@@ -1470,11 +1470,11 @@ static void cpufreq_policy_free(struct cpufreq_policy *policy)
 {
 	unsigned long flags;
 	int cpu;
-	struct ml_freq_ctrl *ml_ctrl;
+	struct ml_freq_ctrl *ml_ctrl, *tmp_ml_ctrl;
 
 	/* Remove policy from list */
 	write_lock_irqsave(&cpufreq_driver_lock, flags);
-	list_for_each_entry(ml_ctrl, &ml_freq_list, node) {
+	list_for_each_entry_safe(ml_ctrl, tmp_ml_ctrl, &ml_freq_list, node) {
 		if (ml_ctrl->policy == policy) {
 			list_del(&ml_ctrl->node);
 			kfree(ml_ctrl);
