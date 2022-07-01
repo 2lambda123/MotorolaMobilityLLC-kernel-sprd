@@ -17,9 +17,12 @@
 #include <uapi/linux/sprd_ion.h>
 #include <linux/sprd_ion.h>
 #include <linux/genalloc.h>
-#include <../../../../../arch/arm64/include/asm/page-def.h>
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/mutex.h>
+#include <linux/jiffies.h>
+#include <linux/workqueue.h>
+#include "ion_ipc_trusty.h"
+#include "cma.h"
 
 struct ion_cma_heap {
 	struct ion_heap heap;
@@ -30,7 +33,6 @@ struct ion_cma_heap {
 #define to_cma_heap(x) container_of(x, struct ion_cma_heap, heap)
 
 #define ION_CMA_ALLOCATE_FAIL  -1
-#define widevine_size  (180 * 1024 * 1024)
 
 static struct gen_pool *pool;
 static bool gen_tags;
@@ -39,7 +41,10 @@ static struct ion_cma_heap *wv_cma_heap;
 static struct page *wv_pages;
 static unsigned long wv_nr_pages;
 static struct sg_table *wv_table;
-static DEFINE_SPINLOCK(gen_pool_lock);
+static unsigned long  widevine_size;
+static phys_addr_t widevine_base;
+static DEFINE_MUTEX(gen_pool_lock);
+static struct delayed_work destroy_pool_work;
 
 static phys_addr_t ion_cma_to_genallocate(unsigned long size)
 {
@@ -50,6 +55,137 @@ static phys_addr_t ion_cma_to_genallocate(unsigned long size)
 	if (!offset)
 		return ION_CMA_ALLOCATE_FAIL;
 	return offset;
+}
+
+static void destroy_gen_pool(struct work_struct *work)
+{
+	struct ion_message in_buf;
+	struct ion_message out_buf;
+
+	pr_info("%s, cma_pool: %p, destroyed gen pool!\n", __func__, pool);
+	gen_tags = false;
+	/*close firewall*/
+	in_buf.cmd = TA_UNLOCK_DRM_MEM;
+	ion_tipc_write(&in_buf, sizeof(in_buf));
+	ion_tipc_read(&out_buf, sizeof(out_buf));
+	if ((out_buf.cmd == TA_UNLOCK_DRM_MEM) && (out_buf.payload[0] == 1))
+		pr_debug("TA_UNLOCK_DRM_MEM success\n");
+	ion_tipc_exit();
+
+	mutex_lock(&gen_pool_lock);
+	gen_pool_destroy(pool);
+	cma_release(wv_cma_heap->cma, wv_pages, wv_nr_pages);
+	sg_free_table(wv_table);
+	kfree(wv_table);
+	wv_table = NULL;
+	pool = NULL;
+	mutex_unlock(&gen_pool_lock);
+}
+
+/*start-up firewall*/
+static void ion_notice_firewall(void)
+{
+	unsigned char buf[32];
+	struct ion_message in_buf;
+	struct ion_message out_buf;
+
+	int ret;
+
+	ret = ion_tipc_init();
+	if (!ret) {
+		ion_tipc_read(buf, sizeof(buf));
+		pr_debug("tipc init succsess\n");
+		in_buf.cmd = TA_LOCK_DRM_MEM;
+		in_buf.payload[0] = widevine_base;
+		in_buf.payload[1] = widevine_size;
+		ion_tipc_write(&in_buf, sizeof(in_buf));
+		ion_tipc_read(&out_buf, sizeof(out_buf));
+		if ((out_buf.cmd == TA_LOCK_DRM_MEM) && (out_buf.payload[0] == 1))
+			pr_debug("TA_LOCK_DRM_MEM success\n");
+
+	} else {
+		pr_debug("tipc init failed\n");
+	}
+}
+
+static int ion_cma_create_pool(struct ion_cma_heap *cma_heap)
+{
+	struct sg_table *table;
+	struct page *pages;
+	unsigned long nr_pages;
+	unsigned long align;
+	int ret;
+
+	widevine_size = cma_heap->cma->count << PAGE_SHIFT;
+
+	widevine_base = PFN_PHYS(cma_heap->cma->base_pfn);
+	pr_debug("%s, widevine paddr: 0x%llx, widevine size: %lu\n", __func__, (u64)widevine_base, widevine_size);
+	nr_pages = widevine_size >> PAGE_SHIFT;
+	align = get_order(widevine_size);
+
+	if (align > CONFIG_CMA_ALIGNMENT)
+		align = CONFIG_CMA_ALIGNMENT;
+
+	pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
+
+	if (!pages)
+		return -ENOMEM;
+
+	if (PageHighMem(pages)) {
+		unsigned long nr_clear_pages = nr_pages;
+		struct page *page = pages;
+
+		while (nr_clear_pages > 0) {
+			void *vaddr = kmap_atomic(page);
+
+			memset(vaddr, 0, PAGE_SIZE);
+			kunmap_atomic(vaddr);
+			page++;
+			nr_clear_pages--;
+		}
+	} else {
+		memset(page_address(pages), 0, widevine_size);
+	}
+
+	table = kmalloc(sizeof(*table), GFP_KERNEL);
+	if (!table)
+		goto err;
+
+	ret = sg_alloc_table(table, 1, GFP_KERNEL);
+	if (ret)
+		goto free_mem;
+
+	sg_set_page(table->sgl, pages, widevine_size, 0);
+
+	pool = gen_pool_create(PAGE_SHIFT, -1);
+	if (!pool) {
+		pr_err("%s, cma_pool: %p, create gen pool failure!\n", __func__, pool);
+		goto err;
+	}
+
+	cma_heap->cma_base = PFN_PHYS(page_to_pfn(pages));
+	gen_pool_add(pool, cma_heap->cma_base, widevine_size, -1);
+	gen_tags = true;
+	pr_info("%s, cma_pool: %p, cma_heap: %p, cma_heap_base: 0x%llx,  widevine_size: %lu, gen_pool_add success!\n",
+					__func__, pool, cma_heap, cma_heap->cma_base, widevine_size);
+
+	wv_cma_heap = cma_heap;
+	wv_pages = pages;
+	wv_nr_pages = nr_pages;
+	wv_table = table;
+
+	return 0;
+
+free_mem:
+	kfree(table);
+err:
+	cma_release(cma_heap->cma, pages, nr_pages);
+	return -ENOMEM;
+}
+
+static int cma_create_pool(struct ion_cma_heap *cma_heap)
+{
+	return ion_cma_create_pool(cma_heap);
 }
 
 /* ION CMA heap operations functions */
@@ -64,7 +200,6 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 	unsigned long align = get_order(size);
 	phys_addr_t alloc_base;
-	struct gen_pool *current_pool;
 	int ret;
 
 	if (align > CONFIG_CMA_ALIGNMENT)
@@ -72,44 +207,51 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 
 	pr_info("%s, buffer_size: %lu, heap id: %d\n", __func__, size, cma_heap->heap.id);
 	if (cma_heap->heap.id == 1) {
-		pr_debug("%s, cma_heap: %p, heap: %p, cma_pool: %p, start from gen_pool allocate!\n",
-			 __func__, cma_heap, heap, pool);
+		pr_debug("%s, cma_heap: %p, heap: %p, cma_pool: %p, gen_tags: %d, start from gen_pool allocate!\n",
+			 __func__, cma_heap, heap, pool, gen_tags);
+
+		if (delayed_work_pending(&destroy_pool_work))
+			cancel_delayed_work_sync(&destroy_pool_work);
+
+		mutex_lock(&gen_pool_lock);
 		if (gen_tags) {
 			alloc_base = ion_cma_to_genallocate(size);
-			pr_debug("%s, paddr: 0x%llx,get buffer from gen pool!\n", __func__, (u64)alloc_base);
+			pr_debug("%s, second paddr: 0x%llx,get buffer from gen pool!\n", __func__, (u64)alloc_base);
 			if (alloc_base == ION_CMA_ALLOCATE_FAIL) {
-				pr_err("%s: failed to alloc heap id: %d, size: %lu\n",
+				pr_err("%s: second failed to alloc heap id: %d, size: %lu\n",
 					__func__, cma_heap->heap.id, size);
+				mutex_unlock(&gen_pool_lock);
 				return -ENOMEM;
 			}
 			pool_alloc_size += size;
 			pages = pfn_to_page(PFN_DOWN(alloc_base));
-			pr_debug("%s, gen_alloc pages range: %p!\n", __func__, pages);
+			pr_debug("%s, second gen_alloc pages range: %p!\n", __func__, pages);
+			mutex_unlock(&gen_pool_lock);
+
 		} else {
-			spin_lock(&gen_pool_lock);
-			current_pool = pool;
-			spin_unlock(&gen_pool_lock);
-			if (current_pool == NULL) {
-				pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
-			} else {
-				if (size >= widevine_size) {
-					pr_debug("%s, reuse the pool!, used: %lu\n", __func__, pool_alloc_size);
-					if (wv_table != NULL) {
-						buffer->priv_virt = wv_pages;
-						buffer->sg_table = wv_table;
-						gen_tags = true;
-						goto out;
-					}
-					pr_debug("%s, size >= widevine_size!!!\n", __func__);
-					pages = NULL;
-				} else {
-					pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
+			if (cma_create_pool(cma_heap) == 0) {
+				alloc_base = ion_cma_to_genallocate(size);
+				pr_debug("%s, first paddr: 0x%llx,get buffer from gen pool!\n", __func__, (u64)alloc_base);
+				if (alloc_base == ION_CMA_ALLOCATE_FAIL) {
+					pr_err("%s: first failed to alloc heap id: %d, size: %lu\n",
+						__func__, cma_heap->heap.id, size);
+					mutex_unlock(&gen_pool_lock);
+					return -ENOMEM;
 				}
+				pool_alloc_size += size;
+				pages = pfn_to_page(PFN_DOWN(alloc_base));
+				pr_debug("%s, first gen_alloc pages range: %p!\n", __func__, pages);
+				mutex_unlock(&gen_pool_lock);
+				ion_notice_firewall();
+			} else {
+				mutex_unlock(&gen_pool_lock);
+				return -ENOMEM;
 			}
 		}
 	} else {
 		pages = cma_alloc(cma_heap->cma, nr_pages, align, false);
 	}
+
 	if (!pages)
 		return -ENOMEM;
 
@@ -141,25 +283,6 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 
 	buffer->priv_virt = pages;
 	buffer->sg_table = table;
-	spin_lock(&gen_pool_lock);
-	current_pool = pool;
-	spin_unlock(&gen_pool_lock);
-	if (!gen_tags && (cma_heap->heap.id == 1) && (size >= widevine_size) && current_pool == NULL) {
-		pr_info("%s, buffer_size: %lu, cma_alloc pages range: %p,start creat gen pool!\n",
-					__func__, size, pages);
-		pool = gen_pool_create(PAGE_SHIFT, -1);
-		if (!pool) {
-			pr_info("%s, cma_pool: %p, create gen pool failure!\n", __func__, pool);
-			return -ENOMEM;
-		}
-		cma_heap->cma_base = PFN_PHYS(page_to_pfn(pages));
-		pr_debug("%s, get cma heap base: 0x%llx\n", __func__, cma_heap->cma_base);
-		gen_pool_add(pool, cma_heap->cma_base, size, -1);
-		gen_tags = true;
-		pr_debug("%s, cma_pool: %p, cma_heap: %p, heap: %p, gen_pool_add success!\n",
-					__func__, pool, cma_heap, heap);
-	}
-out:
 
 	ion_buffer_prep_noncached(buffer);
 
@@ -185,54 +308,41 @@ static void ion_cma_free(struct ion_buffer *buffer)
 	phys_addr_t offset = widevine_size;
 	phys_addr_t low = cma_heap->cma_base;
 	phys_addr_t high = low + offset;
-	bool found_widevine = false;
 
 	pr_info("%s, cma_pool: %p, size: %zu, cma_addrs: 0x%llx, offset: 0x%llx, low: 0x%llx\n",
 				__func__, pool, buffer->size, addrs, offset, low);
 
 	if (cma_heap->heap.id == 1) {
-		if (gen_tags && buffer->size >= widevine_size) {
-			wv_cma_heap = cma_heap;
-			wv_pages = pages;
-			wv_nr_pages = nr_pages;
-			gen_tags = false;
-			wv_table = buffer->sg_table;
-			found_widevine = true;
-			pr_info("%s, left: %lu\n", __func__, pool_alloc_size);
-		}
-		spin_lock(&gen_pool_lock);
 		if (pool != NULL) {
-			if ((buffer->size != widevine_size) && (addrs >= low && addrs < high)) {
-				pr_debug("%s, cma_pool: %p, free to gen pool!\n", __func__, pool);
+			if (addrs >= low && addrs < high) {
+				pr_debug("%s, cma_pool: %p, free to gen pool,pool_alloc_size: %lu!\n", __func__, pool, pool_alloc_size);
+				mutex_lock(&gen_pool_lock);
 				gen_pool_free(pool, addrs, buffer->size);
 				pool_alloc_size -= buffer->size;
-			} else if (buffer->size != widevine_size) {
-				cma_release(cma_heap->cma, pages, nr_pages);
+				mutex_unlock(&gen_pool_lock);
+				pr_debug("%s, remain pool_alloc_size: %lu, buffer_size: %zu\n", __func__, pool_alloc_size, buffer->size);
+			} else {
+				pr_err("%s: addr out of range\n", __func__);
+				return;
 			}
-			if (!gen_tags && (pool_alloc_size == 0) && (pool != NULL)) {
-				gen_pool_destroy(pool);
-				cma_release(wv_cma_heap->cma, wv_pages, wv_nr_pages);
-				sg_free_table(wv_table);
-				kfree(wv_table);
-				wv_table = NULL;
-				pool = NULL;
-			}
-			if (pool_alloc_size == 0)
-				pr_info("%s, cma_pool: %p, destroyed gen pool!\n", __func__, pool);
 		} else {
-			/* release memory */
-			cma_release(cma_heap->cma, pages, nr_pages);
+			/*release memory*/
+			pr_err("%s, buffer release process exception!\n", __func__);
 		}
-		spin_unlock(&gen_pool_lock);
 	} else {
-		/* release memory */
+		/*release memory*/
 		cma_release(cma_heap->cma, pages, nr_pages);
 	}
+
 	/* release sg table */
-	if (!found_widevine) {
-		sg_free_table(buffer->sg_table);
-		kfree(buffer->sg_table);
+	sg_free_table(buffer->sg_table);
+	kfree(buffer->sg_table);
+
+	if ((cma_heap->heap.id == 1) && (pool_alloc_size == 0) && (pool != NULL)) {
+		pr_debug("%s, cma_pool: %p, wait for destroying gen pool!\n", __func__, pool);
+		schedule_delayed_work(&destroy_pool_work, msecs_to_jiffies(5000));
 	}
+
 }
 
 static struct ion_heap_ops ion_cma_ops = {
@@ -320,6 +430,7 @@ static int __init ion_cma_heap_init(void)
 	int nr = 0;
 	gen_tags = false;
 
+	INIT_DELAYED_WORK(&destroy_pool_work, destroy_gen_pool);
 	ret = cma_for_each_area(__ion_add_cma_heap, &nr);
 	if (ret) {
 		for (nr = 0; nr < MAX_CMA_AREAS && cma_heaps[nr].cma; nr++)
