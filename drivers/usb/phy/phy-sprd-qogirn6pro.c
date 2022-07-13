@@ -29,10 +29,13 @@
 #include <dt-bindings/soc/sprd,qogirn6pro-mask.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-regs.h>
 #include <linux/usb/sprd_usbm.h>
+#include <linux/usb/sprd_commonphy.h>
 
 struct sprd_hsphy {
 	struct device		*dev;
 	struct usb_phy		phy;
+	struct sprd_hsphy_ops		ops;
+	struct notifier_block		typec_nb;
 	struct regulator	*vdd;
 	struct kthread_worker bc1p2_kworker;
 	struct kthread_work bc1p2_kwork;
@@ -126,6 +129,78 @@ struct sprd_hsphy {
 #define DEFAULT_HOST_EYE_PATTERN			0x067bd1c0
 
 #define FULLSPEED_USB33_TUNE				3300000
+
+#define CHGR_DET_FGU_CTRL		0x23a0
+#define DP_DM_FS_ENB			BIT(14)
+#define DP_DM_BC_ENB			BIT(0)
+
+static void sc27xx_dpdm_switch_to_phy(struct regmap *regmap, bool enable)
+{
+	int ret;
+	u32 val;
+
+	pr_info("switch dp/dm to %s\n", enable ? "usb" : "other");
+	ret = regmap_read(regmap, CHGR_DET_FGU_CTRL, &val);
+	if (ret) {
+		pr_err("%s, dp/dm switch reg read failed:%d\n",
+				__func__, ret);
+		return;
+	}
+
+	/*
+	 * bit14: 1 switch to USB phy, 0 switch to fast charger
+	 * bit0 : 1 switch to USB phy, 0 switch to BC1P2
+	 */
+	if (enable)
+		val = val | DP_DM_FS_ENB | DP_DM_BC_ENB;
+	else
+		val = val & ~(DP_DM_FS_ENB | DP_DM_BC_ENB);
+
+	ret = regmap_write(regmap, CHGR_DET_FGU_CTRL, val);
+	if (ret)
+		pr_err("%s, dp/dm switch reg write failed:%d\n",
+				__func__, ret);
+}
+
+static bool sc27xx_get_dpdm_from_phy(struct regmap *regmap)
+{
+	int ret;
+	u32 reg;
+	bool val;
+
+	ret = regmap_read(regmap, CHGR_DET_FGU_CTRL, &reg);
+	if (ret) {
+		pr_err("%s, dp/dm switch reg read failed:%d\n",
+				__func__, ret);
+		return false;
+	}
+
+	/*
+	 * bit14: 1 switch to USB phy, 0 switch to fast charger
+	 * bit0 : 1 switch to USB phy, 0 switch to BC1P2
+	 */
+	if ((reg & DP_DM_FS_ENB) && (reg & DP_DM_BC_ENB))
+		val = true;
+	else
+		val = false;
+	pr_info("get dpdm form %s\n", val ? "usb" : "other");
+
+	return val;
+}
+
+static int sprd_hsphy_typec_notifier(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct sprd_hsphy *phy  = container_of(nb, struct sprd_hsphy, typec_nb);
+
+	pr_info("__func__:%s, event %s\n", __func__, event ? "true" : "false");
+	if (event)
+		sc27xx_dpdm_switch_to_phy(phy->pmic, true);
+	else
+		sc27xx_dpdm_switch_to_phy(phy->pmic, false);
+
+	return 0;
+}
 
 int sprd_hsphy_cali_mode(void)
 {
@@ -484,6 +559,20 @@ static enum usb_charger_type sprd_hsphy_charger_detect(struct usb_phy *x)
 	return type;
 }
 
+static void sprd_hsphy_dpdm_switch_to_phy(struct usb_phy *x, bool enable)
+{
+	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
+
+	sc27xx_dpdm_switch_to_phy(phy->pmic, enable);
+}
+
+static bool sprd_hsphy_get_dpdm_from_phy(struct usb_phy *x)
+{
+	struct sprd_hsphy *phy = container_of(x, struct sprd_hsphy, phy);
+
+	return sc27xx_get_dpdm_from_phy(phy->pmic);
+}
+
 static void sprd_hsphy_get_bc1p2_type_work(struct kthread_work *work)
 {
 	struct sprd_hsphy *phy = container_of(work, struct sprd_hsphy, bc1p2_kwork);
@@ -670,7 +759,7 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 	 * configuration, pass parameter "true" if we use 60MHz utmi phy
 	 */
 	musb_set_utmi_60m_flag(true);
-
+	phy->dev = dev;
 	phy->phy.dev = dev;
 	phy->phy.label = "sprd-hsphy";
 	phy->phy.otg = otg;
@@ -681,6 +770,15 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 	phy->phy.vbus_nb.notifier_call = sprd_hsphy_vbus_notify;
 	phy->phy.charger_detect = sprd_hsphy_charger_detect;
 	otg->usb_phy = &phy->phy;
+
+	phy->ops.dpdm_switch_to_phy = sprd_hsphy_dpdm_switch_to_phy;
+	phy->ops.get_dpdm_from_phy = sprd_hsphy_get_dpdm_from_phy;
+	phy->typec_nb.notifier_call = sprd_hsphy_typec_notifier;
+	ret = register_sprd_usbphy_notifier(&phy->typec_nb, SPRD_USBPHY_EVENT_TYPEC);
+	if (ret) {
+		dev_err(dev, "fail to register sprd_usbphy_notifier\n");
+		return ret;
+	}
 
 	platform_set_drvdata(pdev, phy);
 	spin_lock_init(&phy->vbus_event_lock);
@@ -699,6 +797,7 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "fail to add phy\n");
 	}
+	sc27xx_dpdm_switch_to_phy(phy->pmic, false);
 
 	ret = sysfs_create_groups(&dev->kobj, usb_hsphy_groups);
 	if (ret)
@@ -736,6 +835,13 @@ static int sprd_hsphy_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void sprd_hsphy_drshutdown(struct platform_device *pdev)
+{
+	struct sprd_hsphy *phy = platform_get_drvdata(pdev);
+
+	sc27xx_dpdm_switch_to_phy(phy->pmic, false);
+}
+
 static const struct of_device_id sprd_hsphy_match[] = {
 	{ .compatible = "sprd,qogirn6pro-phy" },
 	{},
@@ -746,6 +852,7 @@ MODULE_DEVICE_TABLE(of, sprd_hsphy_match);
 static struct platform_driver sprd_hsphy_driver = {
 	.probe = sprd_hsphy_probe,
 	.remove = sprd_hsphy_remove,
+	.shutdown = sprd_hsphy_drshutdown,
 	.driver = {
 		.name = "sprd-hsphy",
 		.of_match_table = sprd_hsphy_match,
