@@ -84,6 +84,16 @@ bool wcn_push_list_condition_check(
 	return true;
 }
 
+int wlan_status = 1;
+
+int sprd_wlan_power_status_sync(int option, int value)
+{
+	if (option == 1)
+		wlan_status = value ;
+	return wlan_status;
+}
+EXPORT_SYMBOL_GPL(sprd_wlan_power_status_sync);
+
 static struct chn_info_t *chn_info(void)
 {
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
