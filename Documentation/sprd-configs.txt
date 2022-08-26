@@ -20063,15 +20063,6 @@ CONFIG_XFRM_USER
 	[missing plat description] none
 	[function] vts require, Support for Transformation(XFRM) user configuration interface
 		like IPsec used by native Linux tools
-CONFIG_XOR_BLOCKS
-	[arch] all
-	[plat] all
-	[missing plat] none
-	[field]
-	[subsys]
-	[must]
-	[missing plat description] none
-	[function]
 CONFIG_XPS
 	[arch] all
 	[plat] all

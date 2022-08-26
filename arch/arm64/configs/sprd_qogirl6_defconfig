@@ -5774,7 +5774,6 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 # end of Kernel hardening options
 # end of Security options
 
-CONFIG_XOR_BLOCKS=y
 CONFIG_CRYPTO=y
 
 #

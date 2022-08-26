@@ -5089,7 +5089,6 @@ CONFIG_INIT_STACK_NONE=y
 # end of Kernel hardening options
 # end of Security options
 
-CONFIG_XOR_BLOCKS=y
 CONFIG_CRYPTO=y
 
 #
