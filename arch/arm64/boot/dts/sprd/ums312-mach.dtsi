@@ -174,9 +174,8 @@
 	};
 
 	ddr_dfs: scene-frequency {
-		compatible = "sprd,dfs";
-		freq-num = <7>;
-		backdoor = <1200>;
+		compatible = "sprd,ddr-dvfs";
+		freq-num = <8>;
 	};
 
 	sprd-sensorhub {

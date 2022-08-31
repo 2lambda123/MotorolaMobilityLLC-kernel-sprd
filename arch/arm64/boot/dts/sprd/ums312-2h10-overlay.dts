@@ -524,8 +524,8 @@
 
 &ddr_dfs {
 	sprd-scene = "boost", "lcdon", "lcdoff", "camlow",
-		"camhigh", "camveryhigh", "dpu";
-	sprd-freq = <933 512 256 384 512 933 384>;
+		"camhigh", "camveryhigh", "dpu", "boot-opt", "top";
+	sprd-freq = <933 512 256 384 512 933 384 933 0xbacd>;
 };
 
 &adi_bus {
