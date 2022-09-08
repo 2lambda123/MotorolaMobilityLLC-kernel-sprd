@@ -24,9 +24,8 @@
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 
-#define SPRD_WS_INFO_BUF_MAX (256)
 #define SPRD_REG_INFO_PER_MAX (128)
-#define SPRD_REG_INFO_BUF_MAX (SPRD_REG_INFO_PER_MAX*PDBG_INFO_MAX)
+#define SPRD_LOG_BUF_MAX      (SPRD_REG_INFO_PER_MAX*PDBG_INFO_MAX)
 #define ERROR_MAGIC          (0xAA99887766554433UL)
 #define PDBG_IGNORE_MAGIC    (0xEEDDCCBBAA998877)
 #define WAKEUP_NAME_NUM      (2)
@@ -41,12 +40,18 @@
 #define DEEP_CNT_FMT  "[DEEP_CNT ] "
 #define LIGHT_CNT_FMT "[LIGHT_CNT] "
 
-#define SPRD_PDBG_ERR(fmt, ...) \
-		pr_err("[%s] "pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__)
-#define SPRD_PDBG_WARN(fmt, ...) \
-		pr_warn("[%s]"pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__)
-#define SPRD_PDBG_INFO(fmt, ...) \
-		pr_info("[%s] "pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__)
+static int sprd_pdbg_log_force;
+module_param(sprd_pdbg_log_force, int, 0644);
+MODULE_PARM_DESC(sprd_pdbg_log_force, "sprd pdbg log force out (default: 0)");
+#define SPRD_PDBG_ERR(fmt, ...)  pr_err("[%s] "pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__)
+#define SPRD_PDBG_WARN(fmt, ...) pr_warn("[%s]"pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__)
+#define SPRD_PDBG_INFO(fmt, ...)							\
+	do {										\
+		if (!sprd_pdbg_log_force)						\
+			pr_info("[%s] "pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__);	\
+		else									\
+			pr_err("[%s] "pr_fmt(fmt), "SPRD_PDBG", ##__VA_ARGS__);		\
+	} while (0)									\
 
 enum {
 	PDBG_PHASE0,
@@ -79,6 +84,7 @@ struct power_debug {
 	ktime_t curr_stime; /* monotonic boottime offset after last suspend */
 	bool module_log_enable;
 	bool is_32b_machine;
+	char log_buf[SPRD_LOG_BUF_MAX];
 };
 
 struct ws_irq_domain {
@@ -126,25 +132,25 @@ static void sprd_pdbg_ws_get_info(struct ws_irq_domain *ws_irq_domain, u32 hwirq
 	virq = irq_find_mapping(irq_domain, hwirq);
 	desc = irq_to_desc(virq);
 
-	*buf_cnt += snprintf(ws_info + *buf_cnt, SPRD_WS_INFO_BUF_MAX - *buf_cnt,
+	*buf_cnt += scnprintf(ws_info + *buf_cnt, SPRD_LOG_BUF_MAX - *buf_cnt,
 			     " | [%d]", virq);
 
 	if (desc == NULL) {
-		*buf_cnt += snprintf(ws_info + *buf_cnt, SPRD_WS_INFO_BUF_MAX - *buf_cnt,
+		*buf_cnt += scnprintf(ws_info + *buf_cnt, SPRD_LOG_BUF_MAX - *buf_cnt,
 				     "| stray irq");
 		return;
 	}
 
 	if (desc->action && desc->action->name)
-		*buf_cnt += snprintf(ws_info + *buf_cnt, SPRD_WS_INFO_BUF_MAX - *buf_cnt,
+		*buf_cnt += scnprintf(ws_info + *buf_cnt, SPRD_LOG_BUF_MAX - *buf_cnt,
 				     " | action: %s", desc->action->name);
 
 	if (desc->action && desc->action->handler)
-		*buf_cnt += snprintf(ws_info + *buf_cnt, SPRD_WS_INFO_BUF_MAX - *buf_cnt,
+		*buf_cnt += scnprintf(ws_info + *buf_cnt, SPRD_LOG_BUF_MAX - *buf_cnt,
 				     " | handler: %ps", desc->action->handler);
 
 	if (desc->action && desc->action->thread_fn)
-		*buf_cnt += snprintf(ws_info + *buf_cnt, SPRD_WS_INFO_BUF_MAX - *buf_cnt,
+		*buf_cnt += scnprintf(ws_info + *buf_cnt, SPRD_LOG_BUF_MAX - *buf_cnt,
 				     " | thread_fn: %ps", desc->action->thread_fn);
 }
 
@@ -156,7 +162,7 @@ static int sprd_pdbg_ws_parse(u32 major, u32 irq_domain_id, u32 hwirq, char *ws_
 	intc_num = (major >> 16) & 0xFFFF;
 	intc_bit = major & 0xFFFF;
 
-	buf_cnt += snprintf(ws_info + buf_cnt, SPRD_WS_INFO_BUF_MAX - buf_cnt, "[%d:%d:%d:%d]",
+	buf_cnt += scnprintf(ws_info + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt, "[%d:%d:%d:%d]",
 			    intc_num, intc_bit, irq_domain_id, hwirq);
 
 	if ((irq_domain_id != DATA_INVALID) && (hwirq != DATA_INVALID)) {
@@ -164,7 +170,7 @@ static int sprd_pdbg_ws_parse(u32 major, u32 irq_domain_id, u32 hwirq, char *ws_
 		ws_irq_domain = sprd_pdbg_ws_irq_domain_get(irq_domain_id);
 
 		if (!ws_irq_domain) {
-			SPRD_PDBG_ERR("%s: ws irq domain match error\n", __func__);
+			SPRD_PDBG_ERR("ws irq_domain[%u] match error\n", irq_domain_id);
 			return 0;
 		}
 
@@ -210,7 +216,6 @@ static int sprd_pdbg_ws_show(struct power_debug *pdbg)
 {
 	u64 major, domain_id, hwirq;
 	int ret = 0;
-	char ws_irq_info[SPRD_WS_INFO_BUF_MAX];
 
 	if (!pdbg) {
 		SPRD_PDBG_ERR("%s: Parameter is error\n", __func__);
@@ -235,8 +240,8 @@ static int sprd_pdbg_ws_show(struct power_debug *pdbg)
 		return 0;
 	}
 
-	ret = sprd_pdbg_ws_parse((u32)major, (u32)domain_id, (u32)hwirq, ws_irq_info);
-	SPRD_PDBG_INFO("%s\n", ws_irq_info);
+	ret = sprd_pdbg_ws_parse((u32)major, (u32)domain_id, (u32)hwirq, pdbg->log_buf);
+	SPRD_PDBG_INFO("%s\n", pdbg->log_buf);
 
 	return ret;
 }
@@ -263,7 +268,7 @@ static int sprd_pdbg_regs_get(struct power_debug *pdbg, char *regs_msg, bool pri
 	if (!sprd_pdbg_regs_get_once(pdbg, PDBG_R_SLP)) {
 		slp_deep = pdbg->r_value[0];
 		slp_light = pdbg->r_value[1];
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 				    SLP_FMT, slp_deep, slp_light);
 		sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 	}
@@ -273,14 +278,14 @@ static int sprd_pdbg_regs_get(struct power_debug *pdbg, char *regs_msg, bool pri
 		eb_ap2 = pdbg->r_value[1];
 		eb_aon1 = pdbg->r_value[2];
 		eb_aon2 = pdbg->r_value[3];
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 				    EB_FMT, eb_ap1, eb_ap2, eb_aon1, eb_aon2);
 		sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 	}
 
 	if (!sprd_pdbg_regs_get_once(pdbg, PDBG_R_PD)) {
 		pd = pdbg->r_value[0];
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 				    PD_FMT, pd);
 		sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 	}
@@ -290,16 +295,16 @@ static int sprd_pdbg_regs_get(struct power_debug *pdbg, char *regs_msg, bool pri
 		pval -= 2;
 		cnt_num = *pval;
 		pval = (char *)&pdbg->r_value[0];
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 				    DEEP_CNT_FMT);
 		for (i = 0; i < cnt_num; i++) {
 			cnt_low = *(pval + 2*i);
 			cnt_high = *(pval + 2*i + 1);
 			cnt = (cnt_low | (cnt_high << 8));
-			buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+			buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 					    "%5d, ", cnt);
 		}
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt, "\n");
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt, "\n");
 		sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 	}
 
@@ -308,23 +313,23 @@ static int sprd_pdbg_regs_get(struct power_debug *pdbg, char *regs_msg, bool pri
 		pval -= 2;
 		cnt_num = *pval;
 		pval = (char *)&pdbg->r_value[0];
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 				    LIGHT_CNT_FMT);
 		for (i = 0; i < cnt_num; i++) {
 			cnt_low = *(pval + 2*i);
 			cnt_high = *(pval + 2*i + 1);
 			cnt = (cnt_low | (cnt_high << 8));
-			buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+			buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 					    "%5d, ", cnt);
 		}
-		buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt, "\n");
+		buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt, "\n");
 		sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 	}
 
 	if (!sprd_pdbg_regs_get_once(pdbg, PDBG_R_LPC)) {
 		lpc = pdbg->r_value[0];
 		if (lpc != PDBG_IGNORE_MAGIC) {
-			buf_cnt += snprintf(regs_msg + buf_cnt, SPRD_REG_INFO_BUF_MAX - buf_cnt,
+			buf_cnt += scnprintf(regs_msg + buf_cnt, SPRD_LOG_BUF_MAX - buf_cnt,
 					    LPC_FMT, lpc);
 			sprd_pdbg_regs_msg_print(regs_msg, &buf_cnt, print_out);
 		}
@@ -335,23 +340,23 @@ static int sprd_pdbg_regs_get(struct power_debug *pdbg, char *regs_msg, bool pri
 
 static void sprd_pdbg_regs_info_show(struct power_debug *pdbg)
 {
-	char regs_msg[SPRD_REG_INFO_BUF_MAX];
+	char *regs_msg = pdbg->log_buf;
 
 	sprd_pdbg_regs_get(pdbg, regs_msg, true);
 }
 
 static void sprd_pdbg_kernel_active_ws_show(void)
 {
-	char active_ws[SPRD_WS_INFO_BUF_MAX];
+	struct power_debug *pdbg = sprd_pdbg_get_instance();
+	char *active_ws = pdbg->log_buf;
 
-	pm_get_active_wakeup_sources(active_ws, SPRD_WS_INFO_BUF_MAX);
+	pm_get_active_wakeup_sources(active_ws, SPRD_LOG_BUF_MAX);
 	SPRD_PDBG_INFO("%s\n", active_ws);
 }
 
-static int sprd_pdbg_irq_domain_release(void)
+static int sprd_pdbg_irq_domain_release(struct power_debug *pdbg)
 {
 	struct ws_irq_domain *pos, *tmp;
-	struct power_debug *pdbg = sprd_pdbg_get_instance();
 
 	write_lock(&pdbg->rw_lock);
 	list_for_each_entry_safe(pos, tmp, &pdbg->ws_irq_domain_list, list) {
@@ -566,6 +571,7 @@ static int sprd_pdbg_thread(void *data)
 static int sprd_pdbg_start_monitor(struct power_debug *pdbg)
 {
 	struct task_struct *ptask;
+	int err;
 
 	if (!pdbg)
 		return -EINVAL;
@@ -579,8 +585,17 @@ static int sprd_pdbg_start_monitor(struct power_debug *pdbg)
 		pdbg->task = ptask;
 		wake_up_process(ptask);
 
-		cpu_pm_register_notifier(&pdbg->cpu_pm_notifier_block);
-		register_pm_notifier(&pdbg->pm_notifier_block);
+		err = cpu_pm_register_notifier(&pdbg->cpu_pm_notifier_block);
+		if (err) {
+			SPRD_PDBG_ERR("cpu_pm_notifier_block register failed!!!\n");
+			return err;
+		}
+
+		err = register_pm_notifier(&pdbg->pm_notifier_block);
+		if (err) {
+			SPRD_PDBG_ERR("pm_notifier_block register failed!!!\n");
+			return err;
+		}
 	}
 
 	return 0;
@@ -604,13 +619,6 @@ static void sprd_pdbg_stop_monitor(struct power_debug *pdbg)
 	}
 }
 
-static void sprd_pdbg_release(struct power_debug *pdbg)
-{
-	sprd_pdbg_stop_monitor(pdbg);
-	kfree(pdbg);
-	pdbg = NULL;
-}
-
 void sprd_pdbg_msg_print(const char *format, ...)
 {
 
@@ -631,8 +639,8 @@ EXPORT_SYMBOL_GPL(sprd_pdbg_msg_print);
 
 static int sprd_pdbg_regs_info_read(struct seq_file *m, void *v)
 {
-	char regs_msg[SPRD_REG_INFO_BUF_MAX];
 	struct power_debug *pdbg = sprd_pdbg_get_instance();
+	char *regs_msg = pdbg->log_buf;
 
 	sprd_pdbg_regs_get(pdbg, regs_msg, false);
 	seq_printf(m, "%s", regs_msg);
@@ -667,22 +675,44 @@ static int sprd_pdbg_proc_init(void)
 	fle = proc_create("regs_info", 0444, dir, &sprd_pdbg_proc_fops);
 	if (!fle) {
 		SPRD_PDBG_ERR("Proc file create failed\n");
-		remove_proc_entry("sprd-pdbg", NULL);
 		return -EINVAL;
 	}
 
 	return 0;
 }
 
+
+static void sprd_pdbg_release(struct power_debug *pdbg)
+{
+	cancel_delayed_work_sync(&pdbg->irq_domain_work);
+	sprd_pdbg_irq_domain_release(pdbg);
+	remove_proc_entry("sprd-pdbg", NULL);
+	sprd_pdbg_stop_monitor(pdbg);
+	kfree(pdbg);
+}
+
+static void sprd_pdbg_devm_action(void *_data)
+{
+	struct power_debug *pdbg = _data;
+
+	sprd_pdbg_release(pdbg);
+}
+
 static int sprd_pdbg_probe(struct platform_device *pdev)
 {
-	int result;
+	int ret;
 	struct sprd_sip_svc_handle *sip;
 	struct power_debug *pdbg = sprd_pdbg_get_instance();
 
 	if (!pdbg) {
 		SPRD_PDBG_ERR("fail to get pdbg instance.\n");
 		return -ENODEV;
+	}
+
+	ret = devm_add_action(&pdev->dev, sprd_pdbg_devm_action, pdbg);
+	if (ret) {
+		SPRD_PDBG_ERR("failed to add pdbg devm action\n");
+		return ret;
 	}
 
 	pdbg->scan_interval = 30;
@@ -697,16 +727,18 @@ static int sprd_pdbg_probe(struct platform_device *pdev)
 	pdbg->power_ops = &sip->pwr_ops;
 	pdbg->is_32b_machine = (sizeof(unsigned long) < sizeof(u64));
 
-	result = sprd_pdbg_start_monitor(pdbg);
-	if (result) {
-		kfree(pdbg);
-		return -ENODEV;
-	}
+
 
 	INIT_DELAYED_WORK(&pdbg->irq_domain_work, sprd_pdbg_parse_irq_domain);
 	sprd_pdbg_get_dt_irq_domain_names(pdbg);
 	schedule_delayed_work(&pdbg->irq_domain_work, msecs_to_jiffies(2000));
 	sprd_pdbg_proc_init();
+
+	ret = sprd_pdbg_start_monitor(pdbg);
+	if (ret) {
+		SPRD_PDBG_ERR("failed to start pdbg monitor\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -718,7 +750,6 @@ static int sprd_pdbg_remove(struct platform_device *pdev)
 {
 	struct power_debug *pdbg = sprd_pdbg_get_instance();
 
-	sprd_pdbg_irq_domain_release();
 	sprd_pdbg_release(pdbg);
 
 	return 0;
