@@ -1546,12 +1546,14 @@ static void sipa_single_middle_core(void)
 static void sipa_multi_little_core(void)
 {
 	struct sipa_plat_drv_cfg *ipa = sipa_get_ctrl_pointer();
-	void __iomem *glb_base = ipa->glb_virt_base;
+	void __iomem *glb_base = NULL;
 
 	if (!ipa)
 		return;
 
-	if (ipa->cpu_num >= core0 && ipa->cpu_num < core4 &&
+	glb_base = ipa->glb_virt_base;
+
+	if (ipa->cpu_num < core4 &&
 	    ipa->glb_ops.map_multi_fifo_mode(glb_base))
 		return;
 
@@ -1588,10 +1590,12 @@ static void sipa_multi_little_core(void)
 static void sipa_multi_middle_core(void)
 {
 	struct sipa_plat_drv_cfg *ipa = sipa_get_ctrl_pointer();
-	void __iomem *glb_base = ipa->glb_virt_base;
+	void __iomem *glb_base = NULL;
 
 	if (!ipa)
 		return;
+
+	glb_base == ipa->glb_virt_base;
 
 	if (ipa->cpu_num > core3 && ipa->cpu_num < core7 &&
 	    ipa->multi_mode)
