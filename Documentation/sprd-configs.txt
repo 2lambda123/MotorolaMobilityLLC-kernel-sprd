@@ -15003,6 +15003,15 @@ CONFIG_REGULATOR_SC2730
 	[must] user
 	[missing plat description] SC2730 is used in roc1,sharkl5 and sharkl5pro so far
 	[function] SUPPORT SC2730 regulator function.
+CONFIG_REGULATOR_UMP518
+	[arch] arm64
+	[plat] sharkl5Pro,qogirl6
+	[missing plat] qogirn6pro
+	[field] make
+	[subsys] regulator
+	[must] user
+	[missing plat description] UMP518 is used in qogirl6.
+	[function] SUPPORT UMP518 regulator function.
 CONFIG_RELAY
 	[arch] arm
 	[plat] pike2
