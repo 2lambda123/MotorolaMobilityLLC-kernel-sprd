@@ -13,6 +13,7 @@
 #define ON_BOOST		0
 #define OUT_BOOST		1
 #define SPRD_CPUFREQ_BOOST_DURATION	(60ul * HZ)
+#define SPRD_DVFS_DEBUG_MAGIC		(0x5A)
 
 struct cluster_prop {
 	char *name;
@@ -172,6 +173,32 @@ static struct temp_node *sprd_temp_list_find(struct list_head *head, int temp)
 	}
 
 	return pos;
+}
+
+static u32 sprd_cpufreq_get_debug_flag(void)
+{
+	struct device_node *cmdline_node;
+	const char *cmd_line, *dvfs_set;
+	u32 value = 0;
+	int ret;
+
+	cmdline_node = of_find_node_by_path("/chosen");
+	ret = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
+
+	if (ret) {
+		pr_err("Fail to find cmdline bootargs property\n");
+		return 0;
+	}
+
+	dvfs_set = strstr(cmd_line, "androidboot.dvfs_set=0x");
+	if (!dvfs_set) {
+		pr_err("no property sprdboot.dvfs_set found\n");
+		return 0;
+	}
+
+	sscanf(dvfs_set, "androidboot.dvfs_set=0x%x", &value);
+
+	return value;
 }
 
 static void sprd_cluster_get_supply_mode(char *dcdc_supply)
@@ -743,12 +770,19 @@ static int sprd_cluster_info_init(struct cluster_info *clusters)
 static int sprd_cpufreq_probe(struct platform_device *pdev)
 {
 	int ret;
+	u32 flag;
 
 	boot_done_timestamp = jiffies + SPRD_CPUFREQ_BOOST_DURATION;
 
 	dev = &pdev->dev;
 
 	dev_info(dev, "%s: probe sprd cpufreq v2 driver\n", __func__);
+
+	flag = sprd_cpufreq_get_debug_flag();
+	if ((flag & 0xFF) == SPRD_DVFS_DEBUG_MAGIC) {
+		dev_info(dev, "%s: disable apcpu dvfs for debug!\n", __func__);
+		return 0;
+	}
 
 	pclusters = devm_kzalloc(dev, sizeof(*pclusters) * sprd_cluster_num(), GFP_KERNEL);
 	if (!pclusters) {
@@ -762,7 +796,7 @@ static int sprd_cpufreq_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = pclusters->dvfs_init();
+	ret = pclusters->dvfs_init(flag);
 	if (ret) {
 		dev_err(dev, "%s: init dvfs device error\n", __func__);
 		return -EINVAL;
