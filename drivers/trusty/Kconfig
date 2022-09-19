@@ -45,4 +45,12 @@ config SPRD_TSHM
 	  Say N here if you are unsure about need this.
 	  Otherwise say Y to select.
 
+config TRUSTY_TUI
+	tristate
+	depends on TRUSTY
+	default m
+	help
+	  This module provides a trusty tui driver, used to deal with
+	  conficts of ree tp/display access.
+
 endmenu

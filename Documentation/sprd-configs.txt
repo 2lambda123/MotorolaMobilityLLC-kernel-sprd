@@ -18408,6 +18408,15 @@ CONFIG_TRUSTY_LOG
 	[must] debug
 	[missing plat description] none
 	[function] This is used to dump trusty OS log and output to kernel log
+CONFIG_TRUSTY_TUI
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function] This implements trusty tui driver which is used to deal with conficts of ree tp/display access
 CONFIG_TRUSTY_VIRTIO
 	[arch] all
 	[plat] all
