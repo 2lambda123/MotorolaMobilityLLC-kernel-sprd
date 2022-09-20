@@ -17387,8 +17387,8 @@ CONFIG_SPRD_THERMAL_MAX_FREQ_LIMIT
 	[missing plat description] none
 	[function] be used to limit the max frequency
 CONFIG_SPRD_THERMAL_POLICY
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field] make
 	[subsys] thermal
@@ -18060,8 +18060,8 @@ CONFIG_THERMAL_EMERGENCY_POWEROFF_DELAY_MS
 	[missing plat description] none
 	[function] set emergency poweroff delay time
 CONFIG_THERMAL_EMULATION
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field]
 	[subsys]
