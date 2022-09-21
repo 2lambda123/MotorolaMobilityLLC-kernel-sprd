@@ -307,6 +307,7 @@
 			gpu: gpu@60000000 {
 				compatible = "sprd,rogue";
 				reg = <0x0 0x60000000 0x0 0x100000>;
+				topdvfs-controller = <&topdvfs_controller>;
 				gpu-supply = <&vddgpu>;
 				top_force_shutdown = <&pmu_apb_regs
 					REG_PMU_APB_PD_GPU_TOP_CFG0
