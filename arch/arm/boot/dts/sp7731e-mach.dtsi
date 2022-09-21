@@ -206,7 +206,7 @@
 			sprd,efuse-switch = <0>;
 			sprd,hotplug-period = <10>;
 			sprd,min-cpufreq = <768000>;
-			sprd,min-cpunum = <4>;
+			sprd,min-cpunum = <1>;
 			sprd,max-temp = <90000>;
 			sprd,core-base = <1139>;
 			sprd,cluster-base = <2751>;
