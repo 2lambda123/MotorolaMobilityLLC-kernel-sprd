@@ -230,11 +230,9 @@ static void sprd_cluster_get_supply_mode(char *dcdc_supply)
 
 static int sprd_policy_table_update(struct cpufreq_policy *policy, struct temp_node *node)
 {
-	struct cpufreq_frequency_table *old_table, *new_table __maybe_unused;
+	struct cpufreq_frequency_table *new_table __maybe_unused;
 	struct cluster_info *cluster;
 	struct device *cpu;
-	struct dev_pm_opp *opp;
-	unsigned long rate = 0;
 	u64 freq, vol;
 	int i, ret;
 
@@ -260,17 +258,6 @@ static int sprd_policy_table_update(struct cpufreq_policy *policy, struct temp_n
 
 	dev_dbg(dev, "%s: cluster %u dvfs table entry num is %u\n", __func__, cluster->id, cluster->table_entry_num);
 
-	old_table = policy->freq_table;
-	if (old_table) {
-		while (!IS_ERR(opp = dev_pm_opp_find_freq_ceil(cpu, &rate))) {
-			dev_pm_opp_put(opp);
-			dev_pm_opp_remove(cpu, rate);
-			rate++;
-		}
-	}
-
-	dev_info(dev, "%s: update cluster %u opp\n", __func__, cluster->id);
-
 	for (i = 0; i < cluster->table_entry_num; ++i) {
 		ret = cluster->pair_get(cluster->id, i, &freq, &vol);
 		if (ret) {
@@ -279,6 +266,9 @@ static int sprd_policy_table_update(struct cpufreq_policy *policy, struct temp_n
 		}
 
 		dev_info(dev, "%s: add %lluHz/%lluuV to opp\n", __func__, freq, vol);
+
+		if (policy->freq_table)
+			dev_pm_opp_remove(cpu, freq);
 
 		ret = dev_pm_opp_add(cpu, freq, vol);
 		if (ret) {
