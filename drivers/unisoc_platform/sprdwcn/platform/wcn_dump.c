@@ -1590,8 +1590,12 @@ next:
 	WCN_INFO("mdbg dump bt_bb_rx_buf %ld ok!\n", count);
 #endif
 
+	/*check the status of gnss*/
+	if (!(marlin_get_power() < 80)) {
+	WCN_INFO("need to dump gnss!\n");
 	/* dump gnss */
 	gnss_dump_mem(0);
+	}
 end:
 	/* Make sure only string "marlin_memdump_finish" to slog one time */
 	msleep(40);

@@ -628,7 +628,6 @@ static int gnss_ext_dump_data(unsigned int start_addr, int len)
 	u8 *buf = NULL;
 	int ret = 0;
 	//, count = 0, trans = 0;
-	void  *iram_buffer = NULL;
 	mm_segment_t fs;
 
 	GNSSDUMP_INFO("%s, addr:%x,len:%d\n", __func__, start_addr, len);
@@ -638,14 +637,6 @@ static int gnss_ext_dump_data(unsigned int start_addr, int len)
 		return -ENOMEM;
 	}
 
-	iram_buffer = vmalloc(len);
-	if (!iram_buffer) {
-		GNSSDUMP_ERR("%s vmalloc iram_buffer error\n", __func__);
-		kfree(buf);
-		return -ENOMEM;
-	}
-	memset(iram_buffer, 0, len);
-
 	ret = sprdwcn_bus_direct_read(start_addr, buf, len);
 
 	fs = get_fs();
@@ -654,8 +645,6 @@ static int gnss_ext_dump_data(unsigned int start_addr, int len)
 		GNSSDUMP_ERR("%s read error:%d\n", __func__, ret);
 		goto dump_data_done;
 	}
-
-	memcpy(iram_buffer, buf, len);
 
 	ret = gnss_dump_data(buf, len);
 	if (ret != len) {

@@ -748,6 +748,7 @@ int sprd_pcie_scan_card(void *wcn_dev)
 		return 0;
 	}
 	dev = &pdev->dev;
+	priv->rc_pd = pdev;
 	WCN_INFO("%s: rc node name: %s\n", __func__, dev->of_node->name);
 
 	if (priv->dev)

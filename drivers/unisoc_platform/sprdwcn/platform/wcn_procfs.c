@@ -39,10 +39,12 @@
 #include "../include/wcn_dbg.h"
 
 u32 wcn_print_level = WCN_DEBUG_OFF;
+static DECLARE_COMPLETION(assert_work);
 
 static u32 g_dumpmem_switch =  1;
 static u32 g_loopcheck_switch;
 struct wcn_pcie_info *pcie_dev;
+static int reset_prop_flag;
 
 struct mdbg_proc_entry {
 	char *name;
@@ -115,10 +117,62 @@ bool wcn_is_assert(void)
 }
 EXPORT_SYMBOL_GPL(wcn_is_assert);
 
+void wcn_reset_or_dump_process(void)
+{
+	/*wcn reset or dump process*/
+	stop_loopcheck();
+	wcnlog_clear_log();
+
+	WCN_INFO("start to dump reset_prop = %d\n", reset_prop_flag);
+	if (reset_prop_flag == WCN_ASSERT_ONLY_DUMP) { /*userdebug version*/
+		wcn_dump_process();
+		goto out;
+	} else if (reset_prop_flag == WCN_ASSERT_ONLY_RESET) { /*user version*/
+		wcn_reset_process();
+		goto out;
+	} else if (reset_prop_flag == WCN_ASSERT_BOTH_RESET_DUMP) {
+		/*need to do, please reference androidr_trunk_u01*/
+		wcn_dump_process();
+		msleep(2000);
+		wcn_reset_process();
+		sprdwcn_bus_set_carddump_status(false);
+		/*notify slogmodem to restore the state of saving dump*/
+		wcn_notify_fw_error(WCN_SOURCE_CP2_ALIVE, "save dump");
+		goto out;
+	}
+out:
+	mutex_unlock(&mdbg_proc->mutex);
+}
+
+int pcie_assert_thread(void *data)
+{
+	wait_for_completion(&assert_work);
+	WCN_INFO("%s:wait_for_completion end\n", __func__);
+	wcn_reset_or_dump_process();
+	return 0;
+}
+
+static void pcie_launch_thread(void)
+{
+	struct task_struct *tx_thread = NULL;
+
+	tx_thread = kthread_create(pcie_assert_thread,
+				   NULL, "pcie_assert_thread");
+	if (tx_thread)
+		wake_up_process(tx_thread);
+	else {
+		pr_err("create pcie_assert_thread fail\n");
+		return;
+	}
+}
+
 void wcn_assert_interface(enum wcn_source_type type, char *str)
 {
 	int reset_prop = wcn_sysfs_get_reset_prop();
+	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
+	reset_prop_flag = reset_prop;
+	WCN_INFO("wcn_assert_interface %d\n", reset_prop);
 	WCN_ERR("wcn_source_type:%d\n", type);
 	WCN_ERR("fw assert:%s\n", str);
 	if (g_dumpmem_switch == 0) {
@@ -139,27 +193,12 @@ void wcn_assert_interface(enum wcn_source_type type, char *str)
 		mdbg_proc->assert_notify_flag = 1;
 	}
 
-	/*wcn reset or dump process*/
-	stop_loopcheck();
-	wcnlog_clear_log();
-
-	if (reset_prop == WCN_ASSERT_ONLY_DUMP) { /*userdebug version*/
-		wcn_dump_process();
-		goto out;
-	} else if (reset_prop == WCN_ASSERT_ONLY_RESET) { /*user version*/
-		wcn_reset_process();
-		goto out;
-	} else if (reset_prop == WCN_ASSERT_BOTH_RESET_DUMP) {
-		/*need to do, please reference androidr_trunk_u01*/
-		wcn_dump_process();
-		msleep(2000);
-		wcn_reset_process();
-		sprdwcn_bus_set_carddump_status(false);
-		/*notify slogmodem to restore the state of saving dump*/
-		wcn_notify_fw_error(WCN_SOURCE_CP2_ALIVE, "save dump");
-		goto out;
+	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
+		WCN_INFO("%s:pcie dump start\n", __func__);
+		complete(&assert_work);
+	} else {
+		wcn_reset_or_dump_process();
 	}
-
 out:
 	mutex_unlock(&mdbg_proc->mutex);
 }
@@ -1232,6 +1271,7 @@ int proc_fs_init(void)
 {
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
+	pcie_launch_thread();
 	mdbg_proc = kzalloc(sizeof(struct mdbg_proc_t), GFP_KERNEL);
 	if (!mdbg_proc)
 		return -ENOMEM;
