@@ -8240,8 +8240,8 @@ CONFIG_HID_PICOLCD
 	[missing plat description] none
 	[function] PicoLCD (graphic version)
 CONFIG_HID_PLANTRONICS
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field]
 	[subsys]
@@ -8249,8 +8249,8 @@ CONFIG_HID_PLANTRONICS
 	[missing plat description] none
 	[function]
 CONFIG_HID_PLAYSTATION
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field] menu,make
 	[subsys] hid
