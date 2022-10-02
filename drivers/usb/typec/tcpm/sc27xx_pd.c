@@ -29,6 +29,10 @@
 #define UMP9620_ARM_CLK_EN0		0x200c
 #define UMP9620_RTC_CLK_EN0		0x2010
 #define UMP9620_XTL_WAIT_CTRL0		0x2378
+#define UMP518_MODULE_EN		0x1808
+#define UMP518_ARM_CLK_EN0		0x180c
+#define UMP518_RTC_CLK_EN0		0x1810
+#define UMP518_XTL_WAIT_CTRL0		0x1b78
 #define SC27XX_TYPEC_PD_EN		BIT(13)
 #define SC27XX_CLK_PD_EN		BIT(9)
 #define SC27XX_XTL_EN			BIT(8)
@@ -227,6 +231,10 @@
 #define UMP9620_REF_EFUSE_SHIFT		6
 #define UMP9620_DELTA_EFUSE_SHIFT	9
 
+#define UMP518_RC_EFUSE_SHIFT		9
+#define UMP518_REF_EFUSE_SHIFT		0
+#define UMP518_DELTA_EFUSE_SHIFT	9
+
 /* soc compatible */
 #define UMS9620_MASK_AON_APB_R2G_ANALOG_BB_TOP_SINDRV_ENA	0x0020
 #define UMS9620_REG_AON_APB_MIPI_CSI_POWER_CTRL			0x0350
@@ -235,6 +243,7 @@
 
 #define PMIC_SC2730			1
 #define PMIC_UMP9620			2
+#define PMIC_UMP518			3
 
 enum sc27xx_state {
 	SC27XX_DETACHED_SNK,
@@ -290,6 +299,17 @@ static const struct sc27xx_pd_variant_data ump9620_data = {
 		UMS9620_MASK_AON_APB_R2G_ANALOG_BB_TOP_SINDRV_ENA,
 	.reg_aon_apb_mipi_csi_power_ctrl =
 		UMS9620_REG_AON_APB_MIPI_CSI_POWER_CTRL,
+};
+
+static const struct sc27xx_pd_variant_data ump518_data = {
+	.efuse_rc_shift = UMP518_RC_EFUSE_SHIFT,
+	.efuse_ref_shift = UMP518_REF_EFUSE_SHIFT,
+	.efuse_delta_shift = UMP518_DELTA_EFUSE_SHIFT,
+	.id = PMIC_UMP518,
+	.module_en = UMP518_MODULE_EN,
+	.arm_clk_en0 = UMP518_ARM_CLK_EN0,
+	.rtc_clk_en0 = UMP518_RTC_CLK_EN0,
+	.xtl_wait_ctrl0 = UMP518_XTL_WAIT_CTRL0,
 };
 
 struct sc27xx_pd {
@@ -1624,7 +1644,7 @@ static int sc27xx_pd_cal(struct sc27xx_pd *pd)
 	if (ret)
 		return ret;
 
-	if (pd->var_data->id == PMIC_SC2730) {
+	if (pd->var_data->id == PMIC_SC2730 || pd->var_data->id == PMIC_UMP518) {
 		ret = sc27xx_pd_efuse_read(pd, "pdref_calib", &pd->ref_cal);
 		if (ret)
 			return ret;
@@ -1925,6 +1945,7 @@ static const struct dev_pm_ops sc27xx_pd_pm_ops = {
 static const struct of_device_id sc27xx_pd_of_match[] = {
 	{.compatible = "sprd,sc2730-pd", .data = &sc2730_data},
 	{.compatible = "sprd,ump9620-pd", .data = &ump9620_data},
+	{.compatible = "sprd,ump518-pd", .data = &ump518_data},
 	{}
 };
 
