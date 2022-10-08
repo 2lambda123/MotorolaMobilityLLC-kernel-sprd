@@ -13,6 +13,7 @@
 
 #ifndef _UFS_SPRD_H_
 #define _UFS_SPRD_H_
+#include "ufshpb-sprd.h"
 
 struct syscon_ufs {
 	struct regmap *regmap;
@@ -43,6 +44,7 @@ struct ufs_sprd_host {
 	struct reset_control *aon_apb_ufs_rst;
 	uint32_t ufs_lane_calib_data0;
 	uint32_t ufs_lane_calib_data1;
+
 };
 
 /* Set auto h8 ilde time to 10ms */

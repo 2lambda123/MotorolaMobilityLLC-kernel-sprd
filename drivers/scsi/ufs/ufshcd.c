@@ -51,12 +51,14 @@
 #include "ufs-sysfs.h"
 #include "ufs_bsg.h"
 #include "ufshcd-crypto.h"
+#include "ufshpb.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/ufshcd.h>
+
 
 #define UFSHCD_ENABLE_INTRS	(UTP_TRANSFER_REQ_COMPL |\
 				 UTP_TASK_REQ_COMPL |\
@@ -243,7 +245,23 @@ static struct ufs_dev_fix ufs_fixups[] = {
 		UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME),
 	UFS_FIX(UFS_VENDOR_SKHYNIX, "hB8aL1" /*H28U62301AMR*/,
 		UFS_DEVICE_QUIRK_HOST_VS_DEBUGSAVECONFIGTIME),
-
+#ifdef CONFIG_SCSI_UFS_HPB
+	UFS_FIX(UFS_VENDOR_MICRON, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM |
+		UFS_DEVICE_QUIRK_SWAP_L2P_ENTRY_FOR_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MT128GBCAV2U31",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MT256GBCAV4U31",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MTFC128GAXATEA",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MTFC256GAXATEA",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MT128GAXAT2U31",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+	UFS_FIX(UFS_VENDOR_MICRON, "MT256GAXAT4U31",
+		UFS_DEVICE_QUIRK_CMD_READ16_REPLACE_HPB_READ),
+#endif
 	END_FIX
 };
 
@@ -387,7 +405,9 @@ static void ufshcd_add_command_trace(struct ufs_hba *hba,
 	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	struct scsi_cmnd *cmd = lrbp->cmd;
 	int transfer_len = -1;
-
+#if  defined(CONFIG_SCSI_UFS_HPB) && defined(CONFIG_SPRD_DEBUG)
+	ufshcd_hpb_add_command_trace(hba, tag, str);
+#endif
 	if (!trace_ufshcd_command_enabled()) {
 		/* trace UPIU W/O tracing command */
 		if (cmd)
@@ -2588,6 +2608,8 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	}
 
 	lrbp->req_abort_skip = false;
+
+	ufshpb_prep(hba, lrbp);
 
 	ufshcd_comp_scsi_upiu(hba, lrbp);
 
@@ -4840,6 +4862,26 @@ static int ufshcd_change_queue_depth(struct scsi_device *sdev, int depth)
 	return scsi_change_queue_depth(sdev, depth);
 }
 
+static void ufshcd_hpb_destroy(struct ufs_hba *hba, struct scsi_device *sdev)
+{
+	/* skip well-known LU */
+	if ((sdev->lun >= UFS_UPIU_MAX_UNIT_NUM_ID) ||
+	    !ufshpb_is_hpb_enabled(hba) || !ufshpb_is_allowed(hba))
+		return;
+
+	ufshpb_destroy_lu(hba, sdev);
+}
+
+static void ufshcd_hpb_configure(struct ufs_hba *hba, struct scsi_device *sdev)
+{
+	/* skip well-known LU */
+	if ((sdev->lun >= UFS_UPIU_MAX_UNIT_NUM_ID) ||
+	    !ufshpb_is_hpb_enabled(hba) || !ufshpb_is_allowed(hba))
+		return;
+
+	ufshpb_init_hpb_lu(hba, sdev);
+}
+
 /**
  * ufshcd_slave_configure - adjust SCSI device configurations
  * @sdev: pointer to SCSI device
@@ -4848,6 +4890,8 @@ static int ufshcd_slave_configure(struct scsi_device *sdev)
 {
 	struct request_queue *q = sdev->request_queue;
 	struct ufs_hba *hba = shost_priv(sdev->host);
+
+	ufshcd_hpb_configure(hba, sdev);
 
 	blk_queue_update_dma_pad(q, PRDT_DATA_BYTE_COUNT_PAD - 1);
 
@@ -4868,6 +4912,9 @@ static void ufshcd_slave_destroy(struct scsi_device *sdev)
 	struct ufs_hba *hba;
 
 	hba = shost_priv(sdev->host);
+
+	ufshcd_hpb_destroy(hba, sdev);
+
 	/* Drop the reference as it won't be needed anymore */
 	if (ufshcd_scsi_to_upiu_lun(sdev->lun) == UFS_UPIU_UFS_DEVICE_WLUN) {
 		unsigned long flags;
@@ -4977,6 +5024,8 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 				if (schedule_work(&hba->eeh_work))
 					pm_runtime_get_noresume(hba->dev);
 			}
+			if (scsi_status == SAM_STAT_GOOD)
+				ufshpb_rsp_upiu(hba, lrbp);
 			break;
 		case UPIU_TRANSACTION_REJECT_UPIU:
 			/* TODO: handle Reject UPIU Response */
@@ -6935,6 +6984,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 	 * Stop the host controller and complete the requests
 	 * cleared by h/w
 	 */
+	ufshpb_reset_host(hba);
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	ufshcd_hba_stop(hba, false);
 	hba->silence_err_logs = true;
@@ -7340,6 +7390,9 @@ static int ufs_get_device_desc(struct ufs_hba *hba)
 {
 	int err;
 	size_t buff_len;
+#ifdef CONFIG_SCSI_UFS_HPB
+	u8 b_ufs_feature_sup;
+#endif
 	u8 model_index;
 	u8 *desc_buf;
 	struct ufs_dev_info *dev_info = &hba->dev_info;
@@ -7370,7 +7423,34 @@ static int ufs_get_device_desc(struct ufs_hba *hba)
 	dev_info->wspecversion = desc_buf[DEVICE_DESC_PARAM_SPEC_VER] << 8 |
 				      desc_buf[DEVICE_DESC_PARAM_SPEC_VER + 1];
 
+
 	model_index = desc_buf[DEVICE_DESC_PARAM_PRDCT_NAME];
+
+#ifdef CONFIG_SCSI_UFS_HPB
+	b_ufs_feature_sup = desc_buf[DEVICE_DESC_PARAM_UFS_FEAT];
+
+	if (dev_info->wspecversion >= UFS_DEV_HPB_SUPPORT_VERSION &&
+	    (b_ufs_feature_sup & UFS_DEV_HPB_SUPPORT)) {
+		bool hpb_en = false;
+
+		ufshpb_get_dev_info(hba, desc_buf);
+
+		if (!ufshpb_is_legacy(hba)) {
+			err = ufshcd_query_flag_retry(hba,
+				UPIU_QUERY_OPCODE_READ_FLAG,
+				QUERY_FLAG_IDN_HPB_EN, 0, &hpb_en);
+		}
+		if (hpb_en)
+			dev_info(hba->dev, "get hpb enabled\n");
+		else
+			dev_info(hba->dev, "get hpb not enable, legacy is %s\n",
+			ufshpb_is_legacy(hba) ? "Yes" : "No");
+		/* some old micron support hpb_en attribute by default,but we can not get it*/
+		if (ufshpb_is_legacy(hba) || (!err && hpb_en) ||
+		    (hba->dev_quirks & UFS_DEVICE_QUIRK_MICRON_HPB))
+			*(ufshpb_hpb_enabled(hba)) = true;
+	}
+#endif
 
 	err = ufshcd_read_string_desc(hba, model_index,
 				      &dev_info->model, SD_ASCII_STD);
@@ -7642,6 +7722,10 @@ static int ufshcd_device_geo_params_init(struct ufs_hba *hba)
 	else if (desc_buf[GEOMETRY_DESC_PARAM_MAX_NUM_LUN] == 0)
 		hba->dev_info.max_lu_supported = 8;
 
+	if (hba->desc_size.geom_desc >=
+		GEOMETRY_DESC_PARAM_HPB_MAX_ACTIVE_REGS)
+		ufshpb_get_geo_info(hba, desc_buf);
+
 out:
 	kfree(desc_buf);
 	return err;
@@ -7778,6 +7862,7 @@ static int ufshcd_add_lus(struct ufs_hba *hba)
 	}
 
 	ufs_bsg_probe(hba);
+	ufshpb_init(hba);
 	scsi_scan_host(hba->host);
 	pm_runtime_put_sync(hba->dev);
 
@@ -7907,6 +7992,8 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 	/* Enable Auto-Hibernate if configured */
 	ufshcd_auto_hibern8_enable(hba);
 
+	ufshpb_reset(hba);
+
 out:
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	if (ret)
@@ -7990,6 +8077,10 @@ static enum blk_eh_timer_return ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 static const struct attribute_group *ufshcd_driver_groups[] = {
 	&ufs_sysfs_unit_descriptor_group,
 	&ufs_sysfs_lun_attributes_group,
+#ifdef CONFIG_SCSI_UFS_HPB
+	&ufs_sysfs_hpb_stat_group,
+	&ufs_sysfs_hpb_param_group,
+#endif
 	NULL,
 };
 
@@ -8741,6 +8832,8 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		req_link_state = UIC_LINK_OFF_STATE;
 	}
 
+	ufshpb_suspend(hba);
+
 	/*
 	 * If we can't transition into any of the low power modes
 	 * just gate the clocks.
@@ -8872,6 +8965,7 @@ enable_gating:
 	hba->clk_gating.is_suspended = false;
 	hba->dev_info.b_rpm_dev_flush_capable = false;
 	ufshcd_release(hba);
+	ufshpb_resume(hba);
 out:
 	if (hba->dev_info.b_rpm_dev_flush_capable) {
 		schedule_delayed_work(&hba->rpm_dev_flush_recheck_work,
@@ -8970,6 +9064,8 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	/* Enable Auto-Hibernate if configured */
 	ufshcd_auto_hibern8_enable(hba);
+
+	ufshpb_resume(hba);
 
 	if (hba->dev_info.b_rpm_dev_flush_capable) {
 		hba->dev_info.b_rpm_dev_flush_capable = false;
@@ -9215,6 +9311,7 @@ EXPORT_SYMBOL(ufshcd_shutdown);
 void ufshcd_remove(struct ufs_hba *hba)
 {
 	ufs_bsg_remove(hba);
+	ufshpb_remove(hba);
 	ufs_sysfs_remove_nodes(hba->dev);
 	blk_cleanup_queue(hba->tmf_queue);
 	blk_mq_free_tag_set(&hba->tmf_tag_set);
@@ -9229,6 +9326,9 @@ void ufshcd_remove(struct ufs_hba *hba)
 	ufshcd_exit_clk_gating(hba);
 	if (ufshcd_is_clkscaling_supported(hba))
 		device_remove_file(hba->dev, &hba->clk_scaling.enable_attr);
+#ifdef CONFIG_SCSI_UFS_HPB
+	kfree((void *)(hba->android_kabi_reserved1));
+#endif
 	ufshcd_hba_exit(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_remove);
@@ -9346,6 +9446,12 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	err = ufshcd_hba_init(hba);
 	if (err)
 		goto out_error;
+
+#ifdef CONFIG_SCSI_UFS_HPB
+	hba->android_kabi_reserved1 = (u64)kzalloc(sizeof(struct ufshpb_dev_info), GFP_KERNEL);
+	if (!hba->android_kabi_reserved1)
+		goto out_error;
+#endif
 
 	/* Read capabilities registers */
 	err = ufshcd_hba_capabilities(hba);

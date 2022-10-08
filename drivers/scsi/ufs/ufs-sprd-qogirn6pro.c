@@ -348,6 +348,9 @@ static int ufs_sprd_init(struct ufs_hba *hba)
 		       UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS;
 
 	hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_CRYPTO | UFSHCD_CAP_WB_EN;
+#ifdef CONFIG_SCSI_UFS_HPB
+	hba->quirks |= UFSHCD_QUIRK_BROKEN_HPB_READ_CMD;
+#endif
 
 	return 0;
 
