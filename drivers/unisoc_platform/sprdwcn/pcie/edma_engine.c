@@ -811,13 +811,6 @@ int edma_push_link(int chn, void *head, void *tail, int num)
 		WARN_ON(1);
 		return -1;
 	}
-	if (!atomic_read(&edma->pcie_info->is_suspending))
-		__pm_stay_awake(edma->edma_push_ws);
-	if (edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p == NULL) {
-		WCN_INFO("[+]%s(%d) dscr_ring.lock.irq_spinlock_p =0x%p\n", __func__,
-			chn, edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p);
-		return -1;
-	}
 	if (inout == TX)
 		edma_print_mbuf_data(chn, head, tail, __func__);
 
@@ -825,6 +818,14 @@ int edma_push_link(int chn, void *head, void *tail, int num)
 		WCN_ERR("%s:don not push the data, card removed, chn=%d\n", __func__, chn);
 		return -1;
 	}
+	if (!atomic_read(&edma->pcie_info->is_suspending))
+		__pm_stay_awake(edma->edma_push_ws);
+	if (edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p == NULL) {
+		WCN_INFO("[+]%s(%d) dscr_ring.lock.irq_spinlock_p =0x%p\n", __func__,
+			chn, edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p);
+		return -1;
+	}
+
 	spin_lock_irqsave(edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p,
 			edma->chn_sw[chn].dscr_ring.lock.flag);
 
