@@ -2553,6 +2553,15 @@ CONFIG_CC_HAS_ASM_GOTO
 	[must]
 	[missing plat description] none
 	[function]
+CONFIG_CC_HAS_ASM_GOTO_OUTPUT
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
 CONFIG_CC_HAS_ASM_INLINE
 	[arch] all
 	[plat] all
@@ -3049,13 +3058,11 @@ CONFIG_COMPAT_VDSO
 	[arch] arm64
 	[plat] sharkl3,sharkl5Pro
 	[missing plat] none
-	[field] 	code
-	[subsys] core
-	[must] none
+	[field]
+	[subsys]
+	[must]
 	[missing plat description] none
-	[function] Place in the process address space of 32-bit applications an
-		   ELF shared object providing fast implementations of
-		   gettimeofday and clock_gettime.
+	[function]
 CONFIG_CONFIGFS_FS
 	[arch] all
 	[plat] all
@@ -4152,18 +4159,9 @@ CONFIG_CRYPTO_LIB_ARC4
 	[must]
 	[missing plat description] none
 	[function]
-CONFIG_CRYPTO_LIB_BLAKE2S
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
-	[missing plat] none
-	[field]
-	[subsys]
-	[must]
-	[missing plat description] none
-	[function]
 CONFIG_CRYPTO_LIB_BLAKE2S_GENERIC
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field]
 	[subsys]
@@ -6458,13 +6456,11 @@ CONFIG_GENERIC_COMPAT_VDSO
 	[arch] arm64
 	[plat] sharkl3,sharkl5Pro
 	[missing plat] none
-	[field] code
-	[subsys] core
-	[must] none
+	[field]
+	[subsys]
+	[must]
 	[missing plat description] none
-	[function] Place in the process address space of 32-bit applications an
-		   ELF shared object providing fast implementations of
-		   gettimeofday and clock_gettime.
+	[function]
 CONFIG_GENERIC_CPU_AUTOPROBE
 	[arch] all
 	[plat] all
@@ -10380,6 +10376,15 @@ CONFIG_LIBNVDIMM
 	[must] user
 	[missing plat description] none
 	[function] NVDIMM (Non-Volatile Memory Device) Support.
+CONFIG_LIB_MEMNEQ
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
 CONFIG_LIRC
 	[arch] arm64
 	[plat] sharkl3,sharkl5Pro
@@ -14678,6 +14683,15 @@ CONFIG_RANDOMIZE_BASE
 	[must] console
 	[missing plat description] none
 	[function] Randomize the address of the kernel image.
+CONFIG_RANDOM_TRUST_BOOTLOADER
+	[arch] arm64
+	[plat] sharkl3,sharkl5Pro
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
 CONFIG_RAS
 	[arch] all
 	[plat] all
@@ -14861,15 +14875,6 @@ CONFIG_REED_SOLOMON_ENC8
 	[must] user
 	[missing plat description] none
 	[function] CtsLiblogTestCases testcase needed
-CONFIG_REFCOUNT_FULL
-	[arch] all
-	[plat] all
-	[missing plat] none
-	[field]
-	[subsys]
-	[must]
-	[missing plat description] none
-	[function]
 CONFIG_REGMAP
 	[arch] all
 	[plat] all
@@ -20254,6 +20259,15 @@ CONFIG_XFRM_USER
 	[missing plat description] none
 	[function] vts require, Support for Transformation(XFRM) user configuration interface
 		like IPsec used by native Linux tools
+CONFIG_XOR_BLOCKS
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
 CONFIG_XPS
 	[arch] all
 	[plat] all
