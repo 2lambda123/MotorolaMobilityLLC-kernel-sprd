@@ -597,6 +597,10 @@
 			compatible = "sprd,tshm";
 			memory-region = <&tos_shm_reserved>;
 		};
+
+		tui {
+			compatible = "sprd,trusty-tui-v1";
+		};
 	};
 };
 

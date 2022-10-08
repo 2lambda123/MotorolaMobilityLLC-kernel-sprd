@@ -556,6 +556,10 @@
 		log {
 			compatible = "sprd,trusty-log-v1";
 		};
+
+		tui {
+			compatible = "sprd,trusty-tui-v1";
+		};
 	};
 
 	extcon_gpio: extcon-gpio {
