@@ -377,8 +377,9 @@ static int __init lookat_debug_init(void)
 						    &lookat_id);
 	if (!regmap_np)
 		goto error_pmic_node;
-
 	if (of_device_is_compatible(regmap_np->parent, "sprd,sc2730"))
+		lookat_desc.slave_offset = ADI_15BIT_OFFSET;
+	else if (of_device_is_compatible(regmap_np->parent, "sprd,ump518"))
 		lookat_desc.slave_offset = ADI_15BIT_OFFSET;
 	else
 		lookat_desc.slave_offset = ((struct sprd_lookat_variant_data *)
