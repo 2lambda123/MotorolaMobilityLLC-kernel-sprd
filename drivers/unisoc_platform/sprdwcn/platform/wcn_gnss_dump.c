@@ -108,18 +108,18 @@ static void gnss_ring_destroy(struct gnss_ring_t *pring)
 	if (pring) {
 		if (pring->pbuff) {
 			pr_debug("%s free pbuff\n", __func__);
-			kfree(pring->pbuff);
+			vfree(pring->pbuff);
 			pring->pbuff = NULL;
 		}
 
 		if (pring->plock) {
 			pr_debug("%s free plock\n", __func__);
 			mutex_destroy(pring->plock);
-			kfree(pring->plock);
+			vfree(pring->plock);
 			pring->plock = NULL;
 		}
 		pr_debug("%s free pring\n", __func__);
-		kfree(pring);
+		vfree(pring);
 		pring = NULL;
 	}
 }
