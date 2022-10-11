@@ -704,7 +704,6 @@ static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
 				struct ufs_pa_layer_attr *dev_req_params)
 {
 	int err = 0;
-	unsigned long flags;
 
 	if (!dev_req_params) {
 		pr_err("%s: incoming dev_req_params is NULL\n", __func__);
@@ -722,9 +721,7 @@ static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
 	case POST_CHANGE:
 		/* Set auto h8 ilde time to 10ms */
 		if (ufshcd_is_auto_hibern8_supported(hba)) {
-			spin_lock_irqsave(hba->host->host_lock, flags);
-			ufshcd_writel(hba, AUTO_H8_IDLE_TIME_10MS, REG_AUTO_HIBERNATE_IDLE_TIMER);
-			spin_unlock_irqrestore(hba->host->host_lock, flags);
+			hba->ahit = AUTO_H8_IDLE_TIME_10MS;
 		}
 		break;
 	default:
