@@ -681,23 +681,6 @@ static int ufs_sprd_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
-static int ufs_sprd_link_startup_notify(struct ufs_hba *hba,
-					enum ufs_notify_change_status status)
-{
-	int err = 0;
-
-	switch (status) {
-	case PRE_CHANGE:
-		break;
-	case POST_CHANGE:
-		break;
-	default:
-		break;
-	}
-
-	return err;
-}
-
 static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
 				enum ufs_notify_change_status status,
 				struct ufs_pa_layer_attr *dev_max_params,
@@ -737,10 +720,20 @@ static void ufs_sprd_hibern8_notify(struct ufs_hba *hba,
 				enum uic_cmd_dme cmd,
 				enum ufs_notify_change_status status)
 {
+	u32 set;
+	unsigned long flags;
 	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
 
 	switch (status) {
 	case PRE_CHANGE:
+		if (cmd == UIC_CMD_DME_HIBER_ENTER) {
+			spin_lock_irqsave(hba->host->host_lock, flags);
+			set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
+			set &= ~UIC_COMMAND_COMPL;
+			ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
+			spin_unlock_irqrestore(hba->host->host_lock, flags);
+		}
+
 		if (cmd == UIC_CMD_DME_HIBER_EXIT) {
 			regmap_update_bits(host->ufsdev_refclk_en.regmap,
 					   host->ufsdev_refclk_en.reg,
@@ -754,6 +747,14 @@ static void ufs_sprd_hibern8_notify(struct ufs_hba *hba,
 		}
 		break;
 	case POST_CHANGE:
+		if (cmd == UIC_CMD_DME_HIBER_EXIT) {
+			spin_lock_irqsave(hba->host->host_lock, flags);
+			set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
+			set |= UIC_COMMAND_COMPL;
+			ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
+			spin_unlock_irqrestore(hba->host->host_lock, flags);
+		}
+
 		if (cmd == UIC_CMD_DME_HIBER_ENTER) {
 			regmap_update_bits(host->ufsdev_refclk_en.regmap,
 					   host->ufsdev_refclk_en.reg,
@@ -1071,7 +1072,6 @@ static struct ufs_hba_variant_ops ufs_hba_sprd_vops = {
 	.exit = ufs_sprd_exit,
 	.get_ufs_hci_version = ufs_sprd_get_ufs_hci_version,
 	.hce_enable_notify = ufs_sprd_hce_enable_notify,
-	.link_startup_notify = ufs_sprd_link_startup_notify,
 	.pwr_change_notify = ufs_sprd_pwr_change_notify,
 	.phy_initialization = ufs_sprd_phy_init,
 	.hibern8_notify = ufs_sprd_hibern8_notify,
