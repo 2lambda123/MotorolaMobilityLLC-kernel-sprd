@@ -46,6 +46,7 @@ struct ufs_sprd_host {
 	u32 ioctl_cmd;
 	struct completion hs_async_done;
 	bool ffu_is_process;
+	bool wlun_dev_add;
 	u32 times_pre_pwr;
 	u32 times_pre_compare_fail;
 

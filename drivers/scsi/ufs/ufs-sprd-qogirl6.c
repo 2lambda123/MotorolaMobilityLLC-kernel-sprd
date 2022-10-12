@@ -607,6 +607,9 @@ static int ufs_sprd_apply_dev_quirks(struct ufs_hba *hba)
 	u32 pa_tactivate_us, peer_pa_tactivate_us, max_pa_tactivate_us;
 	u8 gran_to_us_table[] = {1, 4, 8, 16, 32, 100};
 	u32 new_pa_tactivate, new_peer_pa_tactivate;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+
+	host->wlun_dev_add = true;
 
 	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_GRANULARITY),
 				  &granularity);
@@ -1303,6 +1306,7 @@ static inline void ufs_sprd_rpmb_add(struct ufs_hba *hba)
 out_put_dev:
 	scsi_device_put(host->sdev_ufs_rpmb);
 	host->sdev_ufs_rpmb = NULL;
+	host->wlun_dev_add = false;
 }
 
 static inline void ufs_sprd_rpmb_remove(struct ufs_hba *hba)
@@ -1315,6 +1319,7 @@ static inline void ufs_sprd_rpmb_remove(struct ufs_hba *hba)
 	rpmb_dev_unregister(hba->dev);
 	scsi_device_put(host->sdev_ufs_rpmb);
 	host->sdev_ufs_rpmb = NULL;
+	host->wlun_dev_add = false;
 }
 void ufs_sprd_setup_xfer_req(struct ufs_hba *hba, int task_tag, bool scsi_cmd)
 {
@@ -1388,6 +1393,8 @@ static int ufs_sprd_probe(struct platform_device *pdev)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct ufs_hba *hba;
+	struct ufs_sprd_host *host = NULL;
+	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
 
 	register_trace_android_vh_ufs_prepare_command(ufs_sprd_vh_prepare_command, NULL);
 
@@ -1399,6 +1406,15 @@ static int ufs_sprd_probe(struct platform_device *pdev)
 	}
 
 	hba = platform_get_drvdata(pdev);
+	host = ufshcd_get_variant(hba);
+	host->wlun_dev_add = false;
+
+	/* Poll dev init complete flag to be true*/
+	while (time_before(jiffies, timeout) && !host->wlun_dev_add)
+		usleep_range(5000, 10000);
+
+	if (!host->wlun_dev_add)
+		dev_warn(hba->dev, "Dev init not complete!\n");
 	ufs_sprd_rpmb_add(hba);
 out:
 	return err;

@@ -44,6 +44,7 @@ struct ufs_sprd_host {
 	struct reset_control *aon_apb_ufs_rst;
 	uint32_t ufs_lane_calib_data0;
 	uint32_t ufs_lane_calib_data1;
+	bool wlun_dev_add;
 
 };
 

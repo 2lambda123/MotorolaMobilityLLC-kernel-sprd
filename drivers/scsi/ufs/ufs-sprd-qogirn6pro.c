@@ -681,6 +681,15 @@ static int ufs_sprd_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
+static int ufs_sprd_apply_dev_quirks(struct ufs_hba *hba)
+{
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+
+	host->wlun_dev_add = true;
+
+	return 0;
+}
+
 static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
 				enum ufs_notify_change_status status,
 				struct ufs_pa_layer_attr *dev_max_params,
@@ -1009,6 +1018,7 @@ static inline void ufs_sprd_rpmb_add(struct ufs_hba *hba)
 out_put_dev:
 	scsi_device_put(host->sdev_ufs_rpmb);
 	host->sdev_ufs_rpmb = NULL;
+	host->wlun_dev_add = false;
 }
 
 static inline void ufs_sprd_rpmb_remove(struct ufs_hba *hba)
@@ -1021,6 +1031,7 @@ static inline void ufs_sprd_rpmb_remove(struct ufs_hba *hba)
 	rpmb_dev_unregister(hba->dev);
 	scsi_device_put(host->sdev_ufs_rpmb);
 	host->sdev_ufs_rpmb = NULL;
+	host->wlun_dev_add = false;
 }
 
 static void ufs_sprd_dbg_register_dump(struct ufs_hba *hba)
@@ -1075,6 +1086,7 @@ static struct ufs_hba_variant_ops ufs_hba_sprd_vops = {
 	.pwr_change_notify = ufs_sprd_pwr_change_notify,
 	.phy_initialization = ufs_sprd_phy_init,
 	.hibern8_notify = ufs_sprd_hibern8_notify,
+	.apply_dev_quirks = ufs_sprd_apply_dev_quirks,
 	.setup_xfer_req = ufs_sprd_setup_xfer_req,
 	.dbg_register_dump = ufs_sprd_dbg_register_dump,
 	.device_reset = ufs_sprd_device_reset,
@@ -1093,6 +1105,8 @@ static int ufs_sprd_probe(struct platform_device *pdev)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct ufs_hba *hba;
+	struct ufs_sprd_host *host = NULL;
+	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
 
 	/* Perform generic probe */
 	err = ufshcd_pltfrm_init(pdev, &ufs_hba_sprd_vops);
@@ -1102,6 +1116,15 @@ static int ufs_sprd_probe(struct platform_device *pdev)
 	}
 
 	hba = platform_get_drvdata(pdev);
+	host = ufshcd_get_variant(hba);
+	host->wlun_dev_add = false;
+
+	/* Poll dev init complete flag to be true*/
+	while (time_before(jiffies, timeout) && !host->wlun_dev_add)
+		usleep_range(5000, 10000);
+
+	if (!host->wlun_dev_add)
+		dev_warn(hba->dev, "Dev init not complete!\n");
 	ufs_sprd_rpmb_add(hba);
 out:
 	return err;
