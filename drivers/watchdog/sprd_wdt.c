@@ -57,14 +57,51 @@
 #define SPRD_WDTEN_MAGIC "e551"
 #define SPRD_WDTEN_MAGIC_LEN_MAX  10
 
+#define SPRD_DSWDTEN_MAGIC "enabled"
+#define SPRD_DSWDTEN_MAGIC_LEN_MAX  10
+
+#define SPRD_WDT_SLEEP_KICKTIME		540
+#define SPRD_WDT_SLEEP_PRETIMEOUT	(600-570)
+#define SPRD_WDT_SLEEP_TIMEOUT		600
+
 struct sprd_wdt {
 	void __iomem *base;
 	struct watchdog_device wdd;
 	struct clk *enable;
 	struct clk *rtc_enable;
+	struct alarm sleep_tmr;
 	bool reset_en;
+	bool sleep_en;
 	int irq;
 };
+
+static bool sprd_dswdt_fiq_en(void)
+{
+	struct device_node *cmdline_node;
+	const char *cmd_line, *dswdten_name_p;
+	char dswdten_value[SPRD_DSWDTEN_MAGIC_LEN_MAX] = "NULL";
+	int ret;
+
+	cmdline_node = of_find_node_by_path("/chosen");
+	ret = of_property_read_string(cmdline_node, "bootargs", &cmd_line);
+
+	if (ret) {
+		pr_err("can't not parse bootargs property\n");
+		return false;
+	}
+
+	dswdten_name_p = strstr(cmd_line, "androidboot.dswdten=");
+	if (!dswdten_name_p) {
+		pr_err("can't find androidboot.dswdten\n");
+		return false;
+	}
+
+	sscanf(dswdten_name_p, "androidboot.dswdten=%8s", dswdten_value);
+	if (strncmp(dswdten_value, SPRD_DSWDTEN_MAGIC, strlen(SPRD_DSWDTEN_MAGIC)))
+		return false;
+
+	return true;
+}
 
 static bool sprd_wdt_en(void)
 {
@@ -277,6 +314,34 @@ static u32 sprd_wdt_get_timeleft(struct watchdog_device *wdd)
 	return val / SPRD_WDT_CNT_STEP;
 }
 
+static int __maybe_unused sprd_wdt_alarm_prepare(struct device *dev)
+{
+	struct sprd_wdt *wdt = dev_get_drvdata(dev);
+	ktime_t now, add;
+
+	if (wdt->sleep_en) {
+		if (watchdog_active(&wdt->wdd)) {
+			now = ktime_get_boottime();
+			add = ktime_set(SPRD_WDT_SLEEP_KICKTIME, 0);
+			alarm_start(&wdt->sleep_tmr, ktime_add(now, add));
+			pr_info("sprd_wdt:alarm start\n");
+		}
+	}
+	return 0;
+}
+
+static void __maybe_unused sprd_wdt_alarm_complete(struct device *dev)
+{
+	struct sprd_wdt *wdt = dev_get_drvdata(dev);
+
+	if (wdt->sleep_en) {
+		if (watchdog_active(&wdt->wdd)) {
+			alarm_cancel(&wdt->sleep_tmr);
+			pr_info("sprd_wdt:alarm_cancel\n");
+		}
+	}
+}
+
 static const struct watchdog_ops sprd_wdt_ops = {
 	.owner = THIS_MODULE,
 	.start = sprd_wdt_start,
@@ -293,6 +358,13 @@ static const struct watchdog_info sprd_wdt_info = {
 		   WDIOF_KEEPALIVEPING,
 	.identity = "Spreadtrum Watchdog Timer",
 };
+
+static enum alarmtimer_restart sprd_wdt_sleep_callback(struct alarm *p,
+						       ktime_t t)
+{
+	pr_err("sprd_wdt: sprd wdt sleep callback\n");
+	return ALARMTIMER_NORESTART;
+}
 
 static int sprd_wdt_probe(struct platform_device *pdev)
 {
@@ -338,6 +410,7 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 	wdt->wdd.max_timeout = SPRD_WDT_MAX_TIMEOUT;
 	wdt->wdd.timeout = SPRD_WDT_MAX_TIMEOUT;
 
+	wdt->sleep_en = sprd_dswdt_fiq_en();
 	wdt->reset_en = sprd_wdt_en();
 	ret = sprd_wdt_enable(wdt);
 	if (ret) {
@@ -346,6 +419,7 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 	}
 	ret = devm_add_action_or_reset(dev, sprd_wdt_disable, wdt);
 	if (ret) {
+		sprd_wdt_disable(wdt);
 		dev_err(dev, "Failed to add wdt disable action\n");
 		return ret;
 	}
@@ -358,6 +432,12 @@ static int sprd_wdt_probe(struct platform_device *pdev)
 		sprd_wdt_disable(wdt);
 		return ret;
 	}
+
+	if (wdt->sleep_en) {
+		alarm_init(&wdt->sleep_tmr, ALARM_BOOTTIME,
+			   sprd_wdt_sleep_callback);
+	}
+
 	platform_set_drvdata(pdev, wdt);
 
 	return 0;
@@ -367,9 +447,22 @@ static int __maybe_unused sprd_wdt_pm_suspend(struct device *dev)
 {
 	struct sprd_wdt *wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&wdt->wdd))
-		sprd_wdt_stop(&wdt->wdd);
-	sprd_wdt_disable(wdt);
+	if (!wdt) {
+		pr_info("sprd_wdt:wdt is null\n");
+		return -ENODEV;
+	}
+
+	if (wdt->sleep_en) {
+		if (watchdog_active(&wdt->wdd))
+			sprd_wdt_load_value(wdt, SPRD_WDT_SLEEP_TIMEOUT, SPRD_WDT_SLEEP_PRETIMEOUT);
+		else
+			sprd_wdt_disable(wdt);
+	} else {
+		if (watchdog_active(&wdt->wdd))
+			sprd_wdt_stop(&wdt->wdd);
+
+		sprd_wdt_disable(wdt);
+	}
 
 	return 0;
 }
@@ -377,19 +470,43 @@ static int __maybe_unused sprd_wdt_pm_suspend(struct device *dev)
 static int __maybe_unused sprd_wdt_pm_resume(struct device *dev)
 {
 	struct sprd_wdt *wdt = dev_get_drvdata(dev);
-	int ret;
+	int ret = -ENODEV;
 
-	ret = sprd_wdt_enable(wdt);
-	if (ret)
-		return ret;
+	if (!wdt) {
+		pr_info("sprd_wdt:wdt is null\n");
+		return -ENODEV;
+	}
 
-	if (watchdog_active(&wdt->wdd))
+	if (wdt->sleep_en) {
+		if (!watchdog_active(&wdt->wdd)) {
+			ret = sprd_wdt_enable(wdt);
+			if (ret) {
+				pr_info("sprd_wdt:sprd_wdt_enable failed\n");
+				return ret;
+			}
+		}
+	} else {
+		ret = sprd_wdt_enable(wdt);
+		if (ret) {
+			pr_info("sprd_wdt:sprd_wdt_enable failed\n");
+			return ret;
+		}
+	}
+
+	if (watchdog_active(&wdt->wdd)) {
 		ret = sprd_wdt_start(&wdt->wdd);
+		if (ret) {
+			pr_info("sprd_wdt:sprd_wdt_start failed\n");
+			return ret;
+		}
+	}
 
 	return ret;
 }
 
 static const struct dev_pm_ops sprd_wdt_pm_ops = {
+	.prepare = sprd_wdt_alarm_prepare,
+	.complete = sprd_wdt_alarm_complete,
 	SET_SYSTEM_SLEEP_PM_OPS(sprd_wdt_pm_suspend,
 				sprd_wdt_pm_resume)
 };
@@ -397,6 +514,7 @@ static const struct dev_pm_ops sprd_wdt_pm_ops = {
 static const struct of_device_id sprd_wdt_match_table[] = {
 	{ .compatible = "sprd,sp9860-wdt", },
 	{ .compatible = "sprd,sharkl3-wdt", },
+	{ .compatible = "sprd,pike2-wdt", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sprd_wdt_match_table);
