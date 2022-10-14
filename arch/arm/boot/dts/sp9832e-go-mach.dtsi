@@ -343,6 +343,7 @@
 
 &dpu {
 	status = "okay";
+	sprd,logo-memory = <&logo_reserved>;
 };
 
 &iommu_dispc {
