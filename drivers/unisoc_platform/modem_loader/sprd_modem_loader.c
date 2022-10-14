@@ -1211,12 +1211,13 @@ static int modem_debug_show(struct seq_file *m, void *private)
 	modem_debug_putline(m, '-', 80);
 	seq_puts(m, "region list:\n");
 
-	for (i = 0; i < region_cnt; i++)
+	for (i = 0; i < region_cnt; i++) {
 		seq_printf(m, "region[%2d]:address=0x%llx, size=0x%lx, name=%s\n",
-			   i,
-			   (phys_addr_t)regions[i].address,
-			   (size_t)regions[i].size,
-			   regions[i].name);
+		   i,
+		   regions[i].address,
+		   (size_t)regions[i].size,
+		   regions[i].name);
+	}
 
 	if (modem->modem_ctrl) {
 		struct modem_ctrl *ctrl = modem->modem_ctrl;
