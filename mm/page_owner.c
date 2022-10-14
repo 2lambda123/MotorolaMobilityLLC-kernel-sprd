@@ -10,6 +10,7 @@
 #include <linux/migrate.h>
 #include <linux/stackdepot.h>
 #include <linux/seq_file.h>
+#include <linux/sched/clock.h>
 
 #include "internal.h"
 
@@ -25,6 +26,13 @@ struct page_owner {
 	gfp_t gfp_mask;
 	depot_stack_handle_t handle;
 	depot_stack_handle_t free_handle;
+#ifdef CONFIG_SPRD_PAGE_OWNER
+	u64 ts_nsec;
+	u64 free_ts_nsec;
+	char comm[TASK_COMM_LEN];
+	pid_t pid;
+	pid_t tgid;
+#endif
 };
 
 static bool page_owner_enabled = false;
@@ -145,6 +153,9 @@ void __reset_page_owner(struct page *page, unsigned int order)
 	struct page_ext *page_ext;
 	depot_stack_handle_t handle = 0;
 	struct page_owner *page_owner;
+#ifdef CONFIG_SPRD_PAGE_OWNER
+	u64 free_ts_nsec = local_clock();
+#endif
 
 	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
 
@@ -155,6 +166,9 @@ void __reset_page_owner(struct page *page, unsigned int order)
 		__clear_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 		page_owner = get_page_owner(page_ext);
 		page_owner->free_handle = handle;
+#ifdef CONFIG_SPRD_PAGE_OWNER
+		page_owner->free_ts_nsec = free_ts_nsec;
+#endif
 		page_ext = page_ext_next(page_ext);
 	}
 }
@@ -172,6 +186,12 @@ static inline void __set_page_owner_handle(struct page *page,
 		page_owner->order = order;
 		page_owner->gfp_mask = gfp_mask;
 		page_owner->last_migrate_reason = -1;
+#ifdef CONFIG_SPRD_PAGE_OWNER
+		page_owner->pid = current->pid;
+		page_owner->tgid = current->tgid;
+		page_owner->ts_nsec = local_clock();
+		strlcpy(page_owner->comm, current->comm, sizeof(page_owner->comm));
+#endif
 		__set_bit(PAGE_EXT_OWNER, &page_ext->flags);
 		__set_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
 
@@ -236,6 +256,11 @@ void __copy_page_owner(struct page *oldpage, struct page *newpage)
 	new_page_owner->last_migrate_reason =
 		old_page_owner->last_migrate_reason;
 	new_page_owner->handle = old_page_owner->handle;
+#ifdef CONFIG_SPRD_PAGE_OWNER
+	new_page_owner->pid = old_page_owner->pid;
+	new_page_owner->ts_nsec = old_page_owner->ts_nsec;
+	new_page_owner->free_ts_nsec = old_page_owner->ts_nsec;
+#endif
 
 	/*
 	 * We don't clear the bit on the oldpage as it's going to be freed
@@ -349,10 +374,17 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 	if (!kbuf)
 		return -ENOMEM;
 
+#ifdef CONFIG_SPRD_PAGE_OWNER
+	ret = snprintf(kbuf, count,
+			"Page allocated via order %u, mask %#x(%pGg), pid %d, tgid %d (%s), ts %llu ns, free_ts %llu ns\n",
+			page_owner->order, page_owner->gfp_mask, &page_owner->gfp_mask, page_owner->pid, page_owner->tgid,
+			page_owner->comm, page_owner->ts_nsec, page_owner->free_ts_nsec);
+#else
 	ret = snprintf(kbuf, count,
 			"Page allocated via order %u, mask %#x(%pGg)\n",
 			page_owner->order, page_owner->gfp_mask,
 			&page_owner->gfp_mask);
+#endif
 
 	if (ret >= count)
 		goto err;
@@ -428,8 +460,14 @@ void __dump_page_owner(struct page *page)
 	else
 		pr_alert("page_owner tracks the page as freed\n");
 
+#ifdef CONFIG_SPRD_PAGE_OWNER
+	pr_alert("page last allocated via order %u, gfp_mask %#x(%pGg), pid %d(%s), ts %llu, free_ts %llu\n",
+		page_owner->order, gfp_mask, &gfp_mask, page_owner->pid, page_owner->comm,
+		page_owner->ts_nsec, page_owner->free_ts_nsec);
+#else
 	pr_alert("page last allocated via order %u, migratetype %s, gfp_mask %#x(%pGg)\n",
 		 page_owner->order, migratetype_names[mt], gfp_mask, &gfp_mask);
+#endif
 
 	handle = READ_ONCE(page_owner->handle);
 	if (!handle) {
@@ -439,6 +477,7 @@ void __dump_page_owner(struct page *page)
 		stack_trace_print(entries, nr_entries, 0);
 	}
 
+#ifndef CONFIG_SPRD_PAGE_OWNER
 	handle = READ_ONCE(page_owner->free_handle);
 	if (!handle) {
 		pr_alert("page_owner free stack trace missing\n");
@@ -451,6 +490,7 @@ void __dump_page_owner(struct page *page)
 	if (page_owner->last_migrate_reason != -1)
 		pr_alert("page has been migrated, last migrate reason: %s\n",
 			migrate_reason_names[page_owner->last_migrate_reason]);
+#endif
 }
 
 static ssize_t

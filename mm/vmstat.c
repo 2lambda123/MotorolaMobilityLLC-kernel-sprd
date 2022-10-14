@@ -2247,91 +2247,6 @@ static void pagetypeinfo_showblockcount_dump(struct seq_buf *m,
 	seq_buf_printf(m, "\n");
 }
 
-#ifdef CONFIG_PAGE_OWNER
-static void pagetypeinfo_showmixedcount_dump(struct seq_buf *m,
-				       pg_data_t *pgdat, struct zone *zone)
-{
-	struct page *page;
-	struct page_ext *page_ext;
-	struct page_owner *page_owner;
-	unsigned long pfn = zone->zone_start_pfn, block_end_pfn;
-	unsigned long end_pfn = pfn + zone->spanned_pages;
-	unsigned long count[MIGRATE_TYPES] = { 0, };
-	int pageblock_mt, page_mt;
-	int i;
-
-	/* Scan block by block. First and last block may be incomplete */
-	pfn = zone->zone_start_pfn;
-
-	/*
-	 * Walk the zone in pageblock_nr_pages steps. If a page block spans
-	 * a zone boundary, it will be double counted between zones. This does
-	 * not matter as the mixed block count will still be correct
-	 */
-	for (; pfn < end_pfn; ) {
-		page = pfn_to_online_page(pfn);
-		if (!page) {
-			pfn = ALIGN(pfn + 1, MAX_ORDER_NR_PAGES);
-			continue;
-		}
-
-		block_end_pfn = ALIGN(pfn + 1, pageblock_nr_pages);
-		block_end_pfn = min(block_end_pfn, end_pfn);
-
-		pageblock_mt = get_pageblock_migratetype(page);
-
-		for (; pfn < block_end_pfn; pfn++) {
-			if (!pfn_valid_within(pfn))
-				continue;
-
-			/* The pageblock is online, no need to recheck. */
-			page = pfn_to_page(pfn);
-
-			if (page_zone(page) != zone)
-				continue;
-
-			if (PageBuddy(page)) {
-				unsigned long freepage_order;
-
-				freepage_order = page_order_unsafe(page);
-				if (freepage_order < MAX_ORDER)
-					pfn += (1UL << freepage_order) - 1;
-				continue;
-			}
-
-			if (PageReserved(page))
-				continue;
-
-			page_ext = lookup_page_ext(page);
-			if (unlikely(!page_ext))
-				continue;
-
-			if (!test_bit(PAGE_EXT_OWNER, &page_ext->flags))
-				continue;
-
-			page_owner = get_page_owner(page_ext);
-			page_mt = gfpflags_to_migratetype(
-					page_owner->gfp_mask);
-			if (pageblock_mt != page_mt) {
-				if (is_migrate_cma(pageblock_mt))
-					count[MIGRATE_MOVABLE]++;
-				else
-					count[pageblock_mt]++;
-
-				pfn = block_end_pfn;
-				break;
-			}
-			pfn += (1UL << page_owner->order) - 1;
-		}
-	}
-
-	/* Print counts */
-	seq_buf_printf(m, "Node %d, zone %8s ", pgdat->node_id, zone->name);
-	for (i = 0; i < MIGRATE_TYPES; i++)
-		seq_buf_printf(m, "%12lu ", count[i]);
-	seq_buf_printf(m, "\n");
-}
-#endif
 void sprd_dump_pagetypeinfo(void)
 {
 	pg_data_t *pgdat;
@@ -2365,20 +2280,6 @@ void sprd_dump_pagetypeinfo(void)
 		seq_buf_printf(sprd_mem_seq_buf, "\n");
 		walk_zones_in_node_dump(sprd_mem_seq_buf, pgdat, true,
 					pagetypeinfo_showblockcount_dump);
-
-		/* pagetypeinfo_showmixedcount */
-#ifdef CONFIG_PAGE_OWNER
-		if (!static_branch_unlikely(&page_owner_inited))
-			continue;
-
-		seq_buf_printf(sprd_mem_seq_buf, "\n%-23s", "Number of mixed blocks ");
-		for (mtype = 0; mtype < MIGRATE_TYPES; mtype++)
-			seq_printf(sprd_mem_seq_buf, "%12s ", migratetype_names[mtype]);
-		seq_buf_printf(sprd_mem_seq_buf, "\n");
-
-		walk_zones_in_node_dump(sprd_mem_seq_buf, pgdat, true,
-					pagetypeinfo_showmixedcount_dump);
-#endif /* CONFIG_PAGE_OWNER */
 	}
 }
 #endif
