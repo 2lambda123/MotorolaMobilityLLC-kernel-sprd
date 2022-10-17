@@ -46,7 +46,7 @@ config SPRD_TSHM
 	  Otherwise say Y to select.
 
 config TRUSTY_TUI
-	tristate
+	tristate "Trusty TUI driver"
 	depends on TRUSTY
 	default m
 	help
