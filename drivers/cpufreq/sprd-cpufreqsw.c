@@ -731,7 +731,11 @@ static int sprd_cpufreq_set_target_index(struct cpufreq_policy *policy,
 	 * So return 0 here,reject changing freq.
 	 */
 	if (unlikely(boost_mode_flag)) {
+#if IS_ENABLED(CONFIG_ARM_SPRD_SW_CPUFREQ_MAXFREQ)
+		if (policy->max >= policy->cpuinfo.max_freq)
+#else
 		if (policy->max > policy->cpuinfo.max_freq)
+#endif
 			return 0;
 
 		sprd_cpufreq_set_boost(0);

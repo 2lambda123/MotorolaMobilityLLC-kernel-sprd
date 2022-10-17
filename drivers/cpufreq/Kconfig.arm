@@ -370,6 +370,14 @@ config ARM_SPRD_CPUFREQ_V2
 
 endchoice
 
+if ARM_SPRD_SW_CPUFREQ
+config ARM_SPRD_SW_CPUFREQ_MAXFREQ
+       bool "Enable sw dvfs on boot stage in ARM"
+       default n
+       help
+         This option is use for sw dvfs on boot stage in ARM.
+endif
+
 config ARM_SPRD_CPUFREQ_PUBLIC
 	tristate "SPRD CPUfreq Driver Public Data"
 	default n

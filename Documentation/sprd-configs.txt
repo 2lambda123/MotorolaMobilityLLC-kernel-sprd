@@ -1530,6 +1530,17 @@ CONFIG_ARM_SPRD_SW_CPUFREQ
 	[function] The driver works for scaling the voltage and frequency of cpu and
 		   cluster based on Regulator and clk functions independently. It also
                    support the Binning test for all current projects.
+CONFIG_ARM_SPRD_SW_CPUFREQ_MAXFREQ
+	[arch] arm
+	[plat] pike2
+	[missing plat] none
+	[field] make
+	[subsys] cpufreq
+	[must] user
+	[missing plat description] none
+	[function] The driver works for fixded maximum frequency of cpu on bootstage.
+		   After 60s, scale the voltage and frequency of cpu and cluster based on
+		   Regulator and clk functions independently.
 CONFIG_ARM_THUMB
 	[arch] arm
 	[plat] pike2
