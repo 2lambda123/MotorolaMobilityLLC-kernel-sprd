@@ -671,13 +671,184 @@ static int ufs_sprd_link_startup_notify(struct ufs_hba *hba,
 
 	return err;
 }
+static int ufs_compare_dev_req_pwr_mode(struct ufs_hba *hba, struct ufs_pa_layer_attr *dev_req_params)
+{
+	struct ufs_pa_layer_attr  max_pwr_info_raw = {0};
+	struct ufs_pa_layer_attr *max_pwr_info = &max_pwr_info_raw;
+	struct ufs_pa_layer_attr *pwr_info = dev_req_params;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+
+
+	/* Get the connected lane count */
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDRXDATALANES),
+			&max_pwr_info->lane_rx);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDTXDATALANES),
+			&max_pwr_info->lane_tx);
+	/*
+	 *  First, get the maximum gears of HS speed.
+	 *  If a zero value, it means there is no HSGEAR capability.
+	 *  Then, get the maximum gears of PWM speed.
+	 *  */
+	if (pwr_info->pwr_tx == FAST_MODE)
+		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR),
+				&max_pwr_info->gear_rx);
+	else if (pwr_info->pwr_tx == SLOW_MODE)
+		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+				&max_pwr_info->gear_rx);
+
+	if (pwr_info->pwr_rx == FAST_MODE)
+		ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR),
+				&max_pwr_info->gear_tx);
+	else if (pwr_info->pwr_rx == SLOW_MODE)
+		ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+				&max_pwr_info->gear_tx);
+
+	memcpy(&(host->dts_pwr_info), pwr_info, sizeof(struct ufs_pa_layer_attr));
+
+	/* if already configured to the requested pwr_mode */
+	if (max_pwr_info->gear_rx < pwr_info->gear_rx  ||
+			max_pwr_info->gear_tx < pwr_info->gear_tx  ||
+			max_pwr_info->lane_rx < pwr_info->lane_rx  ||
+			max_pwr_info->lane_tx < pwr_info->lane_tx) {
+		dev_err(hba->dev, "%s: the dev_req_pwr can not compare\n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+
+static int ufs_compare_max_pwr_mode(struct ufs_hba *hba)
+{
+	struct ufs_pa_layer_attr  pwr_info_raw;
+	struct ufs_pa_layer_attr *pwr_info = &pwr_info_raw;
+	struct ufs_pa_layer_attr *max_pwr_info = &hba->max_pwr_info.info;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+
+	if (!hba->max_pwr_info.is_valid && (max_pwr_info->pwr_tx != 1))
+		return -EINVAL;
+
+	pwr_info->pwr_tx = FAST_MODE;
+	pwr_info->pwr_rx = FAST_MODE;
+	pwr_info->hs_rate = PA_HS_MODE_B;
+
+	/* Get the connected lane count */
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDRXDATALANES),
+			&pwr_info->lane_rx);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_CONNECTEDTXDATALANES),
+			&pwr_info->lane_tx);
+
+	if (!pwr_info->lane_rx || !pwr_info->lane_tx) {
+		dev_err(hba->dev, "%s: invalid connected lanes value. rx=%d, tx=%d\n",
+				__func__,
+				pwr_info->lane_rx,
+				pwr_info->lane_tx);
+		return -EINVAL;
+	}
+
+	/*
+	 * First, get the maximum gears of HS speed.
+	 * If a zero value, it means there is no HSGEAR capability.
+	 * Then, get the maximum gears of PWM speed.
+	 *  */
+	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR), &pwr_info->gear_rx);
+	if (!pwr_info->gear_rx) {
+		ufshcd_dme_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+				&pwr_info->gear_rx);
+		if (!pwr_info->gear_rx) {
+			dev_err(hba->dev, "%s: invalid max pwm rx gear read = %d\n",
+					__func__, pwr_info->gear_rx);
+			return -EINVAL;
+		}
+		pwr_info->pwr_rx = SLOW_MODE;
+	}
+
+	ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXHSGEAR),
+			&pwr_info->gear_tx);
+	if (!pwr_info->gear_tx) {
+		ufshcd_dme_peer_get(hba, UIC_ARG_MIB(PA_MAXRXPWMGEAR),
+				&pwr_info->gear_tx);
+		if (!pwr_info->gear_tx) {
+			dev_err(hba->dev, "%s: invalid max pwm tx gear read = %d\n",
+					__func__, pwr_info->gear_tx);
+			return -EINVAL;
+		}
+		pwr_info->pwr_tx = SLOW_MODE;
+	}
+	memcpy(&(host->dts_pwr_info), max_pwr_info, sizeof(struct ufs_pa_layer_attr));
+
+	/* if already configured to the requested pwr_mode */
+	if (pwr_info->gear_rx != max_pwr_info->gear_rx  ||
+			pwr_info->gear_tx != max_pwr_info->gear_tx  ||
+			pwr_info->lane_rx != max_pwr_info->lane_rx   ||
+			pwr_info->lane_tx != max_pwr_info->lane_tx   ||
+			pwr_info->pwr_rx != max_pwr_info->pwr_rx     ||
+			pwr_info->pwr_tx != max_pwr_info->pwr_tx     ||
+			pwr_info->hs_rate != max_pwr_info->hs_rate) {
+		dev_err(hba->dev, "%s: the max can not compare\n", __func__);
+		return -EINVAL;
+	}
+	return 0;
+}
+static int ufs_sprd_pwr_post_compare(struct ufs_hba *hba)
+{
+	struct ufs_pa_layer_attr  pwr_info_raw = {0};
+	struct ufs_pa_layer_attr *pwr_mode = &pwr_info_raw;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+	int ret = 0, pwr = 0;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_RXGEAR),
+			&pwr_mode->gear_rx);
+	if (ret)
+		goto out;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_TXGEAR),
+			&pwr_mode->gear_tx);
+	if (ret)
+		goto out;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_ACTIVERXDATALANES),
+			&pwr_mode->lane_rx);
+	if (ret)
+		goto out;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_ACTIVETXDATALANES),
+			&pwr_mode->lane_tx);
+	if (ret)
+		goto out;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_HSSERIES),
+			&pwr_mode->hs_rate);
+	if (ret)
+		goto out;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_PWRMODE),
+			&pwr);
+	if (ret)
+		goto out;
+	pwr_mode->pwr_rx = (pwr >> 4) & 0xf;
+	pwr_mode->pwr_tx = (pwr >> 0) & 0xf;
+	if (pwr_mode->gear_rx == host->dts_pwr_info.gear_rx &&
+			pwr_mode->gear_tx == host->dts_pwr_info.gear_tx &&
+			pwr_mode->lane_rx == host->dts_pwr_info.lane_rx &&
+			pwr_mode->lane_tx == host->dts_pwr_info.lane_tx &&
+			pwr_mode->pwr_rx == host->dts_pwr_info.pwr_rx &&
+			pwr_mode->pwr_tx == host->dts_pwr_info.pwr_tx &&
+			pwr_mode->hs_rate == host->dts_pwr_info.hs_rate){
+		pr_err("%s: ufs_sprd_pwr_post_compare success\n", __func__);
+		return 0;
+	}
+out:
+	return -1;
+}
 
 static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
-				enum ufs_notify_change_status status,
-				struct ufs_pa_layer_attr *dev_max_params,
-				struct ufs_pa_layer_attr *dev_req_params)
+		enum ufs_notify_change_status status,
+		struct ufs_pa_layer_attr *dev_max_params,
+		struct ufs_pa_layer_attr *dev_req_params)
 {
 	int err = 0;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
 
 	if (!dev_req_params) {
 		pr_err("%s: incoming dev_req_params is NULL\n", __func__);
@@ -687,9 +858,41 @@ static int ufs_sprd_pwr_change_notify(struct ufs_hba *hba,
 
 	switch (status) {
 	case PRE_CHANGE:
+		host->times_pre_pwr++;
 		err = -EPERM;
+		if (err == 0) {
+			if (ufs_compare_dev_req_pwr_mode(hba, dev_req_params)) {
+				host->times_pre_compare_fail++;
+				dev_err(hba->dev, "%s: err: compare_pwr\n", __func__);
+#if defined(CONFIG_SPRD_DEBUG)
+				panic("pre_compare_fail");
+#endif
+			} else
+				dev_err(hba->dev, "%s: suc: compare_pwr\n", __func__);
+
+		} else {
+			if (ufs_compare_max_pwr_mode(hba)) {
+				host->times_pre_compare_fail++;
+				dev_err(hba->dev, "%s: err:  compare_max_pwr\n", __func__);
+#if defined(CONFIG_SPRD_DEBUG)
+				panic("pre_compare_fail");
+#endif
+			} else
+				dev_err(hba->dev, "%s: suc: compare_max_pwr\n", __func__);
+		}
 		break;
 	case POST_CHANGE:
+		host->times_post_pwr++;
+		/* if already configured to the requested pwr_mode */
+		if (ufs_sprd_pwr_post_compare(hba)) {
+			host->times_post_compare_fail++;
+			dev_err(hba->dev, "%s: power configured error\n", __func__);
+#if defined(CONFIG_SPRD_DEBUG)
+			panic("post_compare_fail");
+#endif
+		} else {
+			dev_err(hba->dev, "%s: power already configured\n", __func__);
+		}
 		/* Set auto h8 ilde time to 10ms */
 		//ufshcd_auto_hibern8_enable(hba);
 		break;
