@@ -102,7 +102,7 @@ static int loopcheck_send(char *buf, unsigned int len)
 
 	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
 #ifdef BUILD_WCN_PCIE
-		loopcheck_send_pcie(buf, len);
+		ret = loopcheck_send_pcie(buf, len);
 #endif
 		return ret;
 	}
@@ -184,10 +184,8 @@ static void loopcheck_work_queue(struct work_struct *work)
 	if (sprdwcn_rx_cnt_a == sprdwcn_rx_cnt_b) {
 		wcn_send_atcmd_lock();
 		ret = loopcheck_send(a, strlen(a));
-		if (g_match_config && g_match_config->unisoc_wcn_pcie && (ret == -1)) {
+		if ((g_match_config && g_match_config->unisoc_wcn_pcie) && (ret == -1)) {
 			WCN_ERR("pcie is not ok, need to wait!\n");
-			ret = queue_delayed_work(loopcheck.workqueue, &loopcheck.work,
-				 LOOPCHECK_TIMER_INTERVAL * HZ);
 		} else {
 			timeleft = wait_for_completion_timeout(&loopcheck.completion, (4 * HZ));
 			wcn_send_atcmd_unlock();
@@ -209,10 +207,9 @@ static void loopcheck_work_queue(struct work_struct *work)
 				return;
 			}
 		}
-
+	}
 	ret = queue_delayed_work(loopcheck.workqueue, &loopcheck.work,
 				 LOOPCHECK_TIMER_INTERVAL * HZ);
-	}
 }
 
 void start_loopcheck(void)
