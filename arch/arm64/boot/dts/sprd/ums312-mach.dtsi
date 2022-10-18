@@ -11,7 +11,7 @@
 	aliases {
 		cooling-device0 = &cluster0_cooling;
 		cooling-device1 = &cluster1_cooling;
-		gpu-cooling0 = &gpu_cooling0;
+		thm-sensor0 = &virtual_sensor;
 		serial0 = &uart0;
 		serial1 = &uart1;
 		serial2 = &uart2;
@@ -192,7 +192,7 @@
 			polling-delay-passive = <100>;
 			polling-delay = <1000>;
 			sustainable-power = <2386>;
-			thermal-sensors = <&soc_sensor  17>;
+			thermal-sensors = <&virtual_sensor 0>;
 			trips {
 				soc_threshold: trip-point@0 {
 					temperature = <70000>;
@@ -215,12 +215,26 @@
 					trip = <&soc_target>;
 					contribution = <1024>;
 					cooling-device =
-					<&cluster0_cooling THERMAL_NO_LIMIT \
+					<&CPU0 THERMAL_NO_LIMIT \
 					THERMAL_NO_LIMIT>;
 				};
 				map1 {
 					trip = <&soc_target>;
 					contribution = <674>;
+					cooling-device =
+					<&CPU3 THERMAL_NO_LIMIT \
+					THERMAL_NO_LIMIT>;
+				};
+				map2 {
+					trip = <&soc_target>;
+					contribution = <1024>;
+					cooling-device =
+					<&cluster0_cooling THERMAL_NO_LIMIT \
+					THERMAL_NO_LIMIT>;
+				};
+				map3 {
+					trip = <&soc_target>;
+					contribution = <1024>;
 					cooling-device =
 					<&cluster1_cooling THERMAL_NO_LIMIT \
 					THERMAL_NO_LIMIT>;
@@ -270,20 +284,6 @@
 			thermal-sensors = <&ap_thm2 0>;
 		};
 
-		cluster0_thmzone: cluster0-thmzone {
-			polling-delay-passive = <0>;
-			polling-delay = <0>;
-			sustainable-power = <2000>;
-			thermal-sensors = <&cluster0_sensor  15>;
-		};
-
-		cluster1_thmzone: cluster1-thmzone {
-			polling-delay-passive = <0>;
-			polling-delay = <0>;
-			sustainable-power = <2000>;
-			thermal-sensors = <&cluster1_sensor  16>;
-		};
-
 		osctsen_thmzone: osctsen-thmzone {
 			polling-delay-passive = <0>;
 			polling-delay = <0>;
@@ -295,6 +295,13 @@
 			polling-delay = <0>;
 			thermal-sensors = <&pmic_tsensor 1>;
 		};
+	};
+
+	virtual_sensor: virtual-sensor@0 {
+			compatible = "virtual-thermal";
+			#thermal-sensor-cells = <1>;
+			thmzone-cells = <&ank0_thmzone>, <&ank1_thmzone>, <&ank2_thmzone>,
+				<&prometheus0_thmzone>, <&gpu_thmzone>;
 	};
 
 	cooling-devices {
