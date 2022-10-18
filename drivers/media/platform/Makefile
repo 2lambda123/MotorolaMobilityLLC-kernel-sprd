@@ -101,9 +101,3 @@ obj-y					+= meson/
 obj-y					+= cros-ec-cec/
 
 obj-y					+= sunxi/
-
-obj-y					+= sprd-vsp/
-
-obj-y					+= sprd-jpg/
-
-obj-y					+= sprd-vpu/
