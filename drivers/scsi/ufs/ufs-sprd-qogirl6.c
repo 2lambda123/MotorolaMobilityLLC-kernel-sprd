@@ -422,6 +422,42 @@ out:
 
 }
 
+void read_ufs_debug_bus(struct ufs_hba *hba)
+{
+	void __iomem *syssel_reg = NULL;
+	void __iomem *sig_reg = NULL;
+	void __iomem *data_reg = NULL;
+	u32 sigsel[] = {0x1, 0x16, 0x17, 0x1E, 0x1F};
+	u32 debugbus_data;
+	int i;
+
+	syssel_reg = ioremap(REG_DEBUG_APB_BASE + 0x18, 4);
+	sig_reg = ioremap(REG_DEBUG_APB_BASE + 0x1C, 4);
+	data_reg = ioremap(REG_DEBUG_APB_BASE + 0x50, 4);
+	if (!syssel_reg || !sig_reg || !data_reg) {
+		dev_err(hba->dev, "read ufs debug bus io remap failed\n");
+		goto out;
+	}
+
+	/* read aon ufs mphy debugbus */
+	dev_err(hba->dev, "No ufs mphy debugbus single.\n");
+
+	/* read ap ufshcd debugbus */
+	writel(0x0, syssel_reg);
+	dev_err(hba->dev, "ap ufshcd debugbus_data as follow(syssel:0x0):\n");
+	for (i = 0; i < 5; i++) {
+		writel(sigsel[i] << 8, sig_reg);
+		debugbus_data = readl(data_reg);
+		dev_err(hba->dev, "sig_sel: 0x%x. debugbus_data: 0x%x\n", sigsel[i], debugbus_data);
+	}
+	dev_err(hba->dev, "ap ufshcd debugbus_data end.\n");
+
+out:
+	iounmap(syssel_reg);
+	iounmap(sig_reg);
+	iounmap(data_reg);
+}
+
 /*
  * ufs_sprd_init - find other essential mmio bases
  * @hba: host controller instance
@@ -1299,6 +1335,12 @@ void ufs_sprd_setup_xfer_req(struct ufs_hba *hba, int task_tag, bool scsi_cmd)
 		pr_err("ufs after dword_0 = %x,%x\n", dword_0, req_desc->header.dword_0);
 	}
 }
+
+static void ufs_sprd_dbg_register_dump(struct ufs_hba *hba)
+{
+	read_ufs_debug_bus(hba);
+}
+
 /*
  * struct ufs_hba_sprd_vops - UFS sprd specific variant operations
  *
@@ -1318,6 +1360,7 @@ static struct ufs_hba_variant_ops ufs_hba_sprd_vops = {
 	.apply_dev_quirks = ufs_sprd_apply_dev_quirks,
 	.suspend = ufs_sprd_suspend,
 	.resume = ufs_sprd_resume,
+	.dbg_register_dump = ufs_sprd_dbg_register_dump,
 	.device_reset = ufs_sprd_device_reset,
 };
 

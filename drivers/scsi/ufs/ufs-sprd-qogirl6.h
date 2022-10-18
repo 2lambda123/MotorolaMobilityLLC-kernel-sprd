@@ -136,5 +136,7 @@ extern int sprd_get_soc_id(sprd_soc_id_type_t soc_id_type, u32 *id, int id_len);
 #define PWM_MODE_VAL    0x22
 #define HS_MODE_VAL     0x11
 
+/* Define debug apb base register */
+#define REG_DEBUG_APB_BASE	0x7C00A000
 
 #endif/* _UFS_SPRD_H_ */
