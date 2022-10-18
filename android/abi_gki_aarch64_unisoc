@@ -739,6 +739,7 @@
   read_cache_page_gfp
   refcount_dec_and_test_checked
   refcount_inc_checked
+  refcount_warn_saturate
   __refrigerator
   __register_chrdev
   register_filesystem
@@ -2840,3 +2841,5 @@
   set_blocksize
   submit_bio_wait
 
+# required by zsmalloc.ko
+  wait_on_page_bit
