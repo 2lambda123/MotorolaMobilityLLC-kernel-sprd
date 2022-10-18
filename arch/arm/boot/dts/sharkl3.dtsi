@@ -1397,7 +1397,8 @@
 
 			dmc_controller: dmc-controller@300001a8 {
 				compatible = "sprd,pub-dmc-original";
-				reg = <0x300001a8 0x100>;
+				reg = <0x300001a8 0x100>,
+					<0x30000000 0x12c>;
 			};
 		};
 	};
