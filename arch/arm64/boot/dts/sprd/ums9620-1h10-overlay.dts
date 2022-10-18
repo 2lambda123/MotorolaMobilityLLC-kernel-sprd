@@ -228,7 +228,7 @@
 
 				phys = <&ssphy>;
 				pd-extcon-enable;
-				extcon = <&extcon_gpio>, <&pmic_pd>;
+				extcon = <&pmic_typec>, <&pmic_pd>;
 
 			};
 			sprd_marlin3: sprd-marlin3 {
