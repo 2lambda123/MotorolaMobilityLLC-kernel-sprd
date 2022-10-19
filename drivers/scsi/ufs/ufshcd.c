@@ -52,6 +52,7 @@
 #include "ufs_bsg.h"
 #include "ufshcd-crypto.h"
 #include "ufshpb.h"
+#include "ufs-sprd-debug.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
@@ -369,14 +370,61 @@ static void ufshcd_add_query_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 	trace_ufshcd_upiu(dev_name(hba->dev), str, &rq->header, &rq->qr);
 }
 
+/* SPRD DEBUG */
+static void ufs_sprd_debug_send_tm_cmd(struct ufs_hba *hba,
+					int tag, const char *str)
+{
+	struct utp_task_req_desc *descp = &hba->utmrdl_base_addr[tag];
+	struct ufs_tm_cmd_info tm_tmp = {};
+
+	if (sprd_ufs_debug_is_supported(hba) == TRUE) {
+		tm_tmp.tm_func = (u8) (__be32_to_cpu(descp->header.dword_1) >> 16);
+		if (!strcmp(str, "tm_send")) {
+			tm_tmp.param1 = descp->input_param1;
+			tm_tmp.param2 = descp->input_param2;
+			ufshcd_common_trace(hba, UFS_TRACE_TM_SEND, &tm_tmp);
+		} else {
+			tm_tmp.param1 = descp->output_param1;
+			tm_tmp.param2 = 0;
+			tm_tmp.ocs = le32_to_cpu(descp->header.dword_2) & MASK_OCS;
+			if (!strcmp(str, "tm_complete_err"))
+				ufshcd_common_trace(hba, UFS_TRACE_TM_ERR, &tm_tmp);
+			else
+				ufshcd_common_trace(hba, UFS_TRACE_TM_COMPLETED, &tm_tmp);
+		}
+	}
+}
+
 static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
 	struct utp_task_req_desc *descp = &hba->utmrdl_base_addr[tag];
 
 	trace_android_vh_ufs_send_tm_command(hba, tag, str);
+	/* SPRD DEBUG */
+	ufs_sprd_debug_send_tm_cmd(hba, tag, str);
 	trace_ufshcd_upiu(dev_name(hba->dev), str, &descp->req_header,
 			&descp->input_param1);
+}
+
+/* SPRD DEBUG */
+static void ufs_sprd_debug_send_uic_cmd(struct ufs_hba *hba,
+					 struct uic_command *ucmd, const char *str)
+{
+	struct ufs_uic_cmd_info uic_tmp = {};
+
+	if (sprd_ufs_debug_is_supported(hba) == TRUE) {
+		uic_tmp.argu1 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_1);
+		uic_tmp.argu2 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_2);
+		uic_tmp.argu3 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_3);
+		if (!strcmp(str, "send")) {
+			uic_tmp.cmd = ucmd->command;
+			ufshcd_common_trace(hba, UFS_TRACE_UIC_SEND, &uic_tmp);
+		} else {
+			uic_tmp.cmd = ufshcd_readl(hba, REG_UIC_COMMAND);
+			ufshcd_common_trace(hba, UFS_TRACE_UIC_CMPL, &uic_tmp);
+		}
+	}
 }
 
 static void ufshcd_add_uic_command_trace(struct ufs_hba *hba,
@@ -386,6 +434,8 @@ static void ufshcd_add_uic_command_trace(struct ufs_hba *hba,
 	u32 cmd;
 
 	trace_android_vh_ufs_send_uic_command(hba, ucmd, str);
+	/* SPRD DEBUG */
+	ufs_sprd_debug_send_uic_cmd(hba, ucmd, str);
 
 	if (!trace_ufshcd_uic_command_enabled())
 		return;
@@ -503,6 +553,8 @@ static void ufshcd_print_host_regs(struct ufs_hba *hba)
 	ufshcd_print_err_hist(hba, &hba->ufs_stats.task_abort, "task_abort");
 
 	ufshcd_vops_dbg_register_dump(hba);
+	/* SPRD DEBUG */
+	sprd_ufs_debug_err_dump(hba);
 }
 
 static
@@ -2037,6 +2089,14 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	ufshcd_writel(hba, 1 << task_tag, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	/* Make sure that doorbell is committed immediately */
 	wmb();
+
+	/* SPRD debug */
+	if (sprd_ufs_debug_is_supported(hba) == TRUE) {
+		if (!!lrbp->cmd)
+			ufshcd_transfer_event_trace(hba, UFS_TRACE_SEND, lrbp->task_tag);
+		else
+			ufshcd_transfer_event_trace(hba, UFS_TRACE_DEV_SEND, lrbp->task_tag);
+	}
 }
 
 /**
@@ -5110,6 +5170,21 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 	return retval;
 }
 
+/* SPRD DEBUG */
+static void ufs_sprd_debug_compl_cmd(struct ufs_hba *hba,
+				  struct ufshcd_lrb *lrbp)
+{
+	if (sprd_ufs_debug_is_supported(hba) == TRUE) {
+		if (lrbp->cmd)
+			ufshcd_transfer_event_trace(hba, UFS_TRACE_COMPLETED,
+							 lrbp->task_tag);
+		else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE ||
+			 lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE)
+			ufshcd_transfer_event_trace(hba, UFS_TRACE_DEV_COMPLETED,
+							 lrbp->task_tag);
+	}
+}
+
 /**
  * __ufshcd_transfer_req_compl - handle SCSI and query command completion
  * @hba: per adapter instance
@@ -5125,9 +5200,12 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 
 	for_each_set_bit(index, &completed_reqs, hba->nutrs) {
 		lrbp = &hba->lrb[index];
+		lrbp->compl_time_stamp = ktime_get();
 		cmd = lrbp->cmd;
 		if (cmd) {
 			trace_android_vh_ufs_compl_command(hba, lrbp);
+			/* SPRD DEBUG */
+			ufs_sprd_debug_compl_cmd(hba, lrbp);
 			ufshcd_add_command_trace(hba, index, "complete");
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
@@ -5135,15 +5213,15 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			ufshcd_crypto_clear_prdt(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
-			lrbp->compl_time_stamp = ktime_get();
 			/* Do not touch lrbp after scsi done */
 			cmd->scsi_done(cmd);
 			__ufshcd_release(hba);
 		} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE ||
 			lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE) {
-			lrbp->compl_time_stamp = ktime_get();
 			if (hba->dev_cmd.complete) {
 				trace_android_vh_ufs_compl_command(hba, lrbp);
+				/* SPRD DEBUG */
+				ufs_sprd_debug_compl_cmd(hba, lrbp);
 				ufshcd_add_command_trace(hba, index,
 						"dev_complete");
 				complete(hba->dev_cmd.complete);
@@ -6228,6 +6306,9 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba)
 	}
 
 	trace_android_vh_ufs_check_int_errors(hba, queue_eh_work);
+	/* SPRD debug */
+	if (queue_eh_work && sprd_ufs_debug_is_supported(hba) == TRUE)
+		ufshcd_common_trace(hba, UFS_TRACE_INT_ERROR, NULL);
 
 	if (queue_eh_work) {
 		/*
@@ -7045,6 +7126,9 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	do {
 		/* Reset the attached device */
 		ufshcd_vops_device_reset(hba);
+		/* SPRD DEBUG */
+		if (sprd_ufs_debug_is_supported(hba) == TRUE)
+			ufshcd_common_trace(hba, UFS_TRACE_RESET_AND_RESTORE, NULL);
 
 		err = ufshcd_host_reset_and_restore(hba);
 	} while (err && --retries);
@@ -8022,6 +8106,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 {
 	struct ufs_hba *hba = (struct ufs_hba *)data;
 	int ret;
+
+	/* SPRD debug */
+	ufs_sprd_debug_init(hba);
 
 	/* Initialize hba, detect and initialize UFS device */
 	ret = ufshcd_probe_hba(hba, true);
