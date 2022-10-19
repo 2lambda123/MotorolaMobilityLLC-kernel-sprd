@@ -219,6 +219,11 @@
 		compatible = "sprd,pike2-swdvfs";
 	};
 
+	debug_stat: debugstat {
+		compatible = "sprd,debugstat";
+		soc_slp_cnt_reg = <&pmu_apb_regs REG_AON_APB_DCXO_LC_REG1 0xffff>;
+	};
+
 	psci {
 		compatible = "arm,psci-1.0";
 		method = "smc";

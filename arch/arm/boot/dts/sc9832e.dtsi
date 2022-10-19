@@ -274,6 +274,11 @@
 		compatible = "sprd,sharkle-swdvfs";
 	};
 
+	debug_stat: debugstat {
+		compatible = "sprd,debugstat";
+		soc_slp_cnt_reg = <&pmu_apb_regs REG_PMU_APB_PUB_SYS_DEEP_SLEEP_CNT 0xff>;
+	};
+
 	psci {
 		compatible = "arm,psci-1.0";
 		method = "smc";
