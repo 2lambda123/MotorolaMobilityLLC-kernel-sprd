@@ -6,7 +6,7 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 
-#define PAST_REG_RECORD_LEN 6000
+#define PAST_REG_RECORD_LEN 10000
 #define SERROR_PROC_BUF_LEN    6
 #define SERROR_START_ADDR 0x80000000UL
 #define SERROR_END_ADDR (0x80000000UL + 0x100000000UL)
@@ -22,6 +22,7 @@ struct past_reg_info {
 	unsigned int entry_no;
 	unsigned int regval;
 	unsigned int cpu_id;
+	unsigned long time;
 	phys_addr_t phys_addr;
 	void __iomem *addr;
 };
@@ -29,6 +30,7 @@ struct past_reg_info {
 
 struct sprd_debug_reg_record {
 	atomic_t index;
+	unsigned int cur_index;
 	struct past_reg_info reg_info_array[PAST_REG_RECORD_LEN];
 
 };
@@ -38,16 +40,20 @@ unsigned long sprd_debug_virt_to_phys(void __iomem *addr);
 #ifdef CONFIG_SPRD_PAST_RECORD
 #define sprd_write_reg_info(entry_no, val, addr)({\
 	unsigned int index;                                                       \
+	unsigned int time;                                                       \
 	if (sprd_past_reg_record && unlikely(serror_debug_status)	\
 			&& (sprd_debug_virt_to_phys((void __iomem *) addr) < SERROR_START_ADDR)) { \
 		index = (unsigned int)atomic_inc_return(&sprd_past_reg_record->index);	\
 		index %= PAST_REG_RECORD_LEN;	\
+		sprd_past_reg_record->cur_index = index;	\
+		time = (jiffies - INITIAL_JIFFIES) * (MSEC_PER_SEC / HZ);			\
 		sprd_past_reg_record->reg_info_array[index].index = index;            \
 		sprd_past_reg_record->reg_info_array[index].pid = current->pid;      \
 		sprd_past_reg_record->reg_info_array[index].state = 1;            \
 		sprd_past_reg_record->reg_info_array[index].entry_no = entry_no;       \
 		sprd_past_reg_record->reg_info_array[index].regval = (unsigned int) val;	\
 		sprd_past_reg_record->reg_info_array[index].cpu_id = smp_processor_id();	\
+		sprd_past_reg_record->reg_info_array[index].time = time;	\
 		sprd_past_reg_record->reg_info_array[index].phys_addr =		\
 			sprd_debug_virt_to_phys((void __iomem *) addr);	\
 		sprd_past_reg_record->reg_info_array[index].addr = (void __iomem *) addr; }    \
@@ -55,16 +61,20 @@ unsigned long sprd_debug_virt_to_phys(void __iomem *addr);
 })
 #define sprd_read_reg_info(entry_no, addr)({\
 	unsigned int index;                                                       \
+	unsigned long time;                                                       \
 	if (sprd_past_reg_record && unlikely(serror_debug_status)	\
 			&& (sprd_debug_virt_to_phys((void __iomem *) addr) < SERROR_START_ADDR)) { \
 		index = (unsigned int)atomic_inc_return(&sprd_past_reg_record->index);	\
 		index %= PAST_REG_RECORD_LEN;	\
+		sprd_past_reg_record->cur_index = index;	\
+		time = (jiffies - INITIAL_JIFFIES) * (MSEC_PER_SEC / HZ);			\
 		sprd_past_reg_record->reg_info_array[index].index = index;            \
 		sprd_past_reg_record->reg_info_array[index].pid = current->pid;      \
 		sprd_past_reg_record->reg_info_array[index].state = 0;            \
 		sprd_past_reg_record->reg_info_array[index].entry_no = entry_no;       \
 		sprd_past_reg_record->reg_info_array[index].regval = 0;                \
 		sprd_past_reg_record->reg_info_array[index].cpu_id = smp_processor_id();	\
+		sprd_past_reg_record->reg_info_array[index].time = time;	\
 		sprd_past_reg_record->reg_info_array[index].phys_addr =		\
 			sprd_debug_virt_to_phys((void __iomem *) addr);	\
 		sprd_past_reg_record->reg_info_array[index].addr = (void __iomem *) addr; }	\
