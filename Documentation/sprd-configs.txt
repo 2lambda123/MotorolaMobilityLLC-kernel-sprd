@@ -13946,8 +13946,8 @@ CONFIG_PKCS7_MESSAGE_PARSER
 	[missing plat description] none
 	[function] Support PKCS7_MESSAGE_PARSER.
 CONFIG_PLAYSTATION_FF
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field] menu,make
 	[subsys] hid
