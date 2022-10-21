@@ -17504,8 +17504,8 @@ CONFIG_SPRD_USB_U_ETHER
 	[missing plat description] none
 	[function]
 CONFIG_SPRD_USERLOG
-	[arch] arm64
-	[plat] sharkl3,sharkl5Pro
+	[arch] all
+	[plat] all
 	[missing plat] none
 	[field] code,make
 	[subsys] debug
