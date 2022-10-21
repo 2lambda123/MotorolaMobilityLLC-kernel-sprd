@@ -146,7 +146,7 @@ static int prepare_minidump_info(struct pt_regs *regs);
 static struct info_desc minidump_info_desc_g;
 static int prepare_exception_info(struct pt_regs *regs,
 			struct task_struct *tsk, const char *reason);
-static char *ylog_buffer;
+char *ylog_buffer;
 #endif /*	minidump code end	*/
 typedef char note_buf_t[SYSDUMP_NOTE_BYTES];
 
@@ -1726,6 +1726,9 @@ static __init int sysdump_early_init(void)
 
 	minidump_info_init();
 
+	/* last kmsg init */
+	last_kmsg_init();
+
 	return 0;
 }
 early_initcall(sysdump_early_init);
@@ -1786,6 +1789,9 @@ void sysdump_sysctl_exit(void)
 #ifdef CONFIG_SPRD_MINI_SYSDUMP
 	ylog_buffer_exit();
 #endif
+
+	/* last kmsg exit */
+	last_kmsg_exit();
 }
 
 late_initcall_sync(sysdump_sysctl_init);
