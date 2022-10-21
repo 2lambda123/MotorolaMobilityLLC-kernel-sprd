@@ -1233,7 +1233,7 @@
 			};
 
 			ap_efuse: efuse@32240000 {
-				status = "disabled";
+				status = "okay";
 				compatible = "sprd,ums312-efuse";
 				reg = <0 0x32240000 0 0x10000>;
 				clock-names = "enable";
