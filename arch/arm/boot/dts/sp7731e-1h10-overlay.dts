@@ -536,6 +536,7 @@
 
 &dpu {
 	status = "okay";
+	sprd,logo-memory = <&logo_reserved>;
 	/*sprd,wb-memory = <&wb_reserved>;*/
 };
 
