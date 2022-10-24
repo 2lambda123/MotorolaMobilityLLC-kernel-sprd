@@ -1654,6 +1654,20 @@ static void minidump_addr_convert(int i)
 		(int)(minidump_info_g.section_info_total.section_info[i].section_end_paddr -
 		minidump_info_g.section_info_total.section_info[i].section_start_paddr);
 }
+static void update_vmcoreinfo_data(void)
+{
+	if (!sprd_sysdump_info)
+		return;
+	vmcoreinfo_append_str("SYMBOL(%s)=%d\n", "processor_id",
+		smp_processor_id());
+	vmcoreinfo_append_str("SYMBOL(%s)=%d\n", "per_cpu_offset",
+		sprd_sysdump_info->sprd_mmuregs_info.sprd_pcpu_offset);
+	vmcoreinfo_append_str("SYMBOL(%s)=0x%llx\n", "core_regs_id",
+		sprd_sysdump_info->sprd_coreregs_info.paddr_core_regs_t);
+	vmcoreinfo_append_str("SYMBOL(%s)=0x%llx\n", "per_cpu_start",
+		sprd_sysdump_info->sprd_coreregs_info.pcpu_start_paddr);
+
+}
 static void minidump_info_init(void)
 {
 	int i;
@@ -1773,6 +1787,7 @@ static int sysdump_sysctl_init(void)
 #ifdef CONFIG_SPRD_MINI_SYSDUMP
 	minidump_init();
 #endif
+	update_vmcoreinfo_data();
 	return 0;
 }
 void sysdump_sysctl_exit(void)
