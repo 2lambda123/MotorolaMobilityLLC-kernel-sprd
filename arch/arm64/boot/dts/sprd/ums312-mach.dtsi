@@ -44,6 +44,10 @@
 		#size-cells = <0>;
 	};
 
+	sprd-map-user {
+		compatible = "unisoc,map-user";
+	};
+
 	display-subsystem {
 		compatible = "sprd,display-subsystem";
 		ports = <&dpu_port>;
