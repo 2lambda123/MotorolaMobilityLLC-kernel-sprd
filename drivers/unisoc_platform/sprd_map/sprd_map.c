@@ -15,7 +15,10 @@
 
 #define SPRD_MAP_IOCTRL_MAGIC        'o'
 #define MAP_USER_MINOR MISC_DYNAMIC_MINOR
+#define CHILD_NAME_NUM  5
 #define MAP_USER_VIR  _IOWR(SPRD_MAP_IOCTRL_MAGIC, 0, struct sprd_pmem_info)
+
+static const char *child_name[CHILD_NAME_NUM] = {"faceid-mem", "face-mem", "fd-mem", "fd", "camera"};
 
 struct reserved_mem_cfg {
 	bool no_reserved;
@@ -157,7 +160,8 @@ static struct miscdevice map_user_dev = {
 
 static int map_user_probe(struct platform_device *pdev)
 {
-	int ret;
+	int num = 0;
+	int ret, i;
 	struct device_node *reserved_mem_node;
 	struct device_node *fd_reserved_node;
 	struct resource r;
@@ -167,8 +171,15 @@ static int map_user_probe(struct platform_device *pdev)
 		mem_cfg.no_reserved = true;
 		dev_err(&pdev->dev, "find reserved memory node failed\n");
 	} else {
-		fd_reserved_node = of_get_child_by_name(reserved_mem_node, "faceid-mem");
-		if (fd_reserved_node == 0) {
+		for (i = 0; i < CHILD_NAME_NUM; i++) {
+			fd_reserved_node = of_get_child_by_name(reserved_mem_node, child_name[i]);
+			if (fd_reserved_node == 0)
+				continue;
+			num++;
+			if (num > 0)
+				break;
+		}
+		if (num == 0) {
 			mem_cfg.no_reserved = true;
 			dev_err(&pdev->dev, "find reserved memory node failed\n");
 		} else {
@@ -182,12 +193,10 @@ static int map_user_probe(struct platform_device *pdev)
 			}
 		}
 	}
-
 	ret = misc_register(&map_user_dev);
 	if (ret)
 		dev_err(&pdev->dev, "can't register miscdev minor=%d (%d)\n",
-		    MAP_USER_MINOR, ret);
-
+			 MAP_USER_MINOR, ret);
 	return ret;
 }
 
