@@ -29,8 +29,13 @@ void wcn_debug_bus_show(struct wcn_device *wcn_dev, char *show)
 	pr_info("+             DBGBUS               +\n");
 	pr_info("------------------------------------\n");
 
-	if (wcn_dev == NULL)
+	if (wcn_dev == NULL) {
+		if (IS_ERR_OR_NULL(s_wcn_device.btwf_device)) {
+			WCN_ERR("debugbus is not ready!\n");
+			return;
+		}
 		wcn_dev = s_wcn_device.btwf_device;
+	}
 
 	if (wcn_dev->dbus.maxsz == 0)
 		return;

@@ -647,10 +647,15 @@ static DEVICE_ATTR(shutting_down, 0644,
 static ssize_t debugbus_show(struct device *dev,
 					struct device_attribute *attr, char *buf)
 {
-	ssize_t len = s_wcn_device.btwf_device->dbus.curr_size;
+	ssize_t len = 0;
 	static int num;
 	ssize_t max_ret = PAGE_SIZE - 4;
 
+	if (IS_ERR_OR_NULL(s_wcn_device.btwf_device)) {
+		WCN_ERR("debugbus is not ready!\n");
+		return 0;
+	}
+	len = s_wcn_device.btwf_device->dbus.curr_size;
 	if (len == 0 || (from_ddr && s_wcn_device.btwf_device->db_to_ddr_disable)) {
 		WCN_INFO("%s debugbus data not imported\n", __func__);
 		return 0;
