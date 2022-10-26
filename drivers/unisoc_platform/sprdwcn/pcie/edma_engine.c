@@ -821,6 +821,10 @@ int edma_push_link(int chn, void *head, void *tail, int num)
 	if (inout == TX)
 		edma_print_mbuf_data(chn, head, tail, __func__);
 
+	if (!wcn_get_edma_status()) {
+		WCN_ERR("%s:don not push the data, card removed, chn=%d\n", __func__, chn);
+		return -1;
+	}
 	spin_lock_irqsave(edma->chn_sw[chn].dscr_ring.lock.irq_spinlock_p,
 			edma->chn_sw[chn].dscr_ring.lock.flag);
 
