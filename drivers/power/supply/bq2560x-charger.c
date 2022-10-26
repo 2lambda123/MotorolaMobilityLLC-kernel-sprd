@@ -795,6 +795,26 @@ static int bq2560x_charger_set_power_path_status(struct bq2560x_charger_info *in
 	return ret;
 }
 
+static int bq2560x_charger_check_power_path_status(struct bq2560x_charger_info *info)
+{
+	int ret = 0;
+
+	if (info->disable_power_path)
+		return 0;
+
+	if (bq2560x_charger_get_power_path_status(info))
+		return 0;
+
+	dev_info(info->dev, "%s:line%d, disable HIZ\n", __func__, __LINE__);
+
+	ret = bq2560x_update_bits(info, BQ2560X_REG_0,
+				  BQ2560X_REG_EN_HIZ_MASK, 0);
+	if (ret)
+		dev_err(info->dev, "disable HIZ mode failed, ret = %d\n", ret);
+
+	return ret;
+}
+
 static void bq2560x_check_wireless_charge(struct bq2560x_charger_info *info, bool enable)
 {
 	int ret;
@@ -1519,7 +1539,7 @@ static int bq2560x_charger_enable_otg(struct regulator_dev *dev)
 			      msecs_to_jiffies(BQ2560X_OTG_VALID_MS));
 out:
 	mutex_unlock(&info->lock);
-	dev_dbg(info->dev, "%s:line%d:enable_otg\n", __func__, __LINE__);
+	dev_info(info->dev, "%s:line%d:enable_otg\n", __func__, __LINE__);
 
 	return ret;
 }
@@ -1554,7 +1574,7 @@ static int bq2560x_charger_disable_otg(struct regulator_dev *dev)
 
 out:
 	mutex_unlock(&info->lock);
-	dev_dbg(info->dev, "%s:line%d:disable_otg\n", __func__, __LINE__);
+	dev_info(info->dev, "%s:line%d:disable_otg\n", __func__, __LINE__);
 
 	return ret;
 
@@ -1756,6 +1776,7 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 	}
 
 	bq2560x_charger_stop_charge(info, bat_present);
+	bq2560x_charger_check_power_path_status(info);
 
 	device_init_wakeup(info->dev, true);
 
@@ -1810,6 +1831,8 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 	}
 
 	mutex_unlock(&info->lock);
+
+	bq2560x_dump_register(info);
 
 	return 0;
 
