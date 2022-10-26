@@ -42,7 +42,7 @@
 		anlg_wrap_wcn_regs: syscon@33100000 {
 			compatible = "syscon";
 			#syscon-cells = <2>;
-			reg = <0x33100000 0x10000>;
+			reg = <0x33100000 0x1000>;
 		};
 
 		aon_intc_regs: syscon@40200000 {
