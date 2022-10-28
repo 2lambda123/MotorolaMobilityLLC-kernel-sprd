@@ -1096,5 +1096,18 @@
 		clock-frequency = <1248000000>;
 		clock-output-names = "bbpll";
 	};
+	/*sprd_apipe.ko*/
+	apipe-pcm {
+		compatible = "unisoc,apipe";
+	};
+
+	apipe-cmd-in {
+		compatible = "unisoc,apipe";
+	};
+
+	apipe-cmd-out {
+		compatible = "unisoc,apipe";
+	};
+
 };
 
