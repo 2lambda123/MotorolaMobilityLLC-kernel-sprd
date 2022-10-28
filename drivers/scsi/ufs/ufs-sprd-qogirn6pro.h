@@ -39,6 +39,7 @@ struct ufs_sprd_host {
 	struct syscon_ufs usb31pllv_ref2mphy_en;
 
 	struct clk *hclk_source;
+	struct clk *rco_100M;
 	struct clk *hclk;
 	struct reset_control *ap_ahb_ufs_rst;
 	struct reset_control *aon_apb_ufs_rst;
@@ -47,6 +48,9 @@ struct ufs_sprd_host {
 	bool wlun_dev_add;
 	void __iomem *syssel_reg;
 };
+
+/*ufs hclk register*/
+#define REG_HCLKDIV	0xFC
 
 /* Set auto h8 ilde time to 10ms */
 #define AUTO_H8_IDLE_TIME_10MS 0x1001
