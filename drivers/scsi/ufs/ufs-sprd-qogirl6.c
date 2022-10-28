@@ -424,38 +424,28 @@ out:
 
 void read_ufs_debug_bus(struct ufs_hba *hba)
 {
-	void __iomem *syssel_reg = NULL;
-	void __iomem *sig_reg = NULL;
-	void __iomem *data_reg = NULL;
 	u32 sigsel[] = {0x1, 0x16, 0x17, 0x1E, 0x1F};
 	u32 debugbus_data;
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
 	int i;
 
-	syssel_reg = ioremap(REG_DEBUG_APB_BASE + 0x18, 4);
-	sig_reg = ioremap(REG_DEBUG_APB_BASE + 0x1C, 4);
-	data_reg = ioremap(REG_DEBUG_APB_BASE + 0x50, 4);
-	if (!syssel_reg || !sig_reg || !data_reg) {
-		dev_err(hba->dev, "read ufs debug bus io remap failed\n");
-		goto out;
+	if (!host->dbg_apb_reg) {
+		dev_warn(hba->dev, "can't get ufs debug bus base.\n");
+		return;
 	}
 
 	/* read aon ufs mphy debugbus */
 	dev_err(hba->dev, "No ufs mphy debugbus single.\n");
 
 	/* read ap ufshcd debugbus */
-	writel(0x0, syssel_reg);
+	writel(0x0, host->dbg_apb_reg + 0x18);
 	dev_err(hba->dev, "ap ufshcd debugbus_data as follow(syssel:0x0):\n");
 	for (i = 0; i < 5; i++) {
-		writel(sigsel[i] << 8, sig_reg);
-		debugbus_data = readl(data_reg);
+		writel(sigsel[i] << 8, host->dbg_apb_reg + 0x1c);
+		debugbus_data = readl(host->dbg_apb_reg + 0x50);
 		dev_err(hba->dev, "sig_sel: 0x%x. debugbus_data: 0x%x\n", sigsel[i], debugbus_data);
 	}
 	dev_err(hba->dev, "ap ufshcd debugbus_data end.\n");
-
-out:
-	iounmap(syssel_reg);
-	iounmap(sig_reg);
-	iounmap(data_reg);
 }
 
 /*
@@ -533,6 +523,12 @@ static int ufs_sprd_init(struct ufs_hba *hba)
 				__func__, PTR_ERR(host->aon_apb_reg));
 		host->aon_apb_reg = NULL;
 		return -ENODEV;
+	}
+
+	host->dbg_apb_reg = devm_ioremap(dev, REG_DEBUG_APB_BASE, 0x100);
+	if (IS_ERR(host->dbg_apb_reg)) {
+		pr_err("error to ioremap ufs debug bus base.\n");
+		host->dbg_apb_reg = NULL;
 	}
 
 	ufs_sprd_reset_pre(host);

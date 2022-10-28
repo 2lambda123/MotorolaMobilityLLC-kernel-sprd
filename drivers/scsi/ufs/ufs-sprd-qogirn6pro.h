@@ -45,7 +45,7 @@ struct ufs_sprd_host {
 	uint32_t ufs_lane_calib_data0;
 	uint32_t ufs_lane_calib_data1;
 	bool wlun_dev_add;
-
+	void __iomem *syssel_reg;
 };
 
 /* Set auto h8 ilde time to 10ms */

@@ -53,6 +53,7 @@ struct ufs_sprd_host {
 	struct ufs_pa_layer_attr dts_pwr_info;
 	u32 times_post_pwr;
 	u32 times_post_compare_fail;
+	void __iomem *dbg_apb_reg;
 };
 
 extern int sprd_get_soc_id(sprd_soc_id_type_t soc_id_type, u32 *id, int id_len);
