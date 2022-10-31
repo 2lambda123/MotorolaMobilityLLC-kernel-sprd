@@ -186,11 +186,12 @@ static void loopcheck_work_queue(struct work_struct *work)
 		ret = loopcheck_send(a, strlen(a));
 		if ((g_match_config && g_match_config->unisoc_wcn_pcie) && (ret == -1)) {
 			WCN_ERR("pcie is not ok, need to wait!\n");
+			wcn_send_atcmd_unlock();
 		} else {
 			timeleft = wait_for_completion_timeout(&loopcheck.completion, (4 * HZ));
 			wcn_send_atcmd_unlock();
 			if (!test_bit(WCN_LOOPCHECK_OPEN, &loopcheck.status))
-			return;
+				return;
 			if (loopcheck_cnt++ % 25 == 0) {
 				ktime_get_real_ts64(&ts);
 				ts.tv_sec -= sys_tz.tz_minuteswest * 60;
