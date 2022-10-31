@@ -42,6 +42,10 @@ int mbuf_link_alloc(int chn, struct mbuf_t **head, struct mbuf_t **tail,
 	struct buffer_pool *pool = &(mchn->chn_public[chn].pool);
 
 	WCN_DBG("pool=%p, chn=%d, free=%d\n", pool, chn, pool->free);
+	if (sprdwcn_bus_get_carddump_status()) {
+	WCN_ERR("%s err in dump status,chn=%d\n", __func__, chn);
+	return -1;
+	}
 	spin_lock_irqsave(&(pool->lock), pool->irq_flags);
 	if ((*num <= 0) || (pool->free <= 0)) {
 		WCN_ERR("[+]%s err, num %d, free %d)\n",
@@ -139,6 +143,8 @@ int mbuf_pool_deinit(struct buffer_pool *pool)
 	memset(pool->mem, 0x00, (sizeof(struct mbuf_t) +
 	       pool->payload) * pool->size);
 	kfree(pool->mem);
+	pool->mem = NULL;
+	pool->free = 0;
 
 	return 0;
 }
