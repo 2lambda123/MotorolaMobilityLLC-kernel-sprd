@@ -484,9 +484,9 @@
 
 &pmic_fgu {
 	monitored-battery = <&bat>;
-	sprd,calib-resistance-micro-ohms = <10000>;
-	first-calib-voltage = <3630000>;
-	first-calib-capacity = <40>;
+	sprd,calib-resistance-micro-ohms = <20000>;
+	fgu-capacity-track;
+	phys = <&hsphy>;
 };
 
 &panel {
