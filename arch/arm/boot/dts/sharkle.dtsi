@@ -817,11 +817,11 @@
 			djtag: djtag@40340000 {
 				compatible = "sprd,djtag";
 				reg = <0x40340000 0x1000>;
-				syscon-names = "soft_rst";
-				syscons = <&aon_apb_regs REG_AON_APB_APB_RST2
+				syscon = <&aon_apb_regs REG_AON_APB_APB_RST2
 					MASK_AON_APB_DJTAG_SOFT_RST>;
-				clock-names = "enable";
-				clocks = <&aonapb_gate CLK_DJTAG_EB>;
+				clock-names = "enable", "tck";
+				clocks = <&aonapb_gate CLK_DJTAG_EB>,
+					<&aonapb_gate CLK_DISP_EMC_EB>;
 				hwlocks = <&hwlock 10>;
 				hwlock-names = "djtag";
 
@@ -1121,6 +1121,39 @@
 			dmc_controller: dmc-controller@300001b4 {
 				compatible = "sprd,pub-dmc-original";
 				reg = <0x300001b4 0x100>;
+			};
+
+			dmc_mpu: dmc-mpu@300e0000 {
+				compatible = "sprd,dmc-mpu-r3p0";
+				reg = <0x300e0000 0x10000>;
+				interrupts = <GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH>;
+				sprd,channel-num = <8>;
+				sprd,channel-names = "MM", "GPU", "DISP",
+					"A53", "AP/VSP/GSP", "WTLCP/PUBCP",
+					"WCN/AON", "SHARED";
+				sprd,ranges = <0 0>,
+					      <0 0>,
+					      <0 0>,
+					      <0 0>,
+					      <0 0>,
+					      <0 0>,
+					      <0 0>,
+					      <0 0>;
+				sprd,chn-config = <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>,
+						  <DISABLE MON_INSIDE MON_WRITE>;
+				sprd,id-config = <MPUID 0 0>, <MPUID 0 0>,
+						 <MPUID 0 0>, <MPUID 0 0>,
+						 <MPUID 0 0>, <MPUID 0 0>,
+						 <MPUID 0 0>, <MPUID 0 0>;
+				sprd,shared-chn = "MM";
+				sprd,ddr-offset = <0x80000000>;
+				status = "okay";
 			};
 		};
 	};
