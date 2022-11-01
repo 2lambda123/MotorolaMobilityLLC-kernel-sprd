@@ -140,6 +140,11 @@ static enum wcn_hard_intf_type sdio_get_hwintf_type(void)
 	return HW_TYPE_SDIO;
 }
 
+static void sdio_debug_point_show(void)
+{
+	sdiohal_debug_point_show();
+}
+
 static struct sprdwcn_bus_ops sdiohal_bus_ops = {
 	.preinit = sdio_preinit,
 	.deinit = sdio_preexit,
@@ -167,6 +172,7 @@ static struct sprdwcn_bus_ops sdiohal_bus_ops = {
 	.register_rescan_cb = sdio_register_rescan_cb,
 	.rescan = sdio_rescan,
 	.remove_card = sdio_remove_card,
+	.debug_point_show = sdio_debug_point_show,
 };
 
 void module_bus_sdio_init(void)

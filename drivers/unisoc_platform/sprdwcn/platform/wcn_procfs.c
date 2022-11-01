@@ -39,12 +39,10 @@
 #include "../include/wcn_dbg.h"
 
 u32 wcn_print_level = WCN_DEBUG_OFF;
-static DECLARE_COMPLETION(assert_work);
 
 static u32 g_dumpmem_switch =  1;
 static u32 g_loopcheck_switch;
 struct wcn_pcie_info *pcie_dev;
-static int reset_prop_flag;
 
 struct mdbg_proc_entry {
 	char *name;
@@ -53,6 +51,15 @@ struct mdbg_proc_entry {
 	wait_queue_head_t	rxwait;
 	unsigned int	rcv_len;
 	void *buf;
+};
+
+struct async_assert_t {
+	struct work_struct assert_wq;
+	/*device_suspend/device_resume device_lock()*/
+	atomic_t dev_lock;
+	atomic_t flag;
+	enum wcn_source_type async_assert_type;
+	char async_assert_str[128];
 };
 
 struct mdbg_proc_t {
@@ -67,10 +74,27 @@ struct mdbg_proc_t {
 	int fail_count;
 	int assert_notify_flag;
 	bool loopcheck_flag;
+
+	/*see device_lock*/
+	struct async_assert_t async_assert;
 };
 
 static struct mdbg_proc_t *mdbg_proc;
 static int dump_cnt;
+
+void mdbg_device_lock_notify(void)
+{
+	WARN_ON(atomic_read(&mdbg_proc->async_assert.dev_lock));
+	atomic_set(&mdbg_proc->async_assert.dev_lock, 1);
+}
+EXPORT_SYMBOL_GPL(mdbg_device_lock_notify);
+
+void mdbg_device_unlock_notify(void)
+{
+	WARN_ON(!atomic_read(&mdbg_proc->async_assert.dev_lock));
+	atomic_set(&mdbg_proc->async_assert.dev_lock, 0);
+}
+EXPORT_SYMBOL_GPL(mdbg_device_unlock_notify);
 
 void wcn_reset_process(void)
 {
@@ -117,61 +141,10 @@ bool wcn_is_assert(void)
 }
 EXPORT_SYMBOL_GPL(wcn_is_assert);
 
-void wcn_reset_or_dump_process(void)
-{
-	/*wcn reset or dump process*/
-	stop_loopcheck();
-	wcnlog_clear_log();
-
-	WCN_INFO("start to dump reset_prop = %d\n", reset_prop_flag);
-	if (reset_prop_flag == WCN_ASSERT_ONLY_DUMP) { /*userdebug version*/
-		wcn_dump_process();
-		goto out;
-	} else if (reset_prop_flag == WCN_ASSERT_ONLY_RESET) { /*user version*/
-		wcn_reset_process();
-		goto out;
-	} else if (reset_prop_flag == WCN_ASSERT_BOTH_RESET_DUMP) {
-		/*need to do, please reference androidr_trunk_u01*/
-		wcn_dump_process();
-		msleep(2000);
-		wcn_reset_process();
-		sprdwcn_bus_set_carddump_status(false);
-		/*notify slogmodem to restore the state of saving dump*/
-		wcn_notify_fw_error(WCN_SOURCE_CP2_ALIVE, "save dump");
-		goto out;
-	}
-out:
-	mutex_unlock(&mdbg_proc->mutex);
-}
-
-int pcie_assert_thread(void *data)
-{
-	wait_for_completion(&assert_work);
-	WCN_INFO("%s:wait_for_completion end\n", __func__);
-	wcn_reset_or_dump_process();
-	return 0;
-}
-
-static void pcie_launch_thread(void)
-{
-	struct task_struct *tx_thread = NULL;
-
-	tx_thread = kthread_create(pcie_assert_thread,
-				   NULL, "pcie_assert_thread");
-	if (tx_thread)
-		wake_up_process(tx_thread);
-	else {
-		pr_err("create pcie_assert_thread fail\n");
-		return;
-	}
-}
-
-void wcn_assert_interface(enum wcn_source_type type, char *str)
+void __wcn_assert_interface(enum wcn_source_type type, char *str)
 {
 	int reset_prop = wcn_sysfs_get_reset_prop();
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
-	reset_prop_flag = reset_prop;
 	WCN_INFO("wcn_assert_interface %d\n", reset_prop);
 	WCN_ERR("wcn_source_type:%d\n", type);
 	WCN_ERR("fw assert:%s\n", str);
@@ -192,17 +165,64 @@ void wcn_assert_interface(enum wcn_source_type type, char *str)
 		wcn_notify_fw_error(type, str);
 		mdbg_proc->assert_notify_flag = 1;
 	}
+	sprdwcn_bus_debug_point_show();
+	/*wcn reset or dump process*/
+	stop_loopcheck();
+	wcnlog_clear_log();
 
-	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
-		WCN_INFO("%s:pcie dump start\n", __func__);
-		complete(&assert_work);
-	} else {
-		wcn_reset_or_dump_process();
+	if (reset_prop == WCN_ASSERT_ONLY_DUMP) { /*userdebug version*/
+		wcn_dump_process();
+		goto out;
+	} else if (reset_prop == WCN_ASSERT_ONLY_RESET) { /*user version*/
+		wcn_reset_process();
+		goto out;
+	} else if (reset_prop == WCN_ASSERT_BOTH_RESET_DUMP) {
+		/*need to do, please reference androidr_trunk_u01*/
+		wcn_dump_process();
+		msleep(2000);
+		wcn_reset_process();
+		sprdwcn_bus_set_carddump_status(false);
+		/*notify slogmodem to restore the state of saving dump*/
+		wcn_notify_fw_error(WCN_SOURCE_CP2_ALIVE, "save dump");
+		goto out;
 	}
 out:
 	mutex_unlock(&mdbg_proc->mutex);
 }
 EXPORT_SYMBOL_GPL(wcn_assert_interface);
+
+void wcn_assert_interface(enum wcn_source_type type, char *str)
+{
+	if (in_interrupt() || unlikely(atomic_read(&mdbg_proc->async_assert.flag)) ||
+		unlikely(atomic_read(&mdbg_proc->async_assert.dev_lock))) {
+		/* dump: dev_lock(resume), cause deadlock in system resume. see mdbg_dump_data() */
+		WCN_INFO("Async assert! %ld,%d,%d\n", in_interrupt(),
+			atomic_read(&mdbg_proc->async_assert.flag),
+			atomic_read(&mdbg_proc->async_assert.dev_lock));
+		mdbg_proc->async_assert.async_assert_type = type;
+		strncpy(mdbg_proc->async_assert.async_assert_str, str, sizeof(mdbg_proc->async_assert.async_assert_str));
+		schedule_work(&mdbg_proc->async_assert.assert_wq);
+	} else
+		__wcn_assert_interface(type, str);
+}
+
+void wcn_assert_interface_async(enum wcn_source_type type, char *str)
+{
+	atomic_set(&mdbg_proc->async_assert.flag, 1);
+	wcn_assert_interface(type, str);
+	atomic_set(&mdbg_proc->async_assert.flag, 0);
+}
+EXPORT_SYMBOL_GPL(wcn_assert_interface_async);
+
+static void wcn_assert_wq(struct work_struct *work)
+{
+	struct async_assert_t *as = container_of(work, struct async_assert_t, assert_wq);
+
+	if (IS_ERR_OR_NULL(as))
+		return;
+
+	__wcn_assert_interface(as->async_assert_type, as->async_assert_str);
+}
 
 void mdbg_assert_interface(char *str)
 {
@@ -1271,7 +1291,6 @@ int proc_fs_init(void)
 {
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
-	pcie_launch_thread();
 	mdbg_proc = kzalloc(sizeof(struct mdbg_proc_t), GFP_KERNEL);
 	if (!mdbg_proc)
 		return -ENOMEM;
@@ -1317,6 +1336,7 @@ int proc_fs_init(void)
 	init_waitqueue_head(&mdbg_proc->assert.rxwait);
 	init_waitqueue_head(&mdbg_proc->loopcheck.rxwait);
 	mutex_init(&mdbg_proc->mutex);
+	INIT_WORK(&mdbg_proc->async_assert.assert_wq, wcn_assert_wq);
 
 	if (mdbg_memory_alloc() < 0) {
 		kfree(mdbg_proc);
