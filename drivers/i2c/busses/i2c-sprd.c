@@ -137,6 +137,7 @@ struct sprd_i2c {
 	bool ack_flag;
 	struct sprd_syscon_i2c i2c_syscon_rst;
 	struct sprd_i2c_dma dma;
+	struct reset_control *rst;
 };
 
 static void sprd_i2c_dump_reg(struct sprd_i2c *i2c_dev)
@@ -148,21 +149,6 @@ static void sprd_i2c_dump_reg(struct sprd_i2c *i2c_dev)
 	dev_err(i2c_dev->dev, "ADDR_DVD0 = 0x%x\n", readl(i2c_dev->base + ADDR_DVD0));
 	dev_err(i2c_dev->dev, "ADDR_DVD1 = 0x%x\n", readl(i2c_dev->base + ADDR_DVD1));
 	dev_err(i2c_dev->dev, "ADDR_STA0_DVD = 0x%x\n", readl(i2c_dev->base + ADDR_STA0_DVD));
-}
-
-static void sprd_i2c_reset(struct sprd_i2c *i2c_dev)
-{
-	struct reset_control *rst_test;
-	int ret;
-
-	rst_test = devm_reset_control_get(i2c_dev->dev, "i2c_rst");
-	if (!IS_ERR(rst_test)) {
-		ret = reset_control_reset(rst_test);
-		if (ret < 0)
-			dev_err(i2c_dev->dev, "i2c soft reset failed, ret = %d\n", ret);
-	} else {
-		dev_err(i2c_dev->dev, "reset control get failed\n");
-	}
 }
 
 static void sprd_i2c_set_count(struct sprd_i2c *i2c_dev, u32 count)
@@ -339,6 +325,7 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 {
 	struct sprd_i2c *i2c_dev = i2c_adap->algo_data;
 	unsigned long time_left;
+	int ret;
 
 	i2c_dev->msg = msg;
 	i2c_dev->buf = msg->buf;
@@ -375,10 +362,15 @@ static int sprd_i2c_handle_msg(struct i2c_adapter *i2c_adap,
 	time_left = wait_for_completion_timeout(&i2c_dev->complete,
 				msecs_to_jiffies(I2C_XFER_TIMEOUT));
 	if (!time_left) {
-		sprd_i2c_reset(i2c_dev);
+		dev_err(i2c_dev->dev, "transfer timeout, I2C_STATUS = 0x%x\n",
+			readl(i2c_dev->base + I2C_STATUS));
+		if (i2c_dev->rst != NULL) {
+			ret = reset_control_reset(i2c_dev->rst);
+			if (ret < 0)
+				dev_err(i2c_dev->dev, "i2c soft reset failed, ret = %d\n", ret);
+		}
 		return -ETIMEDOUT;
 	}
-
 	return i2c_dev->err;
 }
 
@@ -893,6 +885,12 @@ static int sprd_i2c_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, i2c_dev);
+
+	i2c_dev->rst = devm_reset_control_get(i2c_dev->dev, "i2c_rst");
+	if (IS_ERR(i2c_dev->rst)) {
+		dev_err(i2c_dev->dev, "can't get i2c reset node\n");
+		i2c_dev->rst = NULL;
+	}
 
 	ret = sprd_i2c_dma_request(i2c_dev);
 
