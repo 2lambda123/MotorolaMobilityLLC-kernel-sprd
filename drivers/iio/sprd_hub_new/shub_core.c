@@ -560,8 +560,6 @@ static ssize_t batch_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	}
 
-		dev_err(&sensor->sensor_pdev->dev, "%s Fail\n", __func__);
-
 	return count;
 }
 static DEVICE_ATTR_WO(batch);
