@@ -103,18 +103,18 @@ void mmc_debug_print(struct mmc_debug_info *info, struct sdhci_host *host)
 
 	if ((ktime_to_ms(ktime_get()) - info->cnt_time) > (10000ULL)) {
 		/* calculate read/write speed */
-		if (info->read_total_time)
-			read_speed = info->read_total_blocks * 50000 / info->read_total_time;
-		if (info->write_total_time)
-			write_speed = info->write_total_blocks * 50000 / info->write_total_time;
+		if (info->read_total_time >= 10)
+			read_speed = info->read_total_blocks * 500 / (info->read_total_time / 10);
+		if (info->write_total_time >= 10)
+			write_speed = info->write_total_blocks * 500 / (info->write_total_time / 10);
 
 		/* print debug messages of mmc io */
 		rq_log(info->cmd_2_end, "|__c2e%9s", info->name);
 		rq_log(info->data_2_end, "|__d2e%9s", info->name);
 		rq_log(info->block_len, "|__blocks%6s", info->name);
-		pr_info("|__speed%7s: read= %d.%d M/s, write= %d.%d M/s, r_blk= %d, w_blk= %d\n",
-			info->name, read_speed / 100, read_speed % 100, write_speed / 100,
-			write_speed % 100, info->read_total_blocks, info->write_total_blocks);
+		pr_info("|__speed%7s: r= %u.%u M/s, w= %u.%u M/s, r_blk= %d, w_blk= %d\n",
+			info->name, read_speed / 10, read_speed % 10, write_speed / 10,
+			write_speed % 10, info->read_total_blocks, info->write_total_blocks);
 #if IS_ENABLED(CONFIG_MMC_SWCQ)
 		if (!strcmp(info->name, "mmc0") && info->mrq &&
 			((read_speed > 0 && read_speed < 100) ||
