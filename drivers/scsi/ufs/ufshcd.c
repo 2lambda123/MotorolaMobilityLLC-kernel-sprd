@@ -53,6 +53,7 @@
 #include "ufshcd-crypto.h"
 #include "ufshpb.h"
 #include "ufs-sprd-debug.h"
+#include <linux/debugfs.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
@@ -186,6 +187,44 @@ enum {
 	UFSHCD_UIC_DME_ERROR = (1 << 5), /* DME error */
 	UFSHCD_UIC_PA_GENERIC_ERROR = (1 << 6), /* Generic PA error */
 };
+
+enum err_type {
+	UIC_ERR_PA,
+	UIC_ERR_DL,
+	UIC_ERR_DME,
+	UFS_ABORT,
+	UFS_EH_DEVICE_RESET,
+	UFS_EH_HOST_RESET,
+	UFS_EH_TIMEOUT,
+	UFS_HARDWARE_ERR,
+	UFS_LINK_START_FAIL,
+	UFS_EVT_AUTO_HIBERN8_ERR,
+	UFS_EVT_FATAL_ERR,
+	UFS_EVT_SUSPEND_ERR,
+	UFS_EVT_RESUME_ERR,
+	UFS_SPRD_RESET,
+};
+
+#define UIC_ERR_PA_MAX 5
+#define UIC_ERR_DL_MAX 15
+struct ufs_err_cnt {
+	unsigned long pa_err_cnt_total;
+	u32 pa_err_cnt[UIC_ERR_PA_MAX];
+	unsigned long dl_err_cnt_total;
+	u32 dl_err_cnt[UIC_ERR_DL_MAX];
+	u32 dme_err_cnt;
+	u32 hardware_err_reset_cnt;
+	u32 ufshcd_eh_device_reset_handler_cnt;
+	u32 ufshcd_abort_cnt;
+	u32 ufshcd_eh_host_reset_handler_cnt;
+	u32 ufshcd_eh_timed_out_cnt;
+	u32 link_fail_cnt;
+	u32 auto_h8_err_cnt;
+	u32 fatal_err_cnt;
+	u32 suspend_err_cnt;
+	u32 resume_err_cnt;
+	u32 sprd_reset_cnt;
+} ufs_err_cnt;
 
 #define ufshcd_set_eh_in_progress(h) \
 	((h)->eh_flags |= UFSHCD_EH_IN_PROGRESS)
@@ -395,6 +434,194 @@ static void ufs_sprd_debug_send_tm_cmd(struct ufs_hba *hba,
 	}
 }
 
+static void sprd_print_uic_err_cnt(struct ufs_hba *hba)
+{
+	dev_err(hba->dev, "pa_err_cnt_total=%ld\n", ufs_err_cnt.pa_err_cnt_total);
+	dev_err(hba->dev, "pa_lane0_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[0]);
+	dev_err(hba->dev, "pa_lane1_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[1]);
+	dev_err(hba->dev, "pa_line_reset_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[4]);
+	dev_err(hba->dev, "dl_err_cnt_total=%ld\n", ufs_err_cnt.dl_err_cnt_total);
+	dev_err(hba->dev, "dl_nac_received_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[0]);
+	dev_err(hba->dev, "dl_tcx_replay_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[1]);
+	dev_err(hba->dev, "dl_afcx_request_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[2]);
+	dev_err(hba->dev, "dl_fcx_protection_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[3]);
+	dev_err(hba->dev, "dl_crc_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[4]);
+	dev_err(hba->dev, "dl_rx_buffer_overflow_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[5]);
+	dev_err(hba->dev, "dl_max_frame_length_exceeded_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[6]);
+	dev_err(hba->dev, "dl_wrong_sequence_number_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[7]);
+	dev_err(hba->dev, "dl_afc_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[8]);
+	dev_err(hba->dev, "dl_nac_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[9]);
+	dev_err(hba->dev, "dl_eof_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[10]);
+	dev_err(hba->dev, "dl_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[11]);
+	dev_err(hba->dev, "dl_bad_ctrl_symbol_type_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[12]);
+	dev_err(hba->dev, "dl_pa_init_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[13]);
+	dev_err(hba->dev, "dl_pa_error_ind_received=%d\n", ufs_err_cnt.dl_err_cnt[14]);
+	dev_err(hba->dev, "dme_err_cnt=%d\n", ufs_err_cnt.dme_err_cnt);
+	dev_err(hba->dev, "ufshcd_abort_cnt=%d\n", ufs_err_cnt.ufshcd_abort_cnt);
+	dev_err(hba->dev, "ufshcd_eh_device_reset=%d\n", ufs_err_cnt.ufshcd_eh_device_reset_handler_cnt);
+	dev_err(hba->dev, "ufshcd_eh_host_reset=%d\n", ufs_err_cnt.ufshcd_eh_host_reset_handler_cnt);
+	dev_err(hba->dev, "ufshcd_eh_timeout_reset=%d\n", ufs_err_cnt.ufshcd_eh_timed_out_cnt);
+	dev_err(hba->dev, "hardware_err_reset=%d\n", ufs_err_cnt.hardware_err_reset_cnt);
+	dev_err(hba->dev, "link_fail_cnt=%d\n", ufs_err_cnt.link_fail_cnt);
+	dev_err(hba->dev, "auto_h8_err_cnt=%d\n", ufs_err_cnt.auto_h8_err_cnt);
+	dev_err(hba->dev, "fatal_err_cnt=%d\n", ufs_err_cnt.fatal_err_cnt);
+	dev_err(hba->dev, "suspend_err_cnt=%d\n", ufs_err_cnt.suspend_err_cnt);
+	dev_err(hba->dev, "resume_err_cnt=%d\n", ufs_err_cnt.resume_err_cnt);
+	dev_err(hba->dev, "sprd_reset_cnt=%d\n", ufs_err_cnt.sprd_reset_cnt);
+}
+
+/* SPRD UPDATE ERROR COUNT */
+static void ufs_sprd_update_err_cnt(struct ufs_hba *hba, u32 reg_value, u32 type)
+{
+	int i = 0;
+	unsigned long reg_err;
+
+	switch (type) {
+	case UIC_ERR_PA:
+		reg_err = reg_value & UIC_PHY_ADAPTER_LAYER_ERROR_CODE_MASK;
+		for_each_set_bit(i, &reg_err, UIC_ERR_PA_MAX)	{
+			ufs_err_cnt.pa_err_cnt[i]++;
+			ufs_err_cnt.pa_err_cnt_total++;
+		}
+		break;
+	case UIC_ERR_DL:
+		reg_err = reg_value & UIC_DATA_LINK_LAYER_ERROR_CODE_MASK;
+		for_each_set_bit(i, &reg_err, UIC_ERR_DL_MAX) {
+			ufs_err_cnt.dl_err_cnt[i]++;
+			ufs_err_cnt.dl_err_cnt_total++;
+		}
+		break;
+	case UIC_ERR_DME:
+		reg_err = reg_value & UIC_DME_ERROR_CODE_MASK;
+			ufs_err_cnt.dme_err_cnt++;
+		break;
+	case UFS_ABORT:
+		ufs_err_cnt.ufshcd_abort_cnt++;
+		break;
+	case UFS_EH_DEVICE_RESET:
+		ufs_err_cnt.ufshcd_eh_device_reset_handler_cnt++;
+		break;
+	case UFS_EH_HOST_RESET:
+		ufs_err_cnt.ufshcd_eh_host_reset_handler_cnt++;
+		break;
+	case UFS_EH_TIMEOUT:
+		ufs_err_cnt.ufshcd_eh_timed_out_cnt++;
+		break;
+	case UFS_HARDWARE_ERR:
+		 ufs_err_cnt.hardware_err_reset_cnt++;
+		 break;
+	case UFS_LINK_START_FAIL:
+		 ufs_err_cnt.link_fail_cnt++;
+		 break;
+	case UFS_EVT_AUTO_HIBERN8_ERR:
+		 ufs_err_cnt.auto_h8_err_cnt++;
+		 break;
+	case UFS_EVT_FATAL_ERR:
+		 ufs_err_cnt.fatal_err_cnt++;
+		 break;
+	case UFS_EVT_SUSPEND_ERR:
+		 ufs_err_cnt.suspend_err_cnt++;
+		 break;
+	case UFS_EVT_RESUME_ERR:
+		 ufs_err_cnt.resume_err_cnt++;
+		 break;
+	case UFS_SPRD_RESET:
+		 ufs_err_cnt.sprd_reset_cnt++;
+		 break;
+	default:
+		break;
+	}
+
+	return;
+}
+
+static int uic_err_cnt_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "pa_err_cnt_total=%ld\n", ufs_err_cnt.pa_err_cnt_total);
+	seq_printf(m, "pa_lane0_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[0]);
+	seq_printf(m, "pa_lane1_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[1]);
+	seq_printf(m, "pa_line_reset_err_cnt=%d\n", ufs_err_cnt.pa_err_cnt[4]);
+	seq_printf(m, "dl_err_cnt_total=%ld\n", ufs_err_cnt.dl_err_cnt_total);
+	seq_printf(m, "dl_nac_received_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[0]);
+	seq_printf(m, "dl_tcx_replay_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[1]);
+	seq_printf(m, "dl_afcx_request_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[2]);
+	seq_printf(m, "dl_fcx_protection_timer_expired_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[3]);
+	seq_printf(m, "dl_crc_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[4]);
+	seq_printf(m, "dl_rx_buffer_overflow_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[5]);
+	seq_printf(m, "dl_max_frame_length_exceeded_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[6]);
+	seq_printf(m, "dl_wrong_sequence_number_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[7]);
+	seq_printf(m, "dl_afc_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[8]);
+	seq_printf(m, "dl_nac_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[9]);
+	seq_printf(m, "dl_eof_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[10]);
+	seq_printf(m, "dl_frame_syntax_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[11]);
+	seq_printf(m, "dl_bad_ctrl_symbol_type_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[12]);
+	seq_printf(m, "dl_pa_init_err_cnt=%d\n", ufs_err_cnt.dl_err_cnt[13]);
+	seq_printf(m, "dl_pa_error_ind_received=%d\n", ufs_err_cnt.dl_err_cnt[14]);
+	seq_printf(m, "dme_err_cnt=%d\n", ufs_err_cnt.dme_err_cnt);
+	seq_printf(m, "ufshcd_abort_cnt=%d\n", ufs_err_cnt.ufshcd_abort_cnt);
+	seq_printf(m, "ufshcd_eh_device_reset=%d\n", ufs_err_cnt.ufshcd_eh_device_reset_handler_cnt);
+	seq_printf(m, "ufshcd_eh_host_reset=%d\n", ufs_err_cnt.ufshcd_eh_host_reset_handler_cnt);
+	seq_printf(m, "ufshcd_eh_timeout_reset=%d\n", ufs_err_cnt.ufshcd_eh_timed_out_cnt);
+	seq_printf(m, "hardware_err_reset=%d\n", ufs_err_cnt.hardware_err_reset_cnt);
+	seq_printf(m, "link_fail_cnt=%d\n", ufs_err_cnt.link_fail_cnt);
+	seq_printf(m, "auto_h8_err_cnt=%d\n", ufs_err_cnt.auto_h8_err_cnt);
+	seq_printf(m, "fatal_err_cnt=%d\n", ufs_err_cnt.fatal_err_cnt);
+	seq_printf(m, "suspend_err_cnt=%d\n", ufs_err_cnt.suspend_err_cnt);
+	seq_printf(m, "resume_err_cnt=%d\n", ufs_err_cnt.resume_err_cnt);
+	seq_printf(m, "sprd_reset_cnt=%d\n", ufs_err_cnt.sprd_reset_cnt);
+
+	return 0;
+}
+
+static int uic_err_cnt_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, uic_err_cnt_show, inode->i_private);
+}
+
+static const struct file_operations uic_err_cnt_fops = {
+	.open = uic_err_cnt_open,
+	.read = seq_read,
+	.write = NULL,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int ufs_sprd_err_cnt_init(struct ufs_hba *hba)
+{
+	struct dentry *ufs_dfs_root;
+
+	if (!hba || !hba->priv) {
+		pr_info("%s: NULL host exiting\n", __func__);
+		return -EINVAL;
+	}
+
+	ufs_dfs_root = debugfs_create_dir("ufs", NULL);
+	if (!ufs_dfs_root) {
+		dev_err(hba->dev, "create ufs_debugf_root failed!\n");
+		return -1;
+	}
+	debugfs_create_file("uic_ec", 0664, ufs_dfs_root, hba, &uic_err_cnt_fops);
+
+	memset(&ufs_err_cnt.pa_err_cnt, 0, (sizeof(u32) * UIC_ERR_PA_MAX));
+	memset(&ufs_err_cnt.dl_err_cnt, 0, (sizeof(u32) * UIC_ERR_DL_MAX));
+	ufs_err_cnt.dme_err_cnt = 0;
+	ufs_err_cnt.pa_err_cnt_total = 0;
+	ufs_err_cnt.dl_err_cnt_total = 0;
+	ufs_err_cnt.ufshcd_eh_host_reset_handler_cnt = 0;
+	ufs_err_cnt.ufshcd_eh_timed_out_cnt = 0;
+	ufs_err_cnt.hardware_err_reset_cnt = 0;
+	ufs_err_cnt.ufshcd_eh_device_reset_handler_cnt = 0;
+	ufs_err_cnt.ufshcd_abort_cnt = 0;
+	ufs_err_cnt.link_fail_cnt = 0;
+	ufs_err_cnt.auto_h8_err_cnt = 0;
+	ufs_err_cnt.fatal_err_cnt = 0;
+	ufs_err_cnt.suspend_err_cnt = 0;
+	ufs_err_cnt.resume_err_cnt = 0;
+	ufs_err_cnt.sprd_reset_cnt = 0;
+
+	return 0;
+}
+
 static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
@@ -554,6 +781,7 @@ static void ufshcd_print_host_regs(struct ufs_hba *hba)
 
 	ufshcd_vops_dbg_register_dump(hba);
 	/* SPRD DEBUG */
+	sprd_print_uic_err_cnt(hba);
 	sprd_ufs_debug_err_dump(hba);
 }
 
@@ -4554,6 +4782,8 @@ static int ufshcd_hba_execute_hce(struct ufs_hba *hba)
 
 	ufshcd_vops_hce_enable_notify(hba, PRE_CHANGE);
 
+	ufs_sprd_update_err_cnt(hba, 0, UFS_SPRD_RESET);
+
 	/* start controller initialization sequence */
 	ufshcd_hba_start(hba);
 
@@ -4597,6 +4827,7 @@ int ufshcd_hba_enable(struct ufs_hba *hba)
 	if (hba->quirks & UFSHCI_QUIRK_BROKEN_HCE) {
 		ufshcd_set_link_off(hba);
 		ufshcd_vops_hce_enable_notify(hba, PRE_CHANGE);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_SPRD_RESET);
 
 		/* enable UIC related interrupts */
 		ufshcd_enable_intr(hba, UFSHCD_UIC_MASK);
@@ -4691,6 +4922,7 @@ link_startup:
 		if (!ret && !ufshcd_is_device_present(hba)) {
 			ufshcd_update_reg_hist(&hba->ufs_stats.link_startup_err,
 					       0);
+			ufs_sprd_update_err_cnt(hba, 0, UFS_LINK_START_FAIL);
 			dev_err(hba->dev, "%s: Device not present\n", __func__);
 			ret = -ENXIO;
 			goto out;
@@ -4704,6 +4936,7 @@ link_startup:
 		if (ret && ufshcd_hba_enable(hba)) {
 			ufshcd_update_reg_hist(&hba->ufs_stats.link_startup_err,
 					       (u32)ret);
+			ufs_sprd_update_err_cnt(hba, 0, UFS_LINK_START_FAIL);
 			goto out;
 		}
 	} while (ret && retries--);
@@ -4712,6 +4945,7 @@ link_startup:
 		/* failed to get the link up... retire */
 		ufshcd_update_reg_hist(&hba->ufs_stats.link_startup_err,
 				       (u32)ret);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_LINK_START_FAIL);
 		goto out;
 	}
 
@@ -6176,6 +6410,7 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 	if ((reg & UIC_PHY_ADAPTER_LAYER_ERROR) &&
 	    (reg & UIC_PHY_ADAPTER_LAYER_ERROR_CODE_MASK)) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.pa_err, reg);
+		ufs_sprd_update_err_cnt(hba, 0, UIC_ERR_PA);
 		/*
 		 * To know whether this error is fatal or not, DB timeout
 		 * must be checked but this error is handled separately.
@@ -6206,6 +6441,7 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 	if ((reg & UIC_DATA_LINK_LAYER_ERROR) &&
 	    (reg & UIC_DATA_LINK_LAYER_ERROR_CODE_MASK)) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.dl_err, reg);
+		ufs_sprd_update_err_cnt(hba, reg, UIC_ERR_DL);
 
 		if (reg & UIC_DATA_LINK_LAYER_ERROR_PA_INIT)
 			hba->uic_error |= UFSHCD_UIC_DL_PA_INIT_ERROR;
@@ -6241,6 +6477,7 @@ static irqreturn_t ufshcd_update_uic_error(struct ufs_hba *hba)
 	if ((reg & UIC_DME_ERROR) &&
 	    (reg & UIC_DME_ERROR_CODE_MASK)) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.dme_err, reg);
+		ufs_sprd_update_err_cnt(hba, reg, UIC_ERR_DME);
 		hba->uic_error |= UFSHCD_UIC_DME_ERROR;
 		retval |= IRQ_HANDLED;
 	}
@@ -6283,6 +6520,7 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba)
 
 	if (hba->errors & INT_FATAL_ERRORS) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.fatal_err, hba->errors);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_EVT_FATAL_ERR);
 		queue_eh_work = true;
 	}
 
@@ -6301,6 +6539,7 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba)
 			hba->errors, ufshcd_get_upmcrs(hba));
 		ufshcd_update_reg_hist(&hba->ufs_stats.auto_hibern8_err,
 				       hba->errors);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_EVT_AUTO_HIBERN8_ERR);
 		ufshcd_set_link_broken(hba);
 		queue_eh_work = true;
 	}
@@ -6844,6 +7083,7 @@ static int ufshcd_eh_device_reset_handler(struct scsi_cmnd *cmd)
 
 out:
 	hba->req_abort_count = 0;
+	ufs_sprd_update_err_cnt(hba, 0, UFS_EH_DEVICE_RESET);
 	ufshcd_update_reg_hist(&hba->ufs_stats.dev_reset, (u32)err);
 	if (!err) {
 		err = SUCCESS;
@@ -7011,6 +7251,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	scsi_print_command(hba->lrb[tag].cmd);
 	if (!hba->req_abort_count) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.task_abort, 0);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_ABORT);
 		ufshcd_print_host_regs(hba);
 		ufshcd_print_host_state(hba);
 		ufshcd_print_pwr_info(hba);
@@ -7091,6 +7332,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 out:
 	if (err)
 		dev_err(hba->dev, "%s: Host init failed %d\n", __func__, err);
+	ufs_sprd_update_err_cnt(hba, 0, UFS_HARDWARE_ERR);
 	ufshcd_update_reg_hist(&hba->ufs_stats.host_reset, (u32)err);
 	return err;
 }
@@ -7174,6 +7416,8 @@ static int ufshcd_eh_host_reset_handler(struct scsi_cmnd *cmd)
 	if (hba->ufshcd_state == UFSHCD_STATE_ERROR)
 		err = FAILED;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	ufs_sprd_update_err_cnt(hba, 0, UFS_EH_HOST_RESET);
 
 	return err;
 }
@@ -8158,6 +8402,8 @@ static enum blk_eh_timer_return ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 
 	spin_unlock_irqrestore(host->host_lock, flags);
 
+	ufs_sprd_update_err_cnt(hba, 0, UFS_EH_TIMEOUT);
+
 	/*
 	 * Bypass SCSI error handling and reset the block layer timer if this
 	 * SCSI command was not actually dispatched to UFS driver, otherwise
@@ -9066,8 +9312,11 @@ out:
 
 	hba->pm_op_in_progress = 0;
 
-	if (ret)
+	if (ret) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.suspend_err, (u32)ret);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_EVT_SUSPEND_ERR);
+	}
+
 	return ret;
 }
 
@@ -9187,8 +9436,11 @@ disable_irq_and_vops_clks:
 	}
 out:
 	hba->pm_op_in_progress = 0;
-	if (ret)
+	if (ret) {
 		ufshcd_update_reg_hist(&hba->ufs_stats.resume_err, (u32)ret);
+		ufs_sprd_update_err_cnt(hba, 0, UFS_EVT_RESUME_ERR);
+	}
+
 	return ret;
 }
 
@@ -9712,6 +9964,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 
 	async_schedule(ufshcd_async_scan, hba);
 	ufs_sysfs_add_nodes(hba);
+	ufs_sprd_err_cnt_init(hba);
 
 	return 0;
 
