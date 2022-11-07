@@ -21,7 +21,7 @@
 			reg = <0x40>;
 		};
 
-		led-controller@180 {
+		pmic_led: led-controller@180 {
 			compatible = "sprd,sc2730-bltc";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -43,7 +43,7 @@
 			};
 		};
 
-		rtc@200 {
+		pmic_rtc: rtc@200 {
 			compatible = "sprd,sc2731-rtc", "sprd,sc2730-rtc";
 			reg = <0x200>;
 			interrupt-parent = <&sc2730_pmic>;
@@ -61,7 +61,7 @@
 			#interrupt-cells = <2>;
 		};
 
-		efuse@300 {
+		pmic_efuse: efuse@300 {
 			compatible = "sprd,sc2730-efuse";
 			reg = <0x300>;
 			#address-cells = <1>;
@@ -190,12 +190,12 @@
 			status = "disabled";
 		};
 
-		syscon@1800 {
+		pmic_syscon: syscon@1800 {
 			compatible = "sprd,sc2731-syscon", "sprd,sc27xx-syscon";
 			reg = <0x1800>, <0x1ba0>, <0x1b98>;
 		};
 
-		power-controller@1800 {
+		pmic_power: power-controller@1800 {
 			compatible = "sprd,sc2731-regulator", "sprd,sc2730-regulator";
 
 			vddcpu: DCDC_CPU {
@@ -444,7 +444,7 @@
 			sprd,smpl-timer-threshold = <250>;
 		};
 
-		poweroff@1820 {
+		pmic_poweroff: poweroff@1820 {
 			compatible = "sprd,sc27xx-poweroff", "sprd,sc2730-poweroff";
 			reg = <0x1820>;
 		};
@@ -465,12 +465,12 @@
 			};
 		};
 
-		vibrator@1b90 {
+		pmic_vibrator: vibrator@1b90 {
 			compatible = "sprd,sc2730-vibrator";
 			reg = <0x1b90>;
 		};
 
-		hw-reset@1bc0 {
+		pmic_hwreset: hw-reset@1bc0 {
 			compatible = "sprd,sc27xx-7sreset", "sprd,sc2730-7sreset";
 			reg = <0x1bf8>, <0x1bc0>;
 		};
