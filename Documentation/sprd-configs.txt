@@ -2600,6 +2600,15 @@ CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO
 	[must]
 	[missing plat description] none
 	[function]
+CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_ENABLER
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
 CONFIG_CC_HAS_KASAN_GENERIC
 	[arch] all
 	[plat] all
