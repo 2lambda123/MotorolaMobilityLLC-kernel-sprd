@@ -89,6 +89,10 @@ static ssize_t get_dvfs_enable_show(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	int ret = 0;
 
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
 	ret = sprintf(buf, "%d\n", vsp->ip_coeff.hw_dfs_en);
 
 	return ret;
@@ -101,6 +105,11 @@ static ssize_t set_dvfs_enable_store(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	u32 user_en;
 	int ret;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject set vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	ret = sscanf(buf, "%u\n", &user_en);
 	if (ret != 1)
@@ -125,6 +134,11 @@ static ssize_t get_work_freq_show(struct device *dev,
 	u32 work_freq;
 	int ret = 0;
 
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
+
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_work_freq) {
 		work_freq = vsp->dvfs_ops->get_work_freq(vsp);
 		ret = sprintf(buf, "%u\n", work_freq);
@@ -142,6 +156,11 @@ static ssize_t set_work_freq_store(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	u32 user_freq;
 	int ret;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject set vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	mutex_lock(&devfreq->lock);
 	ret = sscanf(buf, "%u\n", &user_freq);
@@ -170,6 +189,11 @@ static ssize_t get_idle_freq_show(struct device *dev,
 	int ret = 0;
 	u32 idle_freq;
 
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
+
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_idle_freq) {
 		idle_freq = vsp->dvfs_ops->get_idle_freq(vsp);
 		ret = sprintf(buf, "%d\n", idle_freq);
@@ -188,6 +212,11 @@ static ssize_t set_idle_freq_store(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	u32 idle_freq;
 	int ret;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject set vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	mutex_lock(&devfreq->lock);
 	ret = sscanf(buf, "%u\n", &idle_freq);
@@ -213,6 +242,11 @@ static ssize_t get_work_index_show(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	int ret = 0, work_index;
 
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
+
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_work_index) {
 		work_index = vsp->dvfs_ops->get_work_index(vsp);
 		ret = sprintf(buf, "%d\n", work_index);
@@ -230,6 +264,11 @@ static ssize_t set_work_index_store(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	u32 work_index;
 	int ret;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject set vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	ret = sscanf(buf, "%u\n", &work_index);
 	if (ret != 1)
@@ -250,6 +289,11 @@ static ssize_t get_idle_index_show(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	int ret = 0, idle_index;
 
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
+
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_idle_index) {
 		idle_index = vsp->dvfs_ops->get_idle_index(vsp);
 		ret = sprintf(buf, "%d\n", idle_index);
@@ -267,6 +311,11 @@ static ssize_t set_idle_index_store(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	u32 idle_index;
 	int ret;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject set vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	ret = sscanf(buf, "%u\n", &idle_index);
 	if (ret != 1)
@@ -287,6 +336,11 @@ static ssize_t get_dvfs_status_show(struct device *dev,
 	struct vsp_dvfs *vsp = dev_get_drvdata(devfreq->dev.parent);
 	struct ip_dvfs_status ip_status = {0};
 	ssize_t len = 0;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_dvfs_status)
 		vsp->dvfs_ops->get_dvfs_status(vsp, &ip_status);
@@ -322,6 +376,11 @@ static ssize_t get_dvfs_table_info_show(struct device *dev,
 	struct ip_dvfs_map_cfg dvfs_table[MAX_FREQ_LEVEL];
 	ssize_t len = 0;
 	int i;
+
+	if (!get_display_power_status()) {
+		pr_err("dpu is stopped, reject get vpu dvfs status\n");
+		return -EINVAL;
+	}
 
 	if (vsp->dvfs_ops && vsp->dvfs_ops->get_dvfs_table)
 		vsp->dvfs_ops->get_dvfs_table(dvfs_table);
