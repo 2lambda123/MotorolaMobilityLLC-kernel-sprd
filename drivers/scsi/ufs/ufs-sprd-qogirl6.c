@@ -424,7 +424,7 @@ out:
 
 void read_ufs_debug_bus(struct ufs_hba *hba)
 {
-	u32 sigsel[] = {0x1, 0x16, 0x17, 0x1E, 0x1F};
+	u32 sigsel[] = {0x1, 0x16, 0x17, 0x1D, 0x1E, 0x1F, 0x20, 0x21};
 	u32 debugbus_data;
 	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
 	int i;
@@ -440,7 +440,7 @@ void read_ufs_debug_bus(struct ufs_hba *hba)
 	/* read ap ufshcd debugbus */
 	writel(0x0, host->dbg_apb_reg + 0x18);
 	dev_err(hba->dev, "ap ufshcd debugbus_data as follow(syssel:0x0):\n");
-	for (i = 0; i < 5; i++) {
+	for (i = 0; i < ARRAY_SIZE(sigsel); i++) {
 		writel(sigsel[i] << 8, host->dbg_apb_reg + 0x1c);
 		debugbus_data = readl(host->dbg_apb_reg + 0x50);
 		dev_err(hba->dev, "sig_sel: 0x%x. debugbus_data: 0x%x\n", sigsel[i], debugbus_data);
