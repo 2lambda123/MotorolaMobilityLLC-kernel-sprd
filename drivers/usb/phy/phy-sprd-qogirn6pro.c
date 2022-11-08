@@ -25,7 +25,7 @@
 #include <linux/usb/otg.h>
 #include <linux/usb/phy.h>
 #include <uapi/linux/sched/types.h>
-#include <linux/power/ump96xx-usb-charger.h>
+#include <linux/power/sprd-ump96xx-bc1p2.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-mask.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-regs.h>
 #include <linux/usb/sprd_usbm.h>

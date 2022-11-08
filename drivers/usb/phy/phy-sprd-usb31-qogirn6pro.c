@@ -26,7 +26,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/kthread.h>
-#include <linux/power/ump96xx-usb-charger.h>
+#include <linux/power/sprd-ump96xx-bc1p2.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/usb/phy.h>
