@@ -797,7 +797,6 @@ void sdiohal_enable_rx_irq(void)
 
 	sdiohal_atomic_sub(1, &p_data->irq_cnt);
 	irq_set_irq_type(p_data->irq_num, IRQF_TRIGGER_HIGH);
-	/* WARNING: when the card is removed, sdiohal_remove():free(pdata->irq) */
 	enable_irq(p_data->irq_num);
 }
 
@@ -962,7 +961,6 @@ static int sdiohal_suspend(struct device *dev)
 	pr_debug("[%s]enter\n", __func__);
 
 	atomic_set(&p_data->flag_suspending, 1);
-	mdbg_device_lock_notify();
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
 		if (sdiohal_ops && sdiohal_ops->power_notify) {
@@ -973,7 +971,6 @@ static int sdiohal_suspend(struct device *dev)
 				pr_info("[%s] chn:%d suspend fail\n",
 					__func__, chn);
 				atomic_set(&p_data->flag_suspending, 0);
-				mdbg_device_unlock_notify();
 				return ret;
 			}
 		}
@@ -993,7 +990,6 @@ static int sdiohal_suspend(struct device *dev)
 		func = container_of(dev, struct sdio_func, dev);
 		func->card->host->pm_flags |= MMC_PM_KEEP_POWER;
 	}
-	mdbg_device_unlock_notify();
 
 	return 0;
 }
@@ -1014,7 +1010,6 @@ static int sdiohal_resume(struct device *dev)
 	}
 
 	atomic_set(&p_data->flag_resume, 1);
-	mdbg_device_lock_notify();
 
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
@@ -1025,7 +1020,6 @@ static int sdiohal_resume(struct device *dev)
 					__func__, chn);
 		}
 	}
-	mdbg_device_unlock_notify();
 
 	return 0;
 }
