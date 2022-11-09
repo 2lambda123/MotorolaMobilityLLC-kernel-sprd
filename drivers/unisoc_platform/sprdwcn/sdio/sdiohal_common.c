@@ -11,6 +11,86 @@
 #include <linux/mmc/sdio_func.h>
 #include "sdiohal.h"
 
+void sdiohal_debug_point_show(void)
+{
+	struct sdiohal_data_t *p_data = sdiohal_get_data();
+	struct sdiohal_xmit_debug_point *txp = p_data->sdcb.tx_list_push;
+	struct sdiohal_xmit_debug_point *rxp = p_data->sdcb.rx_list_dispatch;
+	int i = 0;
+
+	pr_info("rx_irq_ns(%llu %llu), tx_sch_ns(%llu %llu).\n",
+		p_data->tm_begin_irq, p_data->tm_end_irq, p_data->tm_begin_sch, p_data->tm_end_sch);
+
+	pr_info("Last xmit_lock: Enter task(%s) caller: %ps, time=%llu\n",
+		p_data->sdcb.op_enter_comm, p_data->sdcb.op_enter_builtin_addr[0],
+		p_data->op_enter_ns);
+	pr_info("Last xmit_lock: Leave task(%s) caller: %ps, time=%llu\n",
+		p_data->sdcb.op_leave_comm, p_data->sdcb.op_leave_builtin_addr[0],
+		p_data->op_leave_ns);
+
+	if (p_data->op_enter_ns > p_data->op_leave_ns)
+		pr_info("WARNING:Task(%s) holds xmit_lock!!!", p_data->sdcb.op_enter_comm);
+
+	pr_info("SDIOHAL TX DEBUG POINT[%d]:\n", p_data->sdcb.tx_list_push_index - 1);
+	for (i = 0; i < SDIO_DEBUG_POINT_NUM; i++) {
+		pr_info("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, txp[i].channel,
+			txp[i].cur_time, txp[i].head, txp[i].tail, txp[i].num, txp[i].tx_driect,
+			(i == p_data->sdcb.tx_list_push_index - 1) ? "[LAST]":"");
+	}
+
+	pr_info("SDIOHAL RX DEBUG POINT[%d]:\n", p_data->sdcb.rx_list_dispatch_index - 1);
+	for (i = 0; i < SDIO_DEBUG_POINT_NUM; i++) {
+		pr_info("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, rxp[i].channel,
+			rxp[i].cur_time, rxp[i].head, rxp[i].tail, rxp[i].num, rxp[i].tx_driect,
+			(i == p_data->sdcb.rx_list_dispatch_index - 1) ? "[LAST]":"");
+	}
+}
+
+void __sdiohal_debug_point_store(int channel, int num, struct mbuf_t *head,
+	struct mbuf_t *tail, struct sdiohal_xmit_debug_point *point, bool tx_direct)
+{
+	point->channel = channel;
+	point->head = head;
+	point->tail = tail;
+	point->num = num;
+	point->cur_time = ktime_get_boot_fast_ns();
+	point->tx_driect = tx_direct;
+}
+
+void sdiohal_debug_point_store(int type, int channel, int num, struct mbuf_t *head,
+		struct mbuf_t *tail, bool tx_direct)
+{
+	struct sdiohal_data_t *p_data = sdiohal_get_data();
+	int *index = NULL;
+	struct sdiohal_xmit_debug_point *point = NULL;
+
+	WARN(type <= TX_LIST_PUSH && channel >= SDIO_CHN_TX_NUM,
+			"debug point check(1) %d,%d\n", type, channel);
+	WARN(type >= RX_LIST_DISPATCH && channel < SDIO_CHN_TX_NUM,
+			"debug point check(2) %d,%d\n", type, channel);
+	WARN((channel >= SDIO_CHN_TX_NUM) && tx_direct,
+			"debug point check(3) %d,%d\n", type, channel);
+
+	switch (type) {
+	case TX_LIST_PUSH:
+		point = p_data->sdcb.tx_list_push;
+		index = &p_data->sdcb.tx_list_push_index;
+		break;
+	case RX_LIST_DISPATCH:
+		point =  p_data->sdcb.rx_list_dispatch;
+		index = &p_data->sdcb.rx_list_dispatch_index;
+		break;
+	default:
+		pr_err("unexpected!\n");
+		break;
+	};
+
+	if (*index >= SDIO_DEBUG_POINT_NUM)
+		*index = 0;
+
+	__sdiohal_debug_point_store(channel, num, head, tail, &point[(*index)++], tx_direct);
+}
+
 void sdiohal_print_list_data(struct sdiohal_list_t *data_list,
 			     const char *func, int loglevel)
 {
@@ -407,6 +487,8 @@ void sdiohal_op_enter(void)
 
 	mutex_lock(&p_data->xmit_lock);
 	p_data->op_enter_ns = ktime_get_boot_fast_ns();
+	p_data->sdcb.op_enter_builtin_addr[0] = __builtin_return_address(0);
+	memcpy(p_data->sdcb.op_enter_comm, current->comm, sizeof(p_data->sdcb.op_enter_comm));
 }
 
 void sdiohal_op_leave(void)
@@ -415,7 +497,7 @@ void sdiohal_op_leave(void)
 	u64 expire_time_ns = NSEC_PER_SEC;
 
 	p_data->op_leave_ns = ktime_get_boot_fast_ns();
-	if (p_data->op_leave_ns - p_data->op_enter_ns > expire_time_ns) {
+	if (unlikely(p_data->op_leave_ns - p_data->op_enter_ns > expire_time_ns)) {
 		p_data->op_expire_cnt++;
 		pr_err_ratelimited("%s %ps->%ps->%ps->%ps expire_%llums_cnt %llu(%llu, %llu).\n",
 		current->comm, __builtin_return_address(3), __builtin_return_address(2),
@@ -423,6 +505,8 @@ void sdiohal_op_leave(void)
 		expire_time_ns/NSEC_PER_MSEC, p_data->op_expire_cnt,
 		p_data->op_enter_ns, p_data->op_leave_ns);
 	}
+	p_data->sdcb.op_leave_builtin_addr[0] = __builtin_return_address(0);
+	memcpy(p_data->sdcb.op_leave_comm, current->comm, sizeof(p_data->sdcb.op_leave_comm));
 	mutex_unlock(&p_data->xmit_lock);
 }
 
@@ -769,6 +853,8 @@ int sdiohal_rx_list_dispatch(void)
 					rx_list->node_num,
 					__func__, SDIOHAL_READ,
 					SDIOHAL_NORMAL_LEVEL);
+		sdiohal_rx_list_dispatch_dp(channel, rx_list->mbuf_head,
+				rx_list->mbuf_tail, rx_list->node_num);
 		if (sdiohal_ops && sdiohal_ops->pop_link) {
 			sdiohal_ops->pop_link(channel, rx_list->mbuf_head,
 					      rx_list->mbuf_tail,
@@ -1132,7 +1218,8 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 	if (unlikely(p_data->flag_init != true))
 		return -ENODEV;
 
-	if (unlikely(p_data->card_dump_flag == true))
+	/* May need to use: marlin_dev->power_state? */
+	if (unlikely(p_data->card_dump_flag == true || !WCN_CARD_EXIST(&p_data->xmit_cnt)))
 		return -ENODEV;
 
 	sdiohal_mbuf_list_check(channel, head, tail, num, __func__,
@@ -1171,7 +1258,7 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 			times_count = 0;
 		}
 		p_data->tm_begin_sch = ktime_get_boot_fast_ns();
-
+		sdiohal_tx_list_push_dp(channel, head, tail, num);
 		sdiohal_tx_up();
 	} else
 		sdiohal_rx_list_free(head, tail, num);
@@ -1186,6 +1273,13 @@ int sdiohal_list_direct_write(int channel, struct mbuf_t *head,
 	struct sdiohal_list_t data_list;
 	int ret = 0;
 
+	if (unlikely(p_data->flag_init != true))
+		return -ENODEV;
+
+	/* May need to use: marlin_dev->power_state? */
+	if (unlikely(p_data->card_dump_flag == true || !WCN_CARD_EXIST(&p_data->xmit_cnt)))
+		return -ENODEV;
+
 	sdiohal_lock_tx_ws();
 	sdiohal_resume_check();
 	sdiohal_cp_tx_wakeup(PACKER_DT_TX);
@@ -1195,6 +1289,7 @@ int sdiohal_list_direct_write(int channel, struct mbuf_t *head,
 	data_list.mbuf_tail = tail;
 	data_list.node_num = num;
 	data_list.mbuf_tail->next = NULL;
+	sdiohal_tx_list_push_direct_dp(channel, head, tail, num);
 
 	if (p_data->adma_tx_enable)
 		ret = sdiohal_adma_pt_write(&data_list);
