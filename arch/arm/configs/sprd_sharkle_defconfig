@@ -4188,7 +4188,7 @@ CONFIG_SPRD_DISP_PM_DOMAIN_SHARKL3=m
 #
 # SPRD IQ modules
 #
-CONFIG_SPRD_IQ=m
+CONFIG_SPRD_IQ=y
 # end of SPRD IQ modules
 
 #
