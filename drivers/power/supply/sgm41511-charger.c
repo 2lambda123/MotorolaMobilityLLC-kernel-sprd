@@ -93,6 +93,7 @@ struct sgm41511_charger_info {
 	struct sgm41511_charge_current cur;
 	struct work_struct work;
 	struct mutex lock;
+	struct mutex input_limit_cur_lock;
 	bool charging;
 	struct delayed_work otg_work;
 	struct delayed_work wdt_work;
@@ -215,28 +216,7 @@ static int sgm41511_update_bits(struct sgm41511_charger_info *info, u8 reg, u8 m
 	return sgm41511_write(info, reg, v);
 }
 
-static int sgm41511_charger_set_limit_current(struct sgm41511_charger_info *info, u32 cur)
-{
-	u8 reg_val;
-	int ret;
-
-	if (cur >= SGM41511_LIMIT_CURRENT_MAX)
-		cur = SGM41511_LIMIT_CURRENT_MAX;
-
-	cur = cur / 1000;
-	if (cur < REG00_IINLIM_BASE)
-		cur = REG00_IINLIM_BASE;
-	reg_val = (cur - REG00_IINLIM_BASE) / REG00_IINLIM_LSB;
-	ret = sgm41511_update_bits(info, SGM4151X_REG_00, REG00_IINLIM_MASK,
-				   reg_val << REG00_IINLIM_SHIFT);
-	if (ret)
-		dev_err(info->dev, "set sgm41511 limit cur failed\n");
-	info->actual_limit_cur = ((reg_val * REG00_IINLIM_LSB) + REG00_IINLIM_BASE) * 1000;
-	return ret;
-}
-
-static u32 sgm41511_charger_get_limit_current(struct sgm41511_charger_info *info,
-					      u32 *limit_cur)
+static u32 sgm41511_charger_get_limit_current(struct sgm41511_charger_info *info, u32 *limit_cur)
 {
 	u8 reg_val;
 	int ret;
@@ -249,6 +229,45 @@ static u32 sgm41511_charger_get_limit_current(struct sgm41511_charger_info *info
 	reg_val = reg_val >> REG00_IINLIM_SHIFT;
 	*limit_cur = (reg_val * REG00_IINLIM_LSB + REG00_IINLIM_BASE) * 1000;
 	return 0;
+}
+
+static int sgm41511_charger_set_limit_current(struct sgm41511_charger_info *info, u32 cur, bool enable)
+{
+	u8 reg_val;
+	int ret = 0;
+
+	mutex_lock(&info->input_limit_cur_lock);
+	if (enable) {
+		ret = sgm41511_charger_get_limit_current(info, &limit_cur);
+		if (ret) {
+			dev_err(info->dev, "get limit cur failed\n");
+			goto out;
+		}
+
+		if (limit_cur == info->actual_limit_cur)
+			goto out;
+	}
+
+	if (cur >= SGM41511_LIMIT_CURRENT_MAX)
+		cur = SGM41511_LIMIT_CURRENT_MAX;
+
+	cur = cur / 1000;
+	if (cur < REG00_IINLIM_BASE)
+		cur = REG00_IINLIM_BASE;
+	reg_val = (cur - REG00_IINLIM_BASE) / REG00_IINLIM_LSB;
+	info->actual_limit_cur = ((reg_val * REG00_IINLIM_LSB) + REG00_IINLIM_BASE) * 1000;
+	ret = sgm41511_update_bits(info, SGM4151X_REG_00, REG00_IINLIM_MASK,
+				   reg_val << REG00_IINLIM_SHIFT);
+	if (ret)
+		dev_err(info->dev, "set sgm41511 limit cur failed\n");
+
+	dev_info(info->dev, "set limit current reg_val = %#x, actual_limit_cur = %d\n",
+		 reg_val, info->actual_limit_cur);
+
+out:
+	mutex_unlock(&info->input_limit_cur_lock);
+
+	return ret;
 }
 
 static int sgm41511_set_acovp_threshold(struct sgm41511_charger_info *info, int volt)
@@ -442,7 +461,7 @@ static int sgm41511_charger_hw_init(struct sgm41511_charger_info *info)
 		}
 
 		ret = sgm41511_charger_set_limit_current(info,
-							 info->cur.unknown_cur);
+							 info->cur.unknown_cur, false);
 		if (ret)
 			dev_err(info->dev, "set sgm41511 limit current failed\n");
 	}
@@ -450,8 +469,7 @@ static int sgm41511_charger_hw_init(struct sgm41511_charger_info *info)
 	return ret;
 }
 
-static int sgm41511_charger_get_charge_voltage(struct sgm41511_charger_info *info,
-					       u32 *charge_vol)
+static int sgm41511_charger_get_charge_voltage(struct sgm41511_charger_info *info, u32 *charge_vol)
 {
 	struct power_supply *psy;
 	union power_supply_propval val;
@@ -614,9 +632,8 @@ static int sgm41511_charger_get_health(struct sgm41511_charger_info *info, u32 *
 
 static int sgm41511_charger_feed_watchdog(struct sgm41511_charger_info *info)
 {
-	int ret;
+	int ret = 0;
 	u8 reg_val = REG01_WDT_RESET << REG01_WDT_RESET_SHIFT;
-	u32 limit_cur = 0;
 
 	ret = sgm41511_update_bits(info, SGM4151X_REG_01, REG01_WDT_RESET_MASK, reg_val);
 	if (ret) {
@@ -625,24 +642,13 @@ static int sgm41511_charger_feed_watchdog(struct sgm41511_charger_info *info)
 	}
 
 	if (info->otg_enable)
-		return 0;
-
-	ret = sgm41511_charger_get_limit_current(info, &limit_cur);
-	if (ret) {
-		dev_err(info->dev, "get limit cur failed\n");
 		return ret;
-	}
 
-	if (info->actual_limit_cur == limit_cur)
-		return 0;
-
-	ret = sgm41511_charger_set_limit_current(info, info->actual_limit_cur);
-	if (ret) {
+	ret = sgm41511_charger_set_limit_current(info, info->actual_limit_cur, true);
+	if (ret)
 		dev_err(info->dev, "set limit cur failed\n");
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int sgm41511_charger_get_status(struct sgm41511_charger_info *info)
@@ -829,7 +835,7 @@ static int sgm41511_charger_usb_set_property(struct power_supply *psy,
 			dev_err(info->dev, "set charge current failed\n");
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = sgm41511_charger_set_limit_current(info, val->intval);
+		ret = sgm41511_charger_set_limit_current(info, val->intval, false);
 		if (ret < 0)
 			dev_err(info->dev, "set input current limit failed\n");
 		break;
@@ -856,10 +862,12 @@ static int sgm41511_charger_usb_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		info->is_charger_online = val->intval;
-		if (val->intval == true)
+		if (val->intval == true) {
 			schedule_delayed_work(&info->wdt_work, 0);
-		else
+		} else {
+			info->actual_limit_cur = 0;
 			cancel_delayed_work_sync(&info->wdt_work);
+		}
 		break;
 	default:
 		ret = -EINVAL;
@@ -1261,6 +1269,7 @@ static int sgm41511_charger_probe(struct i2c_client *client,
 		return -ENODEV;
 	}
 	mutex_init(&info->lock);
+	mutex_init(&info->input_limit_cur_lock);
 	mutex_lock(&info->lock);
 
 	charger_cfg.drv_data = info;
