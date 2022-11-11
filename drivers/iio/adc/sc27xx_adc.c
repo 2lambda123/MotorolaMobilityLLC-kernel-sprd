@@ -86,6 +86,7 @@ enum sc27xx_pmic_type {
 	SC27XX_ADC,
 	SC2721_ADC,
 	UMP9620_ADC,
+	UMP518_ADC,
 };
 
 enum ump96xx_scale_cal {
@@ -263,7 +264,7 @@ static int ump96xx_adc_scale_cal(struct sc27xx_adc_data *data,
 {
 	struct sc27xx_adc_linear_graph *graph = NULL;
 	const char *cell_name1 = NULL, *cell_name2 = NULL;
-	int adc_calib_data1 = 0, adc_calib_data2 = 0;
+	int adc_calib_data1 = 0, adc_calib_data2 = 0, adc0_calib, adc1_calib;
 
 	if (!data)
 		return -EINVAL;
@@ -302,8 +303,12 @@ static int ump96xx_adc_scale_cal(struct sc27xx_adc_data *data,
 	 *Read the data in the two blocks of efuse and convert them into the
 	 *calibration value in the ump9620 adc linear graph.
 	 */
-	graph->adc0 = (adc_calib_data1 & 0xfff0) >> 4;
-	graph->adc1 = (adc_calib_data2 & 0xfff0) >> 4;
+	adc0_calib = (adc_calib_data1 & 0xfff0) >> 4;
+	adc1_calib = (adc_calib_data2 & 0xfff0) >> 4;
+	if (adc0_calib > 0 && adc1_calib > 0) {
+		graph->adc0 = adc0_calib;
+		graph->adc1 = adc1_calib;
+	}
 
 	return 0;
 }
@@ -826,7 +831,7 @@ static int sc27xx_adc_read_processed(struct sc27xx_adc_data *data,
 	if (ret)
 		return ret;
 
-	if (data->var_data->pmic_type == UMP9620_ADC)
+	if (data->var_data->pmic_type == UMP9620_ADC || data->var_data->pmic_type == UMP518_ADC)
 		*val = ump96xx_adc_convert_volt(data, channel, scale, raw_adc);
 	else
 		*val = sc27xx_adc_convert_volt(data, channel, scale, raw_adc);
@@ -964,7 +969,7 @@ static int sc27xx_adc_enable(struct sc27xx_adc_data *data)
 		goto disable_adc;
 
 	/* ADC channel scales calibration from nvmem device */
-	if (data->var_data->pmic_type == UMP9620_ADC) {
+	if (data->var_data->pmic_type == UMP9620_ADC || data->var_data->pmic_type == UMP518_ADC) {
 		ret = ump96xx_adc_scale_cal(data, UMP96XX_VBAT_SENSES_CAL);
 		if (ret)
 			goto disable_clk;
@@ -1070,6 +1075,18 @@ static const struct sc27xx_adc_variant_data ump9620_data = {
 	.pmic_type = UMP9620_ADC,
 	.module_en = UMP9620_MODULE_EN,
 	.clk_en = UMP9620_ARM_CLK_EN,
+	.scale_shift = SC27XX_ADC_SCALE_SHIFT,
+	.scale_mask = SC27XX_ADC_SCALE_MASK,
+	.bscale_cal = &big_scale_graph,
+	.sscale_cal = &small_scale_graph,
+	.init_scale = ump9620_adc_scale_init,
+	.get_ratio = ump9620_adc_get_ratio,
+};
+
+static const struct sc27xx_adc_variant_data ump518_data = {
+	.pmic_type = UMP518_ADC,
+	.module_en = SC2730_MODULE_EN,
+	.clk_en    = SC2730_ARM_CLK_EN,
 	.scale_shift = SC27XX_ADC_SCALE_SHIFT,
 	.scale_mask = SC27XX_ADC_SCALE_MASK,
 	.bscale_cal = &big_scale_graph,
@@ -1219,6 +1236,7 @@ static const struct of_device_id sc27xx_adc_of_match[] = {
 	{ .compatible = "sprd,sc2721-adc", .data = &sc2721_data},
 	{ .compatible = "sprd,sc2720-adc", .data = &sc2720_data},
 	{ .compatible = "sprd,ump9620-adc", .data = &ump9620_data},
+	{ .compatible = "sprd,ump518-adc", .data = &ump518_data},
 	{ }
 };
 
