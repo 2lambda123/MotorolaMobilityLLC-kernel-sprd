@@ -18,6 +18,8 @@
 #define UMP9621_EFUSE_RTC		0x2010
 #define UMP96XX_CLK_GATE		BIT(3)
 #define SC27XX_EFUSE_EN			BIT(6)
+#define UMP518_MODULE_EN		0x1808
+#define UMP518_EFUSE_RTC		0x1810
 
 /* Efuse controller registers definition */
 #define SC27XX_EFUSE_GLB_CTRL		0x0
@@ -33,6 +35,9 @@
 
 /* Bits definitions for UMP9620_EFUSE_RTC register */
 #define UMP96XX_EFUSE_RTC_EN		BIT(11)
+
+/* Bits definitions for UMP518_EFUSE_RTC register */
+#define UMP518_EFUSE_RTC_EN		BIT(11)
 
 /* Mask definition for SC27XX_EFUSE_BLOCK_INDEX register */
 #define SC27XX_EFUSE_BLOCK_MASK		GENMASK(4, 0)
@@ -52,6 +57,7 @@
 /* Block number and block width (bytes) definitions */
 #define UMP9620_EFUSE_BLOCK_MAX		64
 #define UMP9621_EFUSE_BLOCK_MAX		12
+#define UMP518_EFUSE_BLOCK_MAX		64
 #define SC27XX_EFUSE_BLOCK_MAX		32
 #define SC27XX_EFUSE_BLOCK_WIDTH	2
 #define SC27XX_EFUSE_BLOCK_SIZE	(SC27XX_EFUSE_BLOCK_WIDTH * BITS_PER_BYTE)
@@ -99,6 +105,11 @@ static const struct sc27xx_efuse_variant_data ump9620_edata = {
 static const struct sc27xx_efuse_variant_data ump9621_edata = {
 	.module_en = UMP9621_MODULE_EN,
 	.block_max = UMP9621_EFUSE_BLOCK_MAX,
+};
+
+static const struct sc27xx_efuse_variant_data ump518_edata = {
+	.module_en = UMP518_MODULE_EN,
+	.block_max = UMP518_EFUSE_BLOCK_MAX,
 };
 
 /*
@@ -169,6 +180,10 @@ static int ump962x_efuse_read(void *context, u32 offset, void *val, size_t bytes
 		goto unlock_efuse;
 
 	if (of_device_is_compatible(efuse->dev->of_node,
+					"sprd,ump518-efuse")) {
+		ret = regmap_update_bits(efuse->regmap, UMP518_EFUSE_RTC,
+			UMP518_EFUSE_RTC_EN, UMP518_EFUSE_RTC_EN);
+	} else if (of_device_is_compatible(efuse->dev->of_node,
 					"sprd,ump9620-efuse")) {
 		ret = regmap_update_bits(efuse->regmap, UMP9620_EFUSE_RTC,
 			UMP96XX_EFUSE_RTC_EN, UMP96XX_EFUSE_RTC_EN);
@@ -352,6 +367,9 @@ static int sc27xx_efuse_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 		econfig.reg_read = ump962x_efuse_read;
+	} else if (of_device_is_compatible(efuse->dev->of_node,
+					"sprd,ump518-efuse")) {
+		econfig.reg_read = ump962x_efuse_read;
 	} else {
 		econfig.reg_read = sc27xx_efuse_read;
 	}
@@ -381,6 +399,7 @@ static const struct of_device_id sc27xx_efuse_of_match[] = {
 	{ .compatible = "sprd,sc2721-efuse", .data = &sc2731_edata},
 	{ .compatible = "sprd,ump9620-efuse", .data = &ump9620_edata},
 	{ .compatible = "sprd,ump9621-efuse", .data = &ump9621_edata},
+	{ .compatible = "sprd,ump518-efuse", .data = &ump518_edata},
 	{ }
 };
 
