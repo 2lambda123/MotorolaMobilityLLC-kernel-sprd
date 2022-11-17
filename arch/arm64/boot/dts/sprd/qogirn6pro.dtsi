@@ -351,11 +351,9 @@
 				reg = <0 0x100>;
 				interrupts = <GIC_SPI 196 IRQ_TYPE_LEVEL_HIGH>;
 				source-base = <0x2001004c>;
-				clock-frequency = <0>;
-				uart-eb-syscon = <&ap_apb_regs
-						REG_AP_APB_APB_EB
-						MASK_AP_APB_UART0_EB>;
-				clocks = <&ext_26m>;
+				clock-names = "enable", "uart", "source";
+				clocks = <&apapb_gate CLK_UART0_EB>,
+					<&ap_clk CLK_AP_UART0>, <&ext_26m>;
 				status = "disabled";
 			};
 
@@ -365,11 +363,9 @@
 				reg = <0x10000 0x100>;
 				interrupts = <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>;
 				source-base = <0x20010058>;
-				clock-frequency = <0>;
-				uart-eb-syscon = <&ap_apb_regs
-						REG_AP_APB_APB_EB
-						MASK_AP_APB_UART1_EB>;
-				clocks = <&ext_26m>;
+				clock-names = "enable", "uart", "source";
+				clocks = <&apapb_gate CLK_UART1_EB>,
+					<&ap_clk CLK_AP_UART1>, <&ext_26m>;
 				status = "disabled";
 			};
 
@@ -379,11 +375,9 @@
 				reg = <0x20000 0x100>;
 				interrupts = <GIC_SPI 167 IRQ_TYPE_LEVEL_HIGH>;
 				source-base = <0x20010064>;
-				clock-frequency = <0>;
-				uart-eb-syscon = <&ap_apb_regs
-						REG_AP_APB_APB_EB
-						MASK_AP_APB_UART2_EB>;
-				clocks = <&ext_26m>;
+				clock-names = "enable", "uart", "source";
+				clocks = <&apapb_gate CLK_UART2_EB>,
+					<&ap_clk CLK_AP_UART2>, <&ext_26m>;
 				status = "disabled";
 			};
 
@@ -393,11 +387,9 @@
 				reg = <0x30000 0x100>;
 				interrupts = <GIC_SPI 166 IRQ_TYPE_LEVEL_HIGH>;
 				source-base = <0x20010070>;
-				clock-frequency = <0>;
-				uart-eb-syscon = <&ap_apb_regs
-						REG_AP_APB_APB_EB
-						MASK_AP_APB_UART3_EB>;
-				clocks = <&ext_26m>;
+				clock-names = "enable", "uart", "source";
+				clocks = <&apapb_gate CLK_UART3_EB>,
+					<&ap_clk CLK_AP_UART3>, <&ext_26m>;
 				status = "disabled";
 			};
 
