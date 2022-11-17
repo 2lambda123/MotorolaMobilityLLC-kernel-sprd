@@ -759,6 +759,14 @@ config FUEL_GAUGE_SC27XX
 	 Say Y here to enable support for fuel gauge with SC27XX
 	 PMIC chips.
 
+config FUEL_GAUGE_UMP518
+	tristate "Spreadtrum UMP518 fuel gauge driver"
+	depends on MFD_SC27XX_PMIC || COMPILE_TEST
+	depends on IIO
+	help
+	 Say Y here to enable support for fuel gauge with UMP518
+	 PMIC chips.
+
 config FAST_CHARGER_SC27XX
 	tristate "Spreadtrum SC27XX fast charger driver"
 	depends on MFD_SC27XX_PMIC || MFD_UMP96XX_PMIC || COMPILE_TEST
