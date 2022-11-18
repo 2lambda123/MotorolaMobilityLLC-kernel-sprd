@@ -501,10 +501,12 @@ static void show_bt_by_pid(int task_pid)
 				pr_err("lhd: %-15.15s %c pid(%d),tid(%d)",
 				     t->comm, state < sizeof(stat_nam) - 1 ? stat_nam[state] : '?',
 				     task_pid, tid);
-
-				sched_show_task_local(t);	/* catch kernel bt */
+				if (t->state == TASK_DEAD || t->state > TASK_STATE_MAX || t->state < TASK_RUNNING)
+					continue;
 
 				log_to_hang_info("%s sysTid=%d, pid=%d\n", t->comm, tid, task_pid);
+
+				sched_show_task_local(t); /* catch kernel bt */
 
 				send_sig_info(SIGSTOP, SEND_SIG_PRIV, t);
 				/* change send ptrace_stop to send signal stop */
@@ -624,18 +626,21 @@ static int hang_detect_thread(void *arg)
 #endif
 				log_to_hang_info("[Native Hang detect]Dump process bt.\n");
 #ifndef CONFIG_SPRD_DEBUG
-				save_native_hang_monitor_data();
-				pr_err("[Native Hang Detect] hang_detect_counter:%d, ",
+				pr_err("[Native Hang Detect] hang_detect_counter:%d\n",
 					atomic_read(&hang_detect_counter));
-				pr_err("hang detect save data finish ......\n");
-				pr_err("[Native Hang Detect] hang_detect_counter:%d, ",
-					atomic_read(&hang_detect_counter));
-				pr_err("we should trigger panic...\n");
+				pr_err("wait 40s for wdh.....\n");
 				/* wait for wdh */
 				msleep(40 * 1000);
 				/* check hang_detect_counter before panic */
-				if (atomic_add_negative(0, &hang_detect_counter))
+				if (atomic_add_negative(0, &hang_detect_counter)) {
+					pr_err("[Native Hang Detect] hang_detect_counter:%d\n",
+							atomic_read(&hang_detect_counter));
+					pr_err("hang detect save data start ......\n");
+					save_native_hang_monitor_data();
+					pr_err("hang detect save data finish ......\n");
+					pr_err("we should trigger panic...\n");
 					panic("Native hang monitor trigger");
+				}
 #endif
 			}
 			atomic_dec(&hang_detect_counter);
