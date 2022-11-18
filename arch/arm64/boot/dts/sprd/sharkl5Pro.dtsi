@@ -1464,6 +1464,7 @@
 			modem_dbg_log: modem-dbg-log@324f0000 {
 				compatible = "sprd,dbg-log-sharkl5", "sprd,dbg-log-sharkl5pro";
 				reg = <0 0x324f0000 0 0x4000>;
+				sprd,syscon-pmu-apb = <&pmu_apb_regs>;
 				sprd,syscon-mm-ahb = <&mm_ahb_regs>;
 				sprd,syscon-dsi-apb = <&anlg_phy_g10_regs>;
 				sprd,ch-name = "TRAINING", "WTL", "MADR", "TPIU", "DBUS", "WCN";
@@ -1471,7 +1472,6 @@
 				sprd,dcfix;
 				sprd,mm;
 				sprd,mipi-l5pro = <1>;
-				power-domains = <&mm_domain>;
 				status = "okay";
 			};
 
