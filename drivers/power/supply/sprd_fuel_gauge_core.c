@@ -41,6 +41,20 @@
 #define SPRD_FGU_SLP_CAP_CALIB_SLP_TIME			300
 #define SPRD_FGU_CAP_CALIB_TEMP_LOW			100
 #define SPRD_FGU_CAP_CALIB_TEMP_HI			450
+#define SPRD_FGU_SR_ARRAY_LEN				100
+#define SPRD_FGU_SR_STOP_CHARGE_TIMES			(30 * 60)
+#define SPRD_FGU_SR_SLEEP_MIN_TIME_S			(10 * 60)
+#define SPRD_FGU_SR_AWAKE_MAX_TIME_S			90
+#define SPRD_FGU_SR_AWAKE_BIG_CUR_MAX_TIME_S		30
+#define SPRD_FGU_SR_SLEEP_AVG_CUR_MA			30
+#define SPRD_FGU_SR_AWAKE_AVG_CUR_MA			200
+#define SPRD_FGU_SR_LAST_SLEEP_TIME_S			(4 * 60)
+#define SPRD_FGU_SR_LAST_AWAKE_TIME_S			30
+#define SPRD_FGU_SR_DUTY_RATIO				95
+#define SPRD_FGU_SR_TOTAL_TIME_S			(30 * 60)
+#define SPRD_FGU_SR_VALID_VOL_CNT			3
+#define SPRD_FGU_SR_MAX_VOL_MV				4500
+#define SPRD_FGU_SR_MIN_VOL_MV				3400
 /* discharing calibration */
 #define SPRD_FGU_CAP_CALIB_ALARM_CAP			30
 /* track cap */
@@ -240,7 +254,7 @@ struct sprd_fgu_data {
 	int bat_soc;
 	int uusoc_mah;
 	int init_mah;
-	int cc_mah;
+	int cc_uah;
 	int max_volt_uv;
 	int min_volt_uv;
 	int boot_volt_uv;
@@ -315,11 +329,24 @@ struct sprd_fgu_data {
 	int *basp_voltage_max_table;
 	int basp_voltage_max_table_len;
 
-	int work_enter_cc_mah;
-	int work_exit_cc_mah;
-	int last_cc_mah;
+	int work_enter_cc_uah;
+	int work_exit_cc_uah;
+	int last_cc_uah;
 	s64 work_enter_times;
 	s64 work_exit_times;
+
+	/* sleep resume calibration */
+	s64 awake_times;
+	s64 sleep_times;
+	s64 stop_charge_times;
+	int sleep_cc_uah;
+	int awake_cc_uah;
+	int awake_avg_cur_ma;
+	int sr_time_sleep[SPRD_FGU_SR_ARRAY_LEN];
+	int sr_time_awake[SPRD_FGU_SR_ARRAY_LEN];
+	int sr_index_sleep;
+	int sr_index_awake;
+	int sr_ocv_uv;
 };
 
 static bool is_charger_mode;
@@ -328,9 +355,10 @@ static void sprd_fgu_capacity_calibration(struct sprd_fgu_data *data, bool int_m
 static void sprd_fgu_discharging_calibration(struct sprd_fgu_data *data, int *cap);
 static int sprd_fgu_resistance_algo(struct sprd_fgu_data *data, int cur_ua, int vol_uv);
 
-static inline int sprd_fgu_mah2current(int mah, int times)
+static inline int sprd_fgu_uah2current(int uah, int times)
 {
-	return DIV_ROUND_CLOSEST(mah * 3600, times);
+	/* To avoid data overflow, divide uah by 100 firstly */
+	return DIV_ROUND_CLOSEST(uah * 36, times * 10);
 }
 
 static int sprd_fgu_ocv2cap(struct power_supply_battery_ocv_table *table,
@@ -973,7 +1001,7 @@ static void sprd_fgu_dump_info(struct sprd_fgu_data *data)
 
 	dev_info(data->dev, "init_cap = %d, init_mah = %d, normal_cap = %d, data->cc_mah = %d, "
 		 "Tbat = %d, uusoc_vbat = %d, uusoc_mah = %d, track_sts = %d\n",
-		 data->init_cap, data->init_mah, data->normal_temp_cap, data->cc_mah,
+		 data->init_cap, data->init_mah, data->normal_temp_cap, data->cc_uah / 1000,
 		 data->bat_temp, data->uusoc_vbat, data->uusoc_mah, data->track.state);
 }
 
@@ -1262,17 +1290,17 @@ static int sprd_fgu_get_capacity(struct sprd_fgu_data *data, int *cap)
 	static int last_fgu_cap = SPRD_FGU_MAGIC_NUMBER;
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &data->cc_mah, true);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &data->cc_uah, true);
 	if (ret) {
-		dev_err(data->dev, "failed to get cc mah!\n");
+		dev_err(data->dev, "failed to get cc uah!\n");
 		return ret;
 	}
 
 	/*
-	 * Convert to capacity percent of the battery total capacity,
-	 * and multiplier is 100 too.
+	 * If convert to capacity percent of the battery total capacity,
+	 * you need to divide by 10.
 	 */
-	delta_cap = DIV_ROUND_CLOSEST(data->cc_mah * 1000, data->total_mah);
+	delta_cap = DIV_ROUND_CLOSEST(data->cc_uah, data->total_mah);
 	*cap = delta_cap + data->init_cap;
 
 	sprd_fgu_calc_charge_cycle(data, *cap, &last_fgu_cap);
@@ -1306,7 +1334,7 @@ static int sprd_fgu_get_capacity(struct sprd_fgu_data *data, int *cap)
 		}
 
 		data->init_mah = fgu_info->ops->cap2mah(fgu_info, data->total_mah, data->init_cap);
-		*cap = DIV_ROUND_CLOSEST((data->init_mah + data->cc_mah - data->uusoc_mah) * 1000,
+		*cap = DIV_ROUND_CLOSEST((data->init_mah - data->uusoc_mah) * 1000 + data->cc_uah,
 					 (data->total_mah - data->uusoc_mah));
 
 		if (*cap < 0) {
@@ -1698,22 +1726,21 @@ static int sprd_fgu_suspend_calib_check_sleep_time(struct sprd_fgu_data *data)
 
 static int sprd_fgu_suspend_calib_check_sleep_cur(struct sprd_fgu_data *data)
 {
-	int cc_mah, times, sleep_cur_ma = 0, ret = 0;
+	int cc_uah, times, sleep_cur_ma = 0, ret = 0;
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &fgu_info->slp_cap_calib.resume_cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &fgu_info->slp_cap_calib.resume_cc_uah, false);
 	if (ret)
 		return ret;
 
-	cc_mah = fgu_info->slp_cap_calib.suspend_cc_mah - fgu_info->slp_cap_calib.resume_cc_mah;
+	cc_uah = fgu_info->slp_cap_calib.suspend_cc_uah - fgu_info->slp_cap_calib.resume_cc_uah;
 	times = (int)(fgu_info->slp_cap_calib.resume_time -  fgu_info->slp_cap_calib.suspend_time);
-	sleep_cur_ma = sprd_fgu_mah2current(cc_mah, times);
+	sleep_cur_ma = sprd_fgu_uah2current(cc_uah, times);
 
-	dev_info(data->dev, "%s, suspend_cc_mah = %d, resume_cc_mah = %d, cc_mah = %d\n",
-		 __func__, fgu_info->slp_cap_calib.suspend_cc_mah,
-		 fgu_info->slp_cap_calib.resume_cc_mah, cc_mah);
-	dev_info(data->dev, "%s, sleep_cur_ma = %d, times = %d, cc_mah = %d\n",
-		 __func__, sleep_cur_ma, times, cc_mah);
+	dev_info(data->dev, "%s, suspend_cc_uah = %d, resume_cc_uah = %d, cc_uah = %d, "
+		 "times = %d, sleep_cur_ma = %d\n",
+		 __func__, fgu_info->slp_cap_calib.suspend_cc_uah,
+		 fgu_info->slp_cap_calib.resume_cc_uah, cc_uah, times, sleep_cur_ma);
 
 	if (abs(sleep_cur_ma) > fgu_info->slp_cap_calib.relax_cur_threshold) {
 		dev_info(data->dev, "Sleep calib sleep current = %d, not meet conditions\n",
@@ -1847,7 +1874,7 @@ static void sprd_fgu_suspend_calib_config(struct sprd_fgu_data *data)
 		cur_time = 0;
 
 	fgu_info->slp_cap_calib.suspend_time =  cur_time;
-	fgu_info->ops->get_cc_mah(fgu_info, &fgu_info->slp_cap_calib.suspend_cc_mah, false);
+	fgu_info->ops->get_cc_uah(fgu_info, &fgu_info->slp_cap_calib.suspend_cc_uah, false);
 
 	ret = fgu_info->ops->relax_mode_config(fgu_info);
 	if (!ret)
@@ -2034,6 +2061,7 @@ static int sprd_fgu_set_property(struct power_supply *psy,
 	struct sprd_fgu_data *data = power_supply_get_drvdata(psy);
 	int ret = 0, ui_cap, normal_cap;
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
+	struct timespec64 cur_time;
 
 	if (!data) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
@@ -2083,6 +2111,10 @@ static int sprd_fgu_set_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_STATUS:
 		data->chg_sts = val->intval;
+		if (data->chg_sts != POWER_SUPPLY_STATUS_CHARGING) {
+			cur_time = ktime_to_timespec64(ktime_get_boottime());
+			data->stop_charge_times = cur_time.tv_sec;
+		}
 		break;
 
 	case POWER_SUPPLY_PROP_CALIBRATE:
@@ -2397,16 +2429,16 @@ static bool sprd_fgu_discharging_current_trend(struct sprd_fgu_data *data)
 static bool sprd_fgu_discharging_cc_mah_trend(struct sprd_fgu_data *data)
 {
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
-	int cur_cc_mah, ret;
+	int cur_cc_uah, ret;
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &cur_cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &cur_cc_uah, false);
 	if (ret) {
-		dev_err(data->dev, "%s failed get cur_cc_mah!!\n", __func__);
+		dev_err(data->dev, "%s failed get cur_cc_uah!!\n", __func__);
 		return false;
 	}
 
-	return (data->last_cc_mah != SPRD_FGU_MAGIC_NUMBER) &&
-		(data->last_cc_mah > cur_cc_mah) ? true : false;
+	return (data->last_cc_uah != SPRD_FGU_MAGIC_NUMBER) &&
+		(data->last_cc_uah > cur_cc_uah) ? true : false;
 }
 
 static bool sprd_fgu_discharging_trend(struct sprd_fgu_data *data)
@@ -2876,7 +2908,7 @@ static void sprd_fgu_cap_track_state_init(struct sprd_fgu_data *data, int *cycle
 
 static void sprd_fgu_cap_track_state_idle(struct sprd_fgu_data *data, int *cycle)
 {
-	int ret, ocv_uv, cc_mah;
+	int ret, ocv_uv, cc_uah;
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
 
 	if (!data->bat_present) {
@@ -2904,18 +2936,18 @@ static void sprd_fgu_cap_track_state_idle(struct sprd_fgu_data *data, int *cycle
 		return;
 	}
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &cc_uah, false);
 	if (ret) {
-		dev_err(data->dev, "[idle] failed to get start cc_mah.\n");
+		dev_err(data->dev, "[idle] failed to get start cc_uah.\n");
 		return;
 	}
 
 	data->track.start_time = ktime_divns(ktime_get_boottime(), NSEC_PER_SEC);
-	data->track.start_cc_mah = cc_mah;
+	data->track.start_cc_mah = cc_uah / 1000;
 	data->track.state = CAP_TRACK_UPDATING;
 
 	dev_info(data->dev, "[idle] start_time = %lld, start_cc_mah = %d, start_cap = %d\n",
-		 data->track.start_time, cc_mah, data->track.start_cap);
+		 data->track.start_time, cc_uah / 1000, data->track.start_cap);
 }
 
 static void sprd_fgu_cap_track_state_updating(struct sprd_fgu_data *data, int *cycle)
@@ -2989,7 +3021,7 @@ static void sprd_fgu_cap_track_state_updating(struct sprd_fgu_data *data, int *c
 static void sprd_fgu_cap_track_state_done(struct sprd_fgu_data *data, int *cycle)
 {
 	int ret, ibat_avg_ma = 0, vbat_avg_mv = 0, ibat_now_ma = 0;
-	int delta_mah, total_mah, design_mah, start_mah, end_mah, cur_cc_mah;
+	int delta_mah, total_mah, design_mah, start_mah, end_mah, cur_cc_uah;
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
 
 	*cycle = SPRD_FGU_CAPACITY_TRACK_3S;
@@ -3057,9 +3089,9 @@ static void sprd_fgu_cap_track_state_done(struct sprd_fgu_data *data, int *cycle
 		return;
 	}
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &cur_cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &cur_cc_uah, false);
 	if (ret) {
-		dev_err(data->dev, "[done] failed to get cur_cc_mah.\n");
+		dev_err(data->dev, "[done] failed to get cur_cc_uah.\n");
 		return;
 	}
 
@@ -3078,14 +3110,14 @@ static void sprd_fgu_cap_track_state_done(struct sprd_fgu_data *data, int *cycle
 	 * formula:
 	 * end_mah = total_mah * (start_cap / 100) + delta_mah
 	 */
-	delta_mah = cur_cc_mah - data->track.start_cc_mah;
+	delta_mah = cur_cc_uah / 1000 - data->track.start_cc_mah;
 	start_mah = (total_mah * data->track.start_cap) / 1000;
 	end_mah = start_mah + delta_mah;
 
 	dev_info(data->dev, "Capacity track end: cur_cc_mah = %d, start_cc_mah = %d,"
 		 "delta_mah = %d, total_mah = %d, design_mah = %d, start_mah = %d,"
 		 "end_mah = %d, ibat_avg_ma = %d, ibat_now_ma = %d, vbat_avg_mv = %d\n",
-		 cur_cc_mah, data->track.start_cc_mah, delta_mah, total_mah, design_mah,
+		 cur_cc_uah / 1000, data->track.start_cc_mah, delta_mah, total_mah, design_mah,
 		 start_mah, end_mah, ibat_avg_ma, ibat_now_ma, vbat_avg_mv);
 
 	data->track.state = CAP_TRACK_IDLE;
@@ -3129,7 +3161,7 @@ static int sprd_fgu_cap_track_state_machine(struct sprd_fgu_data *data)
 }
 static int sprd_fgu_cap_calc_work_cycle(struct sprd_fgu_data *data)
 {
-	int ret = 0, temp, cur_ma = 0, delta_cc_mah;
+	int ret = 0, temp, cur_ma = 0, delta_cc_uah;
 	int work_cycle = SPRD_FGU_CAP_CALC_WORK_15S;
 	s64 times;
 
@@ -3146,11 +3178,11 @@ static int sprd_fgu_cap_calc_work_cycle(struct sprd_fgu_data *data)
 		return work_cycle;
 	}
 
-	if (data->work_exit_times != 0 && data->work_enter_cc_mah > data->work_exit_cc_mah) {
+	if (data->work_exit_times != 0 && data->work_enter_cc_uah > data->work_exit_cc_uah) {
 		times = data->work_enter_times - data->work_exit_times;
-		delta_cc_mah = data->work_enter_cc_mah - data->work_exit_cc_mah;
+		delta_cc_uah = data->work_enter_cc_uah - data->work_exit_cc_uah;
 		if (times != 0) {
-			cur_ma = sprd_fgu_mah2current(delta_cc_mah, times);
+			cur_ma = sprd_fgu_uah2current(delta_cc_uah, times);
 			if (cur_ma > SPRD_FGU_CAP_CALC_WORK_BIG_CURRENT) {
 				dev_info(data->dev, "%s cur_ma = %d!!\n", __func__, cur_ma);
 				work_cycle = SPRD_FGU_CAP_CALC_WORK_8S;
@@ -3174,9 +3206,9 @@ static void sprd_fgu_cap_calculate_work(struct work_struct *work)
 		return;
 	}
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &data->work_enter_cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &data->work_enter_cc_uah, false);
 	if (ret) {
-		dev_err(data->dev, "failed get work_enter_cc_mah!!\n");
+		dev_err(data->dev, "failed get work_enter_cc_uah!!\n");
 		goto out;
 	}
 
@@ -3191,16 +3223,16 @@ static void sprd_fgu_cap_calculate_work(struct work_struct *work)
 
 	work_cycle = sprd_fgu_cap_calc_work_cycle(data);
 
-	ret = fgu_info->ops->get_cc_mah(fgu_info, &data->work_exit_cc_mah, false);
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &data->work_exit_cc_uah, false);
 	if (ret) {
-		dev_err(data->dev, "failed get work_exit_cc_mah!!\n");
+		dev_err(data->dev, "failed get work_exit_cc_uah!!\n");
 		goto out;
 	}
 
 	cur_time = ktime_to_timespec64(ktime_get_boottime());
 	data->work_exit_times = cur_time.tv_sec;
 
-	data->last_cc_mah = data->work_exit_cc_mah;
+	data->last_cc_uah = data->work_exit_cc_uah;
 
 out:
 	dev_info(data->dev, "battery soc = %d, cycle = %d\n", data->bat_soc, work_cycle);
@@ -3265,7 +3297,7 @@ static ssize_t sprd_fgu_dump_info_show(struct device *dev,
 			"[max_volt:%d];\n[min_volt:%d];\n[first_calib_volt:%d];\n[first_calib_cap:%d];\n"
 			"[uusoc_vbat:%d];\n[boot_vol:%d];\n[bat_temp:%d];\n[online:%d];\n"
 			"[is_first_poweron:%d];\n[chg_type:%d]\n[support_debug_log:%d]\n",
-			data->bat_present, data->total_mah, data->init_cap, data->cc_mah,
+			data->bat_present, data->total_mah, data->init_cap, data->cc_uah / 1000,
 			data->alarm_cap, data->boot_cap, data->normal_temp_cap, data->max_volt_uv,
 			data->min_volt_uv, data->first_calib_volt, data->first_calib_cap,
 			data->uusoc_vbat, data->boot_volt_uv, data->bat_temp, data->online,
@@ -3834,6 +3866,7 @@ static int sprd_fgu_hw_init(struct sprd_fgu_data *data)
 	int ret;
 	struct sprd_battery_info info = {};
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
+	struct timespec64 cur_time;
 
 	data->cur_now_buff[SPRD_FGU_CURRENT_BUFF_CNT - 1] = SPRD_FGU_MAGIC_NUMBER;
 
@@ -3945,6 +3978,12 @@ static int sprd_fgu_hw_init(struct sprd_fgu_data *data)
 		goto disable_fgu;
 	}
 
+	cur_time = ktime_to_timespec64(ktime_get_boottime());
+	data->awake_times = data->stop_charge_times = cur_time.tv_sec;
+	data->awake_cc_uah = 0;
+	dev_info(data->dev, "suspend calib: current current time_stamp = %lld\n",
+		 data->awake_times);
+
 	return 0;
 
 disable_fgu:
@@ -3973,7 +4012,7 @@ static int sprd_fgu_probe(struct platform_device *pdev)
 	}
 
 	data->normal_temp_cap = SPRD_FGU_MAGIC_NUMBER;
-	data->last_cc_mah = SPRD_FGU_MAGIC_NUMBER;
+	data->last_cc_uah = SPRD_FGU_MAGIC_NUMBER;
 	data->chg_sts = POWER_SUPPLY_STATUS_DISCHARGING;
 
 	data->dev = &pdev->dev;
@@ -4161,17 +4200,232 @@ err:
 	return ret;
 }
 
+static int sprd_fgu_sr_get_duty_ratio(struct sprd_fgu_data *data)
+{
+	int total_sleep_time = 0, total_awake_time = 0, cnt = 0, duty_ratio = 0;
+	int last_sleep_idx = (data->sr_index_sleep - 1 < 0) ?
+		SPRD_FGU_SR_ARRAY_LEN - 1 : data->sr_index_sleep - 1;
+	int last_awake_idx = (data->sr_index_awake - 1 < 0) ?
+		SPRD_FGU_SR_ARRAY_LEN - 1 : data->sr_index_awake - 1;
+
+	do {
+		total_sleep_time += data->sr_time_sleep[last_sleep_idx];
+		total_awake_time += data->sr_time_awake[last_awake_idx];
+
+		last_sleep_idx = (data->sr_index_sleep - 1 < 0) ?
+			SPRD_FGU_SR_ARRAY_LEN - 1 : data->sr_index_sleep - 1;
+		last_awake_idx = (data->sr_index_awake - 1 < 0) ?
+			SPRD_FGU_SR_ARRAY_LEN - 1 : data->sr_index_awake - 1;
+
+		cnt++;
+		if (cnt >= SPRD_FGU_SR_ARRAY_LEN)
+			break;
+	} while (total_sleep_time + total_awake_time < SPRD_FGU_SR_TOTAL_TIME_S);
+
+	if (total_sleep_time + total_awake_time >= SPRD_FGU_SR_TOTAL_TIME_S) {
+		duty_ratio = total_sleep_time * 100 /
+			(total_sleep_time + total_awake_time);
+		dev_info(data->dev, "%s suspend calib: total_awake_time = %d, "
+			 "total_sleep_time = %d, duty_ratio = %d!!!\n",
+			 __func__, total_awake_time, total_sleep_time, duty_ratio);
+	}
+
+	return duty_ratio;
+}
+
+static bool sprd_fgu_sr_need_update_ocv(struct sprd_fgu_data *data)
+{
+	int last_awake_time = 0, last_sleep_time = 0, duty_ratio = 0;
+
+	/* get last awake time */
+	if (data->sr_index_awake >= 0 && data->sr_index_awake < SPRD_FGU_SR_ARRAY_LEN) {
+		last_awake_time = (data->sr_index_awake - 1 < 0) ?
+			data->sr_time_awake[SPRD_FGU_SR_ARRAY_LEN - 1] :
+			data->sr_time_awake[data->sr_index_awake - 1];
+	}
+
+	/* get last sleep time */
+	if (data->sr_index_sleep >= 0 && data->sr_index_sleep < SPRD_FGU_SR_ARRAY_LEN) {
+		last_sleep_time = (data->sr_index_sleep - 1 < 0) ?
+			data->sr_time_sleep[SPRD_FGU_SR_ARRAY_LEN - 1] :
+			data->sr_time_sleep[data->sr_index_sleep - 1];
+	}
+
+	duty_ratio = sprd_fgu_sr_get_duty_ratio(data);
+
+	if (last_sleep_time > SPRD_FGU_SR_LAST_SLEEP_TIME_S &&
+	    last_awake_time < SPRD_FGU_SR_LAST_AWAKE_TIME_S &&
+	    abs(data->awake_avg_cur_ma) < SPRD_FGU_SR_AWAKE_AVG_CUR_MA &&
+	    duty_ratio > SPRD_FGU_SR_DUTY_RATIO) {
+		dev_info(data->dev, "%s suspend calib: last_sleep_time = %d, last_awake_time = %d, "
+			 "awake_avg_cur_ma = %d, duty_ratio = %d!!!\n", __func__,
+			 last_sleep_time, last_awake_time, data->awake_avg_cur_ma, duty_ratio);
+		return true;
+	}
+
+	dev_info(data->dev, "%s suspend calib: last_sleep_time = %d, last_awake_time = %d, "
+		 "awake_avg_cur_ma = %d is not meet!!!\n", __func__, last_sleep_time,
+		 last_awake_time, data->awake_avg_cur_ma);
+
+	return false;
+}
+
+static bool sprd_fgu_sr_ocv_is_valid(struct sprd_fgu_data *data)
+{
+	struct sprd_fgu_info *fgu_info = data->fgu_info;
+	struct timespec64 cur_time;
+	s64 sleep_time = 0;
+	int cur_cc_uah = 0, sleep_delta_cc_uah, cur_ma, ret = 0;
+
+	cur_time = ktime_to_timespec64(ktime_get_boottime());
+	sleep_time = cur_time.tv_sec - data->sleep_times;
+
+	if (sleep_time < SPRD_FGU_SR_SLEEP_MIN_TIME_S &&
+	    !sprd_fgu_sr_need_update_ocv(data)) {
+		dev_info(data->dev, "%s suspend calib: sleep_time = %lld "
+			 "is not meet update ocv!!!\n", __func__, sleep_time);
+		return false;
+	}
+
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &cur_cc_uah, false);
+	if (ret) {
+		dev_err(data->dev, "%s suspend calib: failed get cur_cc_mah!!\n", __func__);
+		return false;
+	}
+
+	sleep_delta_cc_uah = data->sleep_cc_uah - cur_cc_uah;
+	if (sleep_time > 0) {
+		cur_ma = sprd_fgu_uah2current(sleep_delta_cc_uah, sleep_time);
+		dev_info(data->dev, "%s suspend calib: sleep_time = %lld, current cc_uah = %d , "
+			 "sleep_cc_uah = %d, sleep_delta_cc_uah = %d, sleep_avg_cur_ma = %d\n",
+			 __func__, sleep_time, data->sleep_cc_uah, cur_cc_uah,
+			 sleep_delta_cc_uah, cur_ma);
+		if (cur_ma > SPRD_FGU_SR_SLEEP_AVG_CUR_MA) {
+			dev_info(data->dev, "%s suspend calib: cur_ma = %d "
+				 "is not meet update ocv!!!\n", __func__, cur_ma);
+			return false;
+		}
+	} else {
+		dev_info(data->dev, "%s suspend calib: sleep_time = %lld "
+			 "is not meet update ocv!!!\n", __func__, sleep_time);
+		return false;
+	}
+
+	return true;
+}
+
+static int sprd_fgu_sr_get_ocv(struct sprd_fgu_data *data)
+{
+	int ret, i, cur_ma = 0x7fffffff, total_vol_mv = 0, valid_cnt = 0;
+	u32 vol_mv = 0, vol_uv = 0;
+	struct sprd_fgu_info *fgu_info = data->fgu_info;
+
+	for (i = SPRD_FGU_VOLTAGE_BUFF_CNT - 1; i >= 0; i--) {
+		vol_mv = 0;
+		ret = fgu_info->ops->get_vbat_buf(fgu_info, i, &vol_mv);
+		if (ret) {
+			dev_info(data->dev, "%s suspend calib: fail to get vbat_buf[%d]\n",
+				 __func__, i);
+			continue;
+		}
+
+		cur_ma = 0x7fffffff;
+		ret = fgu_info->ops->get_current_buf(fgu_info, i, &cur_ma);
+		if (ret) {
+			dev_info(data->dev, "%s suspend calib: fail to get cur_buf[%d]\n",
+				 __func__, i);
+			continue;
+		}
+
+		if (abs(cur_ma) > SPRD_FGU_SR_SLEEP_AVG_CUR_MA) {
+			dev_info(data->dev, "%s suspend calib: get cur[%d] is invalid = %dmA\n",
+				 __func__, i, cur_ma);
+			continue;
+		}
+
+		if (vol_mv > SPRD_FGU_SR_MAX_VOL_MV || vol_mv < SPRD_FGU_SR_MIN_VOL_MV) {
+			dev_info(data->dev, "%s suspend calib: get vol[%d] is invalid = %dmV\n",
+				 __func__, i, vol_mv);
+			continue;
+		}
+
+		dev_info(data->dev, "%s suspend calib: get index:[%d] valid current = %dmA, "
+			 "valid voltage = %dmV\n", __func__, i, cur_ma, vol_mv);
+		total_vol_mv += vol_mv;
+		valid_cnt++;
+	}
+
+	if (valid_cnt < SPRD_FGU_SR_VALID_VOL_CNT) {
+		dev_info(data->dev, "%s suspend calib: fail to get cur and vol: cur = %dmA, "
+			 "vol = %dmV or valid_cnt = %d < %d!!!\n",
+			 __func__, cur_ma, vol_mv, valid_cnt, SPRD_FGU_SR_VALID_VOL_CNT);
+		return -EINVAL;
+	}
+
+	dev_info(data->dev, "%s suspend calib: total_vol = %dmV, valid_cnt = %d, vol = %dmV\n",
+		  __func__, total_vol_mv, valid_cnt, total_vol_mv / valid_cnt);
+
+	vol_uv = total_vol_mv * 1000 / valid_cnt;
+	if (sprd_fgu_is_in_low_energy_dens(data, vol_uv, data->cap_calib_dens_ocv_table,
+					   data->cap_calib_dens_ocv_table_len)) {
+		data->sr_ocv_uv = vol_mv * 1000;
+		dev_info(data->dev, "%s suspend calib: get sr_ocv_uv = %duV!!!\n",
+			 __func__, data->sr_ocv_uv);
+	}
+
+	return 0;
+}
+
+static void sprd_fgu_sr_calib_resume_check(struct sprd_fgu_data *data)
+{
+	struct sprd_fgu_info *fgu_info = data->fgu_info;
+	int ret = 0;
+	struct timespec64 cur_time;
+	s64 cur_times, sleep_time = 0;
+
+	cur_time = ktime_to_timespec64(ktime_get_boottime());
+	cur_times = data->awake_times = cur_time.tv_sec;
+	sleep_time = cur_times - data->sleep_times;
+	if (sleep_time >= 0) {
+		data->sr_time_sleep[data->sr_index_sleep] = sleep_time;
+		data->sr_index_sleep++;
+		data->sr_index_sleep = data->sr_index_sleep % SPRD_FGU_SR_ARRAY_LEN;
+	} else {
+		dev_err(data->dev, "%s suspend calib: sleep_time = %lld, "
+			"is not meet!!!\n", __func__, sleep_time);
+	}
+
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &data->awake_cc_uah, false);
+	if (ret) {
+		dev_err(data->dev, "%s suspend calib: failed get awake_cc_uah!!\n", __func__);
+		return;
+	}
+
+	dev_info(data->dev, "%s suspend calib: current time_stamp = %lld, "
+		 "stop charge time_stamp = %lld, sleep_time = %lld, current cc_mah = %d\n",
+		 __func__, cur_times, data->stop_charge_times, sleep_time, data->awake_cc_uah);
+
+	if ((cur_times - data->stop_charge_times) > SPRD_FGU_SR_STOP_CHARGE_TIMES &&
+	    sprd_fgu_sr_ocv_is_valid(data)) {
+		ret = sprd_fgu_sr_get_ocv(data);
+		if (ret)
+			dev_err(data->dev, "%s suspend calib: failed get sr_ocv_uv!!\n", __func__);
+	}
+}
+
 #if IS_ENABLED(CONFIG_PM_SLEEP)
 static int sprd_fgu_resume(struct device *dev)
 {
 	struct sprd_fgu_data *data = dev_get_drvdata(dev);
 	struct sprd_fgu_info *fgu_info = data->fgu_info;
-	int ret;
+	int ret = 0;
 
 	if (!data) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
 		return -EINVAL;
 	}
+
+	sprd_fgu_sr_calib_resume_check(data);
 
 	sprd_fgu_suspend_calib_check(data);
 
@@ -4194,6 +4448,60 @@ static int sprd_fgu_resume(struct device *dev)
 	return 0;
 }
 
+static void sprd_fgu_clear_sr_time_array(struct sprd_fgu_data *data)
+{
+	memset(&data->sr_time_sleep, 0, sizeof(data->sr_time_sleep));
+	memset(&data->sr_time_awake, 0, sizeof(data->sr_time_awake));
+	data->sr_index_sleep = 0;
+	data->sr_index_awake = 0;
+}
+
+static void sprd_fgu_sr_calib_suspend_check(struct sprd_fgu_data *data)
+{
+	struct sprd_fgu_info *fgu_info = data->fgu_info;
+	struct timespec64 cur_time;
+	s64 cur_times, awake_time = 0;
+	int awake_delta_cc_uah, ret = 0;
+
+	cur_time = ktime_to_timespec64(ktime_get_boottime());
+	cur_times = data->sleep_times = cur_time.tv_sec;
+	awake_time = cur_times - data->awake_times;
+	ret = fgu_info->ops->get_cc_uah(fgu_info, &data->sleep_cc_uah, false);
+	if (ret) {
+		dev_err(data->dev, "%s suspend calib: failed get sleep_cc_uah!!\n", __func__);
+		return;
+	}
+
+	if (awake_time > 0) {
+		awake_delta_cc_uah = data->sleep_cc_uah - data->awake_cc_uah;
+		data->awake_avg_cur_ma = sprd_fgu_uah2current(awake_delta_cc_uah, awake_time);
+		dev_info(data->dev, "%s suspend calib: current time_stamp = %lld, "
+			 "awake_time = %lld, cureent cc_uah = %d, awake_delta_cc_uah = %d, "
+			 "awake_avg_cur_ma = %d\n", __func__, cur_times, awake_time,
+			 data->sleep_cc_uah, awake_delta_cc_uah, data->awake_avg_cur_ma);
+	}
+
+	if (awake_time > SPRD_FGU_SR_AWAKE_MAX_TIME_S ||
+	    (abs(data->awake_avg_cur_ma) > SPRD_FGU_SR_AWAKE_AVG_CUR_MA &&
+	     awake_time > SPRD_FGU_SR_AWAKE_BIG_CUR_MAX_TIME_S)){
+		sprd_fgu_clear_sr_time_array(data);
+		dev_info(data->dev, "%s suspend calib: awake_time = %llds > %ds, "
+			 "or awake_avg_cur_ma = %dmA > %dmA and awake_time = %llds > %ds, "
+			 "need to clear_sr_time_array!\n",
+			 __func__, awake_time, SPRD_FGU_SR_AWAKE_MAX_TIME_S,
+			 abs(data->awake_avg_cur_ma), SPRD_FGU_SR_AWAKE_AVG_CUR_MA,
+			 SPRD_FGU_SR_AWAKE_BIG_CUR_MAX_TIME_S, awake_time);
+	} else if (awake_time > 0) {
+		data->sr_time_awake[data->sr_index_awake] = awake_time;
+		data->sr_index_awake++;
+		data->sr_index_awake = data->sr_index_awake % SPRD_FGU_SR_ARRAY_LEN;
+	} else {
+		dev_err(data->dev, "%s suspend calib: awake_time = %lld, not meet!!!\n",
+			__func__, awake_time);
+	}
+}
+
+
 static int sprd_fgu_suspend(struct device *dev)
 {
 	struct sprd_fgu_data *data = dev_get_drvdata(dev);
@@ -4204,6 +4512,8 @@ static int sprd_fgu_suspend(struct device *dev)
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
 		return -EINVAL;
 	}
+
+	sprd_fgu_sr_calib_suspend_check(data);
 
 	/*
 	 * If we are charging, then no need to enable the FGU interrupts to

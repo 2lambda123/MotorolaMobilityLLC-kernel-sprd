@@ -142,6 +142,7 @@
 #define UMP518_FGU_RELAX_CURT_THRE_SHIFT_L	0
 #define UMP518_FGU_RELAX_CURT_THRE_MASK_H	GENMASK(4, 0)
 #define UMP518_FGU_RELAX_CURT_THRE_SHIFT_H	16
+#define UMP518_FGU_RELAX_CURT_THRE_OFFSET	0xf0000
 #define UMP518_FGU_RELAX_POWER_STS_MASK		BIT(5)
 #define UMP518_FGU_RELAX_POWER_STS_SHIFT	5
 #define UMP518_FGU_RELAX_CURT_STS_MASK		BIT(4)
@@ -237,20 +238,20 @@ static s64 ump518_fgu_cap2clbcnt(struct sprd_fgu_info *info, int total_mah, int 
 	return DIV_ROUND_CLOSEST(cur_mah * 36 * info->cur_1000ma_adc * fgu_clk_sample_hz * 15, 10);
 }
 
-static int ump518_fgu_clbcnt2mah(struct sprd_fgu_info *info, s64 clbcnt)
+static int ump518_fgu_clbcnt2uah(struct sprd_fgu_info *info, s64 clbcnt)
 {
 	/*
-	 * Convert coulomb counter to delta capacity (mAh), and set multiplier
+	 * Convert coulomb counter to delta capacity (uAh), and set multiplier
 	 * as 10 to improve the precision.
-	 * formula: 1 mAh =3.6 coulomb
+	 * formula: 1000 uAh = 3.6 coulomb
 	 */
-	s64 mah = DIV_ROUND_CLOSEST(clbcnt * 10, 36 * fgu_clk_sample_hz * 15);
-	if (mah > 0)
-		mah = mah + info->cur_1000ma_adc / 2;
+	s64 uah = DIV_ROUND_CLOSEST(clbcnt * 10 * 1000, 36 * fgu_clk_sample_hz * 15);
+	if (uah > 0)
+		uah = uah + info->cur_1000ma_adc / 2;
 	else
-		mah = mah - info->cur_1000ma_adc / 2;
+		uah = uah - info->cur_1000ma_adc / 2;
 
-	return (int)div_s64(mah, info->cur_1000ma_adc);
+	return (int)div_s64(uah, info->cur_1000ma_adc);
 }
 
 static int ump518_fgu_parse_cmdline_match(struct sprd_fgu_info *info, char *match_str,
@@ -1182,7 +1183,7 @@ static int ump518_fgu_reset_cc_mah(struct sprd_fgu_info *info, int total_mah, in
 	return ret;
 }
 
-static int ump518_fgu_get_cc_mah(struct sprd_fgu_info *info, int *cc_mah, bool is_adjust)
+static int ump518_fgu_get_cc_uah(struct sprd_fgu_info *info, int *cc_uah, bool is_adjust)
 {
 	int ret = 0;
 	s64 cur_clbcnt, delta_clbcnt;
@@ -1200,7 +1201,7 @@ static int ump518_fgu_get_cc_mah(struct sprd_fgu_info *info, int *cc_mah, bool i
 	else
 		delta_clbcnt = cur_clbcnt - start_work_clbcnt;
 
-	*cc_mah = ump518_fgu_clbcnt2mah(info, delta_clbcnt);
+	*cc_uah = ump518_fgu_clbcnt2uah(info, delta_clbcnt);
 
 	return ret;
 }
@@ -1252,13 +1253,15 @@ static int ump518_fgu_set_relax_cur_thre(struct sprd_fgu_info *info, int relax_c
 	relax_cur_threshold_adc = ump518_fgu_current2adc(info, relax_cur_threshold);
 	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_RELAX_CURT_THRE_H,
 				 UMP518_FGU_RELAX_CURT_THRE_MASK_H,
-				 relax_cur_threshold_adc >> UMP518_FGU_RELAX_CURT_THRE_SHIFT_H);
+				 (relax_cur_threshold_adc - UMP518_FGU_RELAX_CURT_THRE_OFFSET) >>
+				 UMP518_FGU_RELAX_CURT_THRE_SHIFT_H);
 	if (ret)
 		return ret;
 
 	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_RELAX_CURT_THRE_L,
 				 UMP518_FGU_RELAX_CURT_THRE_MASK_L,
-				 relax_cur_threshold_adc >> UMP518_FGU_RELAX_CURT_THRE_SHIFT_L);
+				 (relax_cur_threshold_adc - UMP518_FGU_RELAX_CURT_THRE_OFFSET) >>
+				 UMP518_FGU_RELAX_CURT_THRE_SHIFT_L);
 
 	return ret;
 }
@@ -1537,7 +1540,7 @@ struct sprd_fgu_device_ops ump518_fgu_dev_ops = {
 	.get_current_avg = ump518_fgu_get_current_avg,
 	.get_current_buf = ump518_fgu_get_current_buf,
 	.reset_cc_mah = ump518_fgu_reset_cc_mah,
-	.get_cc_mah = ump518_fgu_get_cc_mah,
+	.get_cc_uah = ump518_fgu_get_cc_uah,
 	.adjust_cap = ump518_fgu_adjust_cap,
 	.set_cap_delta_thre = ump518_fgu_set_cap_delta_thre,
 	.set_relax_cur_thre = ump518_fgu_set_relax_cur_thre,

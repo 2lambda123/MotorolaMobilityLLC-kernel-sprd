@@ -57,8 +57,8 @@ struct sprd_fgu_sleep_capacity_calibration {
 	bool support_slp_calib;
 	int suspend_ocv_uv;
 	int resume_ocv_uv;
-	int suspend_cc_mah;
-	int resume_cc_mah;
+	int suspend_cc_uah;
+	int resume_cc_uah;
 	s64 suspend_time;
 	s64 resume_time;
 	int resume_ocv_cap;
@@ -121,7 +121,7 @@ struct sprd_fgu_device_ops {
 	int (*get_current_avg)(struct sprd_fgu_info *info, int *val);
 	int (*get_current_buf)(struct sprd_fgu_info *info, int index, int *val);
 	int (*reset_cc_mah)(struct sprd_fgu_info *info, int total_mah, int init_cap);
-	int (*get_cc_mah)(struct sprd_fgu_info *info, int *cc_mah, bool is_adjust);
+	int (*get_cc_uah)(struct sprd_fgu_info *info, int *cc_uah, bool is_adjust);
 	int (*adjust_cap)(struct sprd_fgu_info *info, int cap);
 	int (*set_cap_delta_thre)(struct sprd_fgu_info *info, int total_mah, int cap);
 	int (*set_relax_cur_thre)(struct sprd_fgu_info *info, int relax_cur_threshold);
