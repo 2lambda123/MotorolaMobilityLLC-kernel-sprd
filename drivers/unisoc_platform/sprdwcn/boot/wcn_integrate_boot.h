@@ -14,7 +14,10 @@ void wcn_power_wq(struct work_struct *pwork);
 void wcn_device_poweroff(void);
 int wcn_reset_mdbg_notifier_init(void);
 int wcn_reset_mdbg_notifier_deinit(void);
-
+struct reg_wcn_aon_ahb_reserved2 {
+	u32 priority : 2;
+	u32 reserved : 30;
+};
 #define BTWF_SYS_ABNORMAL 0x0deadbad
 #define GNSS_SYS_ABNORMAL 0x1deadbad
 
