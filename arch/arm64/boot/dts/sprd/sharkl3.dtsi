@@ -377,6 +377,8 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";
+				reset-names = "i2c_rst";
+				resets = <&apapb_gate RESET_AP_APB_I2C5_SOFT_RST>;
 			};
 
 			i2c6: i2c@1600000 {
@@ -388,6 +390,8 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";
+				reset-names = "i2c_rst";
+				resets = <&apapb_gate RESET_AP_APB_I2C6_SOFT_RST>;
 			};
 		};
 
