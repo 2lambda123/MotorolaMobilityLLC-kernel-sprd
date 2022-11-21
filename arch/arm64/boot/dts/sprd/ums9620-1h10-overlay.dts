@@ -392,8 +392,8 @@
 		reg = <0x0 0xb0000000 0x0 0x009e4000>;
 	};
 
-	oemcrypto_reserved: oemcrypto@d8700000 {
-		reg = <0x0 0xd8700000 0x0 0x01100000>;
+	oemcrypto_reserved: oemcrypto@c3100000 {
+		reg = <0x0 0xc3100000 0x0 0x01100000>;
 	};
 
 	widevine_reserved: widevine@d9800000 {
