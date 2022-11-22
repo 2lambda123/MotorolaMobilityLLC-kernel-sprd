@@ -960,10 +960,6 @@
 	  sprd-freq = <1244 768 384 384 533 1244 1244 2133 2133>;
 };
 
-&vddemmccore {
-	regulator-always-on;
-};
-
 &pin_controller {
 	pinctrl-names =
 	/* IM1_CLK ,SIM1_DA ,SIM1_RST ,keyin0 */
