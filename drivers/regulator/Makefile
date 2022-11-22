@@ -106,6 +106,7 @@ obj-$(CONFIG_REGULATOR_S5M8767) += s5m8767.o
 obj-$(CONFIG_REGULATOR_SC2720) += sc2720-regulator.o
 obj-$(CONFIG_REGULATOR_SC2721) += sc2721-regulator.o
 obj-$(CONFIG_REGULATOR_SC2730) += sc2730-regulator.o
+obj-$(CONFIG_REGULATOR_UMP518) += ump518-regulator.o
 obj-$(CONFIG_REGULATOR_UMP9620) += ump9620-regulator.o
 obj-$(CONFIG_REGULATOR_UMP9621) += ump9621-regulator.o
 obj-$(CONFIG_REGULATOR_SC2731) += sc2731-regulator.o
