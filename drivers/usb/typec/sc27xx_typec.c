@@ -40,6 +40,18 @@
 #define SC2730_CC_1_DETECT		BIT(0)
 #define SC2730_CC_2_DETECT		BIT(4)
 
+/* additional registers definitions in UMP518 */
+#define UMP518_CABLE_STATUS		0x78
+
+/* UMP518 ONLY registers definitions for controller GLOBAL */
+#define SC27XX_GLOBAL_RESERVED_REG_CORE	0x1b4c
+
+/* UMP518 ONLY SC27XX_GLOBAL__RESERVED_REG_CORE */
+#define UMP518_PULLDOWN_EN		BIT(12)
+
+/* UMP518_CABLE_STATUS */
+#define UMP518_ATTACHED_INT_IS_LAST	BIT(6)
+
 /* SC2721_STATUS */
 #define SC2721_CC_MASK			GENMASK(6, 0)
 #define SC2721_CC_1_DETECT		BIT(5)
@@ -75,6 +87,8 @@
 #define SC2721_EFUSE_CC2_SHIFT		6
 #define UMP9620_EFUSE_CC1_SHIFT		1
 #define UMP9620_EFUSE_CC2_SHIFT		11
+#define UMP518_EFUSE_CC1_SHIFT		6
+#define UMP518_EFUSE_CC2_SHIFT		11
 
 #define SC27XX_CC1_MASK(n)		GENMASK((n) + 9, (n) + 5)
 #define SC27XX_CC2_MASK(n)		GENMASK((n) + 4, (n))
@@ -116,6 +130,7 @@
 #define SC2721				0x01
 #define SC2730				0x02
 #define UMP9620				0x03
+#define UMP518				0x04
 
 /* DFP/UFP DETECT */
 #define CC1_DFP_CHECK			BIT(7)
@@ -187,6 +202,19 @@ static const struct sprd_typec_variant_data ump9620_data = {
 	.pmic_name = UMP9620,
 	.efuse_cc1_shift = UMP9620_EFUSE_CC1_SHIFT,
 	.efuse_cc2_shift = UMP9620_EFUSE_CC2_SHIFT,
+	.int_en = SC27XX_INT_EN,
+	.int_clr = SC27XX_INT_CLR,
+	.mode = SC27XX_MODE,
+	.attach_en = SC27XX_ATTACH_INT_EN,
+	.detach_en = SC27XX_DETACH_INT_EN,
+	.state_mask = SC27XX_STATE_MASK,
+	.event_mask = SC27XX_EVENT_MASK,
+};
+
+static const struct sprd_typec_variant_data ump518_data = {
+	.pmic_name = UMP518,
+	.efuse_cc1_shift = UMP518_EFUSE_CC1_SHIFT,
+	.efuse_cc2_shift = UMP518_EFUSE_CC2_SHIFT,
 	.int_en = SC27XX_INT_EN,
 	.int_clr = SC27XX_INT_CLR,
 	.mode = SC27XX_MODE,
@@ -392,7 +420,8 @@ static int sc27xx_typec_random_tdrp(struct sc27xx_typec *sc)
 	rand &= 0xfff;
 	rand = SC27XX_MIN_TDRP_CNT + rand % SC27XX_TDRP_RANGE;
 
-	if (sc->var_data->pmic_name == SC2730 || sc->var_data->pmic_name == UMP9620)
+	if (sc->var_data->pmic_name == SC2730 || sc->var_data->pmic_name == UMP9620 ||
+	    sc->var_data->pmic_name == UMP518)
 		ret = regmap_write(sc->regmap, sc->base + SC2730_TDRP_CNT, rand);
 	else if (sc->var_data->pmic_name == SC2721)
 		ret = regmap_write(sc->regmap, sc->base + SC2721_TDRP_CNT, rand);
@@ -409,6 +438,7 @@ static irqreturn_t sc27xx_typec_interrupt(int irq, void *data)
 	struct sc27xx_typec *sc = data;
 	u32 event;
 	int ret;
+	u32 last_int;
 
 	ret = regmap_read(sc->regmap, sc->base + SC27XX_INT_MASK, &event);
 	if (ret)
@@ -422,15 +452,61 @@ static irqreturn_t sc27xx_typec_interrupt(int irq, void *data)
 
 	sc->state &= sc->var_data->state_mask;
 
-	if (event & SC27XX_ATTACH_INT) {
-		ret = sc27xx_typec_connect(sc, sc->state);
-		if (ret)
-			dev_warn(sc->dev, "failed to register partner\n");
-	} else if (event & SC27XX_DETACH_INT) {
-		sc27xx_typec_disconnect(sc, sc->state);
-		ret = sc27xx_typec_random_tdrp(sc);
-		if (ret)
-			dev_warn(sc->dev, "failed to random tdrp\n");
+	if(UMP518 == sc->var_data->pmic_name) {
+		/**
+		 * UMP518 adds a new regs TYPEC_CABLE_STATUS,
+		 * which can distinguish between attach and detach;
+		 * last_int=0 : detach int is last
+		 * last_int=1 : attach int is last
+		 * Does not consider the case of an interrupt error
+		 * when UMP518_CABLE_STATUS cannot be read.
+		 */
+		ret = regmap_read(sc->regmap, sc->base + UMP518_CABLE_STATUS, &last_int);
+		if (ret){
+			if (event & SC27XX_ATTACH_INT) {
+				ret = sc27xx_typec_connect(sc, sc->state);
+				if (ret)
+					dev_warn(sc->dev, "failed to register partner\n");
+			} else if (event & SC27XX_DETACH_INT) {
+				sc27xx_typec_disconnect(sc, sc->state);
+				ret = sc27xx_typec_random_tdrp(sc);
+				if (ret)
+					dev_warn(sc->dev, "failed to random tdrp\n");
+			}
+		}else{
+			last_int &= UMP518_ATTACHED_INT_IS_LAST;
+			if ((event & SC27XX_ATTACH_INT) && last_int) {
+				ret = sc27xx_typec_connect(sc, sc->state);
+				if (ret)
+					dev_warn(sc->dev, "failed to register partner\n");
+			} else if (((event & SC27XX_DETACH_INT) && (!last_int)) &&
+				   !(event & SC27XX_ATTACH_INT)) {
+				/**
+				 * Consideri the situation that last interrtup
+				 * is detach, but there is no connect function
+				 * excution
+				 */
+				sc27xx_typec_disconnect(sc, sc->state);
+				ret = sc27xx_typec_random_tdrp(sc);
+				if (ret)
+					dev_warn(sc->dev, "failed to random tdrp\n");
+			} else {
+				dev_warn(sc->dev, "event cannot match last_int.\n");
+                          	dev_warn(sc->dev, "last_int = %x event = %x \n", last_int, event);
+				goto clear_ints;
+			}
+		}
+	}else{
+		if (event & SC27XX_ATTACH_INT) {
+			ret = sc27xx_typec_connect(sc, sc->state);
+			if (ret)
+				dev_warn(sc->dev, "failed to register partner\n");
+		} else if (event & SC27XX_DETACH_INT) {
+			sc27xx_typec_disconnect(sc, sc->state);
+			ret = sc27xx_typec_random_tdrp(sc);
+			if (ret)
+				dev_warn(sc->dev, "failed to random tdrp\n");
+		}
 	}
 
 clear_ints:
@@ -483,7 +559,8 @@ static int sc27xx_typec_enable(struct sc27xx_typec *sc)
 	 * and effect tccde reginize.Reason is hardware signal and clk not
 	 * accurate.
 	 */
-	if (sc->var_data->pmic_name == SC2730 || sc->var_data->pmic_name == UMP9620) {
+	if (sc->var_data->pmic_name == SC2730 || sc->var_data->pmic_name == UMP9620 ||
+	    sc->var_data->pmic_name == UMP518) {
 		ret = regmap_write(sc->regmap, sc->base + SC27XX_TCCDE_CNT,
 				SC27XX_TCC_DEBOUNCE_CNT);
 		if (ret)
@@ -675,6 +752,17 @@ static int sc27xx_typec_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if ( sc->var_data->pmic_name == UMP518 ){
+		/* Configure CC line enable pull-down circuit */
+		dev_info(sc->dev, "cc pull-down is enabled.\n");
+		ret = regmap_update_bits(sc->regmap, SC27XX_GLOBAL_RESERVED_REG_CORE,
+					 UMP518_PULLDOWN_EN, UMP518_PULLDOWN_EN);
+
+		if ( ret < 0 ) {
+			dev_err(sc->dev, "failed to config pulldown_en.\n");
+		}
+	}
+
 	ret = sysfs_create_groups(&sc->dev->kobj, sc27xx_typec_groups);
 	if (ret < 0)
 		dev_err(sc->dev, "failed to create cc_polarity %d\n", ret);
@@ -721,6 +809,7 @@ static const struct of_device_id typec_sprd_match[] = {
 	{.compatible = "sprd,sc2730-typec", .data = &sc2730_data},
 	{.compatible = "sprd,sc2721-typec", .data = &sc2721_data},
 	{.compatible = "sprd,ump96xx-typec", .data = &ump9620_data},
+	{.compatible = "sprd,ump518-typec", .data = &ump518_data},
 	{},
 };
 MODULE_DEVICE_TABLE(of, typec_sprd_match);

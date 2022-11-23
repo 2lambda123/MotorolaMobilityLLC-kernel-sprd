@@ -133,6 +133,7 @@
 };
 
 &pmic_typec {
+	compatible = "sprd,ump518-typec";
 	interrupts = <9>;
 	nvmem-cells = <&typec_cc1_cal_518>, <&typec_cc2_cal_518>;
 	nvmem-cell-names = "typec_cc1_cal", "typec_cc2_cal";
