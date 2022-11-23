@@ -133,7 +133,6 @@ __acquires(ep->musb->lock)
 {
 	struct musb_request	*req;
 	struct musb		*musb;
-	int			busy = ep->busy;
 
 	req = to_musb_request(request);
 
@@ -142,7 +141,6 @@ __acquires(ep->musb->lock)
 		req->request.status = status;
 	musb = req->musb;
 
-	ep->busy = 1;
 	spin_unlock(&musb->lock);
 
 	if (!dma_mapping_error(&musb->g.dev, request->dma))
@@ -151,7 +149,6 @@ __acquires(ep->musb->lock)
 	trace_musb_req_gb(req);
 	usb_gadget_giveback_request(&req->ep->end_point, &req->request);
 	spin_lock(&musb->lock);
-	ep->busy = busy;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -1413,37 +1410,10 @@ static int musb_gadget_dequeue(struct usb_ep *ep, struct usb_request *request)
 				request, ep->name);
 			status = -EINVAL;
 		}
-		goto done;
-	}
-
-	/* if the hardware doesn't have the request, easy ... */
-	if (musb_ep->req_list.next != &req->list || musb_ep->busy)
-		musb_g_giveback(musb_ep, request, -ECONNRESET);
-
-	/* ... else abort the dma transfer ... */
-	else if (is_dma_capable() && musb_ep->dma) {
-		struct dma_controller	*c = musb->dma_controller;
-
-		musb_ep_select(musb->mregs, musb_ep->current_epnum);
-		if (c->channel_abort)
-			status = c->channel_abort(musb_ep->dma);
-		else
-			status = -EBUSY;
-
-		list_for_each_entry(r, &musb_ep->req_list, list) {
-			if (r == req) {
-				/* if the request is still in req_list
-				 * after channel_abort, give it back.
-				 */
-				musb_g_giveback(musb_ep, request, -ECONNRESET);
-				break;
-			}
-		}
 	} else {
-		/* NOTE: by sticking to easily tested hardware/driver states,
-		 * we leave counting of in-flight packets imprecise.
-		 */
 		musb_g_giveback(musb_ep, request, -ECONNRESET);
+		dev_info(musb->controller, "request %p queued to %s giveback\n",
+				request, ep->name);
 	}
 
 done:
