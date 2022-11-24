@@ -274,6 +274,7 @@ struct wcn_device {
 	struct	completion download_done;
 	struct wcn_debug_bus dbus;
 	bool db_to_ddr_disable;
+	bool pm_qos_enable;
 };
 
 struct wcn_device_manage {

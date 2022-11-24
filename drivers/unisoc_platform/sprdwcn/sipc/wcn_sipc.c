@@ -19,6 +19,7 @@
 #include "wcn_integrate.h"
 #include "wcn_sipc.h"
 #include "../platform/wcn_procfs.h"
+#include "wcn_pm_qos.h"
 
 #define SIPC_WCN_DST 3
 
@@ -1198,6 +1199,11 @@ int wcn_sipc_preinit(void)
 	return 0;
 }
 
+static int wcn_sipc_pm_qos(unsigned int mode, bool set)
+{
+	return wcn_pm_qos_config_common(mode, set);
+}
+
 static struct sprdwcn_bus_ops sipc_bus_ops = {
 	.preinit = wcn_sipc_preinit,
 	.chn_init = wcn_sipc_chn_init,
@@ -1209,6 +1215,7 @@ static struct sprdwcn_bus_ops sipc_bus_ops = {
 	.get_carddump_status = wcn_sipc_get_status,
 	.set_carddump_status = wcn_sipc_set_status,
 	.get_rx_total_cnt = wcn_sipc_get_rxcnt,
+	.pm_qos = wcn_sipc_pm_qos,
 };
 
 void module_bus_sipc_init(void)

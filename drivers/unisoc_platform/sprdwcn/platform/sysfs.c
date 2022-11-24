@@ -736,6 +736,22 @@ static ssize_t debugbus_show_trigger_store(struct device *dev, struct device_att
 	return count;
 }
 static DEVICE_ATTR_WO(debugbus_show_trigger);
+
+static ssize_t pm_qos_enable_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	WCN_INFO("%s %s enter\n", __func__, buf);
+
+	if (!strncmp(buf, "enable", strlen("enable")))
+		wcn_pm_qos_enable();
+	else if (!strncmp(buf, "disable", strlen("disable")))
+		wcn_pm_qos_disable();
+	else
+		WCN_INFO("Invalid, valid strings:'enable' or 'disable'\n");
+
+	return count;
+}
+static DEVICE_ATTR_WO(pm_qos_enable);
 /*
  * ud710_3h10:/sys/devices/platform/sprd-marlin3 # ls
  * sleep_state driver driver_override fwlog hw_pg_ver modalias of_node power
@@ -913,6 +929,7 @@ static struct attribute *wcn_attrs[] = {
 	&dev_attr_shutting_down.attr,
 	&dev_attr_debugbus.attr,
 	&dev_attr_debugbus_show_trigger.attr,
+	&dev_attr_pm_qos_enable.attr,
 	NULL,
 };
 

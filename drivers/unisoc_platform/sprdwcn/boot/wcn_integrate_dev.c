@@ -48,6 +48,7 @@
 #include "wcn_txrx.h"
 #include "wcn_gnss_dump.h"
 #include "wcn_debug_bus.h"
+#include "wcn_pm_qos.h"
 
 #define SUFFIX "androidboot.slot_suffix="
 
@@ -930,6 +931,9 @@ static int wcn_parse_dt(struct platform_device *pdev,
 			(u64)wcn_dev->dbus.phy_reg, wcn_dev->dbus.dbus_max_offset,
 			wcn_dev->dbus.dbus_reg_base);
 	}
+	wcn_dev->pm_qos_enable = of_property_read_bool(np, "sprd,wcn-pm-qos-enable");
+	WCN_INFO("%s pm_qos_enable=%d\n", wcn_dev->name, wcn_dev->pm_qos_enable);
+
 	ret = of_property_read_string(np, "sprd,file-name",
 				      (const char **)&wcn_dev->file_path);
 	if (!ret)
@@ -1322,6 +1326,8 @@ int wcn_probe(struct platform_device *pdev)
 		if (wcn_dev->need_sync_efuse)
 			wcn_marlin_write_efuse();
 		loopcheck_init();
+		if (wcn_dev->pm_qos_enable)
+			wcn_pm_qos_init();
 		if (wcn_platform_chip_type() == WCN_PLATFORM_TYPE_QOGIRL6)
 			wcn_dfs_status_clear();
 	} else if (strcmp(wcn_dev->name, WCN_GNSS_DEV_NAME) == 0) {
@@ -1372,6 +1378,8 @@ int wcn_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&wcn_dev->probe_power_wq);
 	cancel_work_sync(&wcn_dev->firmware_init_wq);
 	if (wcn_dev_is_marlin(wcn_dev)) {
+		if (wcn_dev->pm_qos_enable)
+			wcn_pm_qos_exit();
 		loopcheck_deinit();
 		mdbg_atcmd_owner_deinit();
 		wcn_gnss_dump_exit();

@@ -167,6 +167,7 @@ void __wcn_assert_interface(enum wcn_source_type type, char *str)
 	}
 	sprdwcn_bus_debug_point_show();
 	/*wcn reset or dump process*/
+	wcn_pm_qos_reset();
 	stop_loopcheck();
 	wcnlog_clear_log();
 

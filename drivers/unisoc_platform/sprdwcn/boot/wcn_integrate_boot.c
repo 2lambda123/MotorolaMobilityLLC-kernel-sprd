@@ -3937,6 +3937,7 @@ int stop_integrate_wcn_module(u32 subsys)
 			mutex_unlock(&wcn_dev->power_lock);
 			return -1;
 		}
+		wcn_pm_qos_reset();
 	} else {
 		ret = gnss_sys_shutdown(wcn_dev);
 		if (-EBUSY == ret) {
