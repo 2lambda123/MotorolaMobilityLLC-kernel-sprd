@@ -85,6 +85,9 @@
 #define ANLG_WCN_WRITE_ADDR 0XFF4
 #define ANLG_WCN_READ_ADDR 0XFFC
 
+void gnss_set_clk_gate_en(u32 flag);
+u32 gnss_get_clk_gate_en(void);
+
 #else
 #define GNSS_DRAM_ADDR      0x40a80000
 #define GNSS_DRAM_SIZE      0x30000

@@ -164,6 +164,19 @@ extern struct wcn_device_manage s_wcn_device;
 #endif
 
 #ifdef CONFIG_WCN_INTEG
+static u32 cgm_gnss_clk_gate_en = 1;
+#define CGM_GNSS_MTX_GATE_EN 0x2
+void gnss_set_clk_gate_en(u32 flag)
+{
+	cgm_gnss_clk_gate_en = flag;
+}
+
+u32 gnss_get_clk_gate_en(void)
+{
+	GNSSDUMP_INFO("cgm_gnss_clk_gate_en=%x\n", cgm_gnss_clk_gate_en);
+	return cgm_gnss_clk_gate_en;
+}
+
 static void gnss_write_data_to_phy_addr(phys_addr_t phy_addr,
 					      void *src_data, u32 size)
 {
@@ -580,10 +593,30 @@ static int gnss_dump_share_memory(u32 len)
 #endif
 	return 0;
 }
+
+static int gnss_dump_dummy(int len)
+{
+	void  *apreg_buffer = NULL;
+	int count;
+
+	apreg_buffer = vmalloc(len);
+	if (!apreg_buffer)
+		return -2;
+	memset(apreg_buffer, 0xAA, len);
+	count = gnss_dump_data(apreg_buffer, len);
+	vfree(apreg_buffer);
+	if (count != len) {
+		GNSSDUMP_ERR("%s failed size is %d\n", __func__, count);
+		return -1;
+	}
+	GNSSDUMP_INFO("%s %d ok!\n", __func__, count);
+	return 0;
+}
 static int gnss_integrated_dump_mem(void)
 {
 	int ret = 0;
-
+	int dummy_len = 0;
+	uint gnss_sleep_flag = 0;
 	GNSSDUMP_INFO("gnss_dump_mem entry\n");
 
 	if (wcn_platform_chip_type() == WCN_PLATFORM_TYPE_QOGIRL6) {
@@ -592,9 +625,20 @@ static int gnss_integrated_dump_mem(void)
 		if (gnss_pll_switch_flag == 0)
 			return ret;
 		debug_bus_show("GNSS DUMP READ DEBUGBUS");
-		gnss_hold_cpu();
+		gnss_sleep_flag = (!(gnss_get_clk_gate_en()&CGM_GNSS_MTX_GATE_EN))
+			&& (gnss_sys_is_deepsleep_status(s_wcn_device.gnss_device));
+		if (!gnss_sleep_flag)
+			gnss_hold_cpu();
 	}
 	ret = gnss_dump_share_memory(GNSS_SHARE_MEMORY_SIZE);
+	if (wcn_platform_chip_type() == WCN_PLATFORM_TYPE_QOGIRL6) {
+		if (gnss_sleep_flag) {
+			dummy_len = 32768+131072+84+740+1068+100;
+			ret = gnss_dump_dummy(dummy_len);
+			GNSSDUMP_INFO("%s : gnss only dump DDR/SIPC data!!!\n", __func__);
+			return ret;
+		}
+	}
 	gnss_dump_iram();
 	gnss_dump_register();
 	GNSSDUMP_INFO("%s finish\n", __func__);

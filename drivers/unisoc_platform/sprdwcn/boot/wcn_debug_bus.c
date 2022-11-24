@@ -17,6 +17,7 @@
 #include "wcn_misc.h"
 #include "wcn_procfs.h"
 #include "wcn_debug_bus.h"
+#include "gnss_dump.h"
 
 void wcn_debug_bus_show(struct wcn_device *wcn_dev, char *show)
 {
@@ -287,6 +288,10 @@ void wcn_debug_bus_show(struct wcn_device *wcn_dev, char *show)
 				sigsel, (2 << 8) | sigsel, sysbase + SYSSEL_CFG5_OFFSET);
 		debugbus_data[i++] = readl(sysbase + PAD_DBUS_DATA_OUT_OFFSET);
 		pr_info("DEBUGBUS:WCN(1-29) debugbus data: 0x%x\n", debugbus_data[i - 1]);
+#ifdef CONFIG_WCN_INTEG
+		if (sigsel == 1)
+			gnss_set_clk_gate_en(debugbus_data[i - 1]);
+#endif
 	}
 	pr_info("++++++++++++++++++++WCN++++++++++++++++++++");
 
