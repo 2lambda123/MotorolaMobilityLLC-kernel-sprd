@@ -2787,6 +2787,9 @@
   virtqueue_is_broken
 
 # required by wcn_bsp.ko
+  freq_qos_add_request
+  freq_qos_remove_request
+  freq_qos_update_request
   gpiod_set_value
   memdup_user
   pci_disable_device
