@@ -110,8 +110,13 @@
 
 /* UMP518_FGU_CONFIG */
 #define UMP518_FGU_LOW_POWER_MODE	BIT(1)
+#define UMP518_FGU_DISABLE_EN		BIT(11)
 #define UMP518_FGU_RELAX_CNT_MODE	0
 #define UMP518_FGU_DEEP_SLEEP_MODE	1
+
+/* UMP518_FGU_SEL_CLK_CONFIG */
+#define UMP518_FGU_CLK_SEL_MASK			GENMASK(9, 5)
+#define UMP518_FGU_RESET_MASK			BIT(1)
 
 /* UMP518_FGU_INT */
 #define UMP518_FGU_LOW_OVERLOAD_INT		BIT(0)
@@ -130,6 +135,7 @@
 #define UMP518_FGU_BATTERY_FLAG_STS_SHIFT	8
 #define UMP518_FGU_INVALID_POCV_STS_MASK	BIT(7)
 #define UMP518_FGU_INVALID_POCV_STS_SHIFT	7
+#define UMP518_FGU_WRITE_ACTIVE_STS_MASK	BIT(0)
 
 /* UMP518_FGU_RELAX_CNT */
 #define UMP518_FGU_RELAX_CURT_THRE_MASK_L	GENMASK(15, 0)
@@ -148,26 +154,27 @@
 #define UMP518_FGU_HIGH_OVERLOAD_MASK		GENMASK(12, 0)
 #define UMP518_FGU_LOW_OVERLOAD_MASK		GENMASK(12, 0)
 
-#define UMP518_FGU_CURRENT_BUFF_CNT	8
-#define UMP518_FGU_DISCHG_CNT		4
-#define UMP518_FGU_VOLTAGE_BUFF_CNT	8
+#define UMP518_FGU_CURRENT_BUFF_CNT		8
+#define UMP518_FGU_DISCHG_CNT			4
+#define UMP518_FGU_VOLTAGE_BUFF_CNT		8
 
-#define UMP518_FGU_MODE_AREA_MASK	GENMASK(15, 12)
-#define UMP518_FGU_CAP_AREA_MASK	GENMASK(11, 0)
-#define UMP518_FGU_MODE_AREA_SHIFT	12
-#define UMP518_FGU_CAP_INTEGER_MASK	GENMASK(7, 0)
-#define UMP518_FGU_CAP_DECIMAL_MASK	GENMASK(3, 0)
-#define UMP518_FGU_CAP_DECIMAL_SHIFT	8
+#define UMP518_FGU_MODE_AREA_MASK		GENMASK(15, 12)
+#define UMP518_FGU_CAP_AREA_MASK		GENMASK(11, 0)
+#define UMP518_FGU_MODE_AREA_SHIFT		12
+#define UMP518_FGU_CAP_INTEGER_MASK		GENMASK(7, 0)
+#define UMP518_FGU_CAP_DECIMAL_MASK		GENMASK(3, 0)
+#define UMP518_FGU_CAP_DECIMAL_SHIFT		8
 
-#define UMP518_FGU_FIRST_POWERON	GENMASK(3, 0)
-#define UMP518_FGU_DEFAULT_CAP		GENMASK(11, 0)
-#define UMP518_FGU_NORMAL_POWERON	0x5
-#define UMP518_FGU_RTC2_RESET_VALUE	0xA05
+#define UMP518_FGU_FIRST_POWERON		GENMASK(3, 0)
+#define UMP518_FGU_DEFAULT_CAP			GENMASK(11, 0)
+#define UMP518_FGU_NORMAL_POWERON		0x5
+#define UMP518_FGU_RTC2_RESET_VALUE		0xA05
 
-#define UMP518_FGU_INT_MASK		GENMASK(3, 0)
-#define UMP518_FGU_MAGIC_NUMBER		0x5a5aa5a5
-#define UMP518_FGU_FCC_PERCENT		1000
-#define UMP518_FGU_SAMPLE_HZ		2
+#define UMP518_FGU_INT_MASK			GENMASK(3, 0)
+#define UMP518_FGU_MAGIC_NUMBER			0x5a5aa5a5
+#define UMP518_FGU_FCC_PERCENT			1000
+#define UMP518_FGU_CLK_512K_SAMPLE_HZ		4
+#define UMP518_FGU_WAIT_WRITE_ACTIVE_RETRY_CNT	3
 
 /* relax cnt define */
 #define UMP518_FGU_RELAX_CUR_THRESHOLD_MA	30
@@ -177,6 +184,7 @@
 static s64 init_clbcnt;
 static s64 start_work_clbcnt;
 static s64 latest_clbcnt;
+static int fgu_clk_sample_hz;
 
 static const struct sprd_fgu_variant_data ump518_fgu_info = {
 	.module_en = UMP518_MODULE_EN0,
@@ -226,7 +234,7 @@ static s64 ump518_fgu_cap2clbcnt(struct sprd_fgu_info *info, int total_mah, int 
 	 * Convert current capacity (mAh) to coulomb counter according to the
 	 * formula: 1 mAh =3.6 coulomb.
 	 */
-	return DIV_ROUND_CLOSEST(cur_mah * 36 * info->cur_1000ma_adc * UMP518_FGU_SAMPLE_HZ * 15, 10);
+	return DIV_ROUND_CLOSEST(cur_mah * 36 * info->cur_1000ma_adc * fgu_clk_sample_hz * 15, 10);
 }
 
 static int ump518_fgu_clbcnt2mah(struct sprd_fgu_info *info, s64 clbcnt)
@@ -236,7 +244,7 @@ static int ump518_fgu_clbcnt2mah(struct sprd_fgu_info *info, s64 clbcnt)
 	 * as 10 to improve the precision.
 	 * formula: 1 mAh =3.6 coulomb
 	 */
-	s64 mah = DIV_ROUND_CLOSEST(clbcnt * 10, 36 * UMP518_FGU_SAMPLE_HZ * 15);
+	s64 mah = DIV_ROUND_CLOSEST(clbcnt * 10, 36 * fgu_clk_sample_hz * 15);
 	if (mah > 0)
 		mah = mah + info->cur_1000ma_adc / 2;
 	else
@@ -1260,6 +1268,107 @@ static inline int ump518_fgu_get_reg_val(struct sprd_fgu_info *info, int offset,
 	return regmap_read(info->regmap, info->base + offset, reg_val);
 }
 
+static int ump518_fgu_switch_512k_clk(struct sprd_fgu_info *info)
+{
+	int ret = 0, cnt = UMP518_FGU_WAIT_WRITE_ACTIVE_RETRY_CNT, reg_val;
+
+	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_CONFIG,
+				 UMP518_FGU_DISABLE_EN, UMP518_FGU_DISABLE_EN);
+	if (ret) {
+		dev_err(info->dev, "%s failed to disable fgu module!!!\n", __func__);
+		return ret;
+	}
+
+	ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &reg_val);
+	if (ret) {
+		dev_err(info->dev, "%s %d failed to get fgu_sts!!!\n", __func__, __LINE__);
+		return ret;
+	}
+
+	while ((reg_val & UMP518_FGU_WRITE_ACTIVE_STS_MASK) && cnt--) {
+		udelay(50);
+		ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &reg_val);
+		if (ret) {
+			dev_err(info->dev, "%s %d failed to get fgu_sts!!!\n", __func__, __LINE__);
+			return ret;
+		}
+	}
+
+	if (cnt <= 0) {
+		dev_err(info->dev, "%s %d failed to switch 512k clk!!!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	ret = regmap_update_bits(info->regmap, info->pdata->clk_en, UMP518_FGU_RTC_EN, 0);
+	if (ret) {
+		dev_err(info->dev, "%s failed to disable fgu RTC clock!!!\n", __func__);
+		return ret;
+	}
+
+	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_ADC_CONFIG1,
+				 UMP518_FGU_CLK_SEL_MASK, 0);
+	if (ret) {
+		dev_err(info->dev, "failed to select 512k fgu clk!!!\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(info->regmap, info->pdata->clk_en,
+				 UMP518_FGU_RTC_EN, UMP518_FGU_RTC_EN);
+	if (ret) {
+		dev_err(info->dev, "%s failed to enable fgu RTC clock!!!\n", __func__);
+		return ret;
+	}
+
+	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_START,
+				 UMP518_FGU_RESET_MASK, UMP518_FGU_RESET_MASK);
+	if (ret) {
+		dev_err(info->dev, "failed to reset fgu module!!!\n");
+		return ret;
+	}
+
+	udelay(100);
+
+	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_CONFIG,
+				 UMP518_FGU_DISABLE_EN, 0);
+	if (ret)
+		dev_err(info->dev, "%s failed to enable fgu module!!!\n", __func__);
+
+	return ret;
+}
+
+static int ump518_fgu_get_fgu_sample_clock(struct sprd_fgu_info *info)
+{
+	int ret = 0, fgu_clk_sts = 0;;
+
+	ret = ump518_fgu_get_fgu_sts(info, SPRD_FGU_CLK_SEL_FGU_STS_CMD, &fgu_clk_sts);
+	if (ret) {
+		dev_err(info->dev, "%s %d failed get fgu clk sel sts!!!", __func__, __LINE__);
+		return ret;
+	}
+
+	fgu_clk_sample_hz = UMP518_FGU_CLK_512K_SAMPLE_HZ;
+
+	if (!fgu_clk_sts) {
+		ret = ump518_fgu_switch_512k_clk(info);
+		if (ret) {
+			dev_err(info->dev, "%s failed switch fgu clk to 512kHZ!!!", __func__);
+			return ret;
+		}
+
+		ret = ump518_fgu_get_fgu_sts(info, SPRD_FGU_CLK_SEL_FGU_STS_CMD, &fgu_clk_sts);
+		if (ret || !fgu_clk_sts) {
+			dev_err(info->dev, "%s %d failed get fgu clk sel sts or "
+				"failed set fgu clk to 512kHZ, ret = %d, fgu_clk_sts = %d!!!",
+				__func__, __LINE__, ret, fgu_clk_sts);
+			return -EINVAL;
+		}
+	}
+
+	dev_info(info->dev, "%s the current clock frequency is 512KHZ", __func__);
+
+	return ret;
+}
+
 static inline int ump518_fgu_set_reg_val(struct sprd_fgu_info *info, int offset, int reg_val)
 {
 	return regmap_write(info->regmap, info->base + offset, reg_val);
@@ -1282,9 +1391,9 @@ static void ump518_fgu_dump_fgu_info(struct sprd_fgu_info *info,
 		break;
 	case DUMP_FGU_INFO_LEVEL_1:
 		dev_info(info->dev, "ump518_fgu_info : init_clbcnt = %lld, start_work_clbcnt = %lld, "
-			 "cur_clbcnt = %lld, cur_1000ma_adc = %d, vol_1000mv_adc = %d\n",
+			 "cur_clbcnt = %lld, cur_1000ma_adc = %d, vol_1000mv_adc = %d, fgu_clk_sample_hz = %d\n",
 			 init_clbcnt, start_work_clbcnt, latest_clbcnt,
-			 info->cur_1000ma_adc, info->vol_1000mv_adc);
+			 info->cur_1000ma_adc, info->vol_1000mv_adc, fgu_clk_sample_hz);
 		break;
 	default:
 		dev_err(info->dev, "failed to identify dump_level or dump_level is greater than %d!\n",
@@ -1359,7 +1468,7 @@ struct sprd_fgu_device_ops ump518_fgu_dev_ops = {
 struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 {
 	struct sprd_fgu_info *info = NULL;
-	int ret, i;
+	int ret = 0, i;
 	const char *value;
 	struct device_node *np = dev->of_node;
 
@@ -1374,6 +1483,8 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 		dev_err(dev, "%s: %d Fail to malloc memory for ops\n", __func__, __LINE__);
 		return ERR_PTR(-ENOMEM);
 	}
+
+	info->dev = dev;
 
 	info->regmap = dev_get_regmap(dev->parent, NULL);
 	if (!info->regmap)
@@ -1430,7 +1541,12 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 			info->slp_cap_calib.power_low_counter_threshold = UMP518_FGU_POWER_LOW_THRESHOLD;
 	}
 
-	info->dev = dev;
+	ret = ump518_fgu_get_fgu_sample_clock(info);
+	if (ret) {
+		dev_err(dev, "%s failed get fgu sample clock!!!", __func__);
+		return ERR_PTR(ret);
+	}
+
 	info->ops = &ump518_fgu_dev_ops;
 
 	return info;

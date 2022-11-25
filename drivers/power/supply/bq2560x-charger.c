@@ -642,6 +642,7 @@ static int bq2560x_charger_set_limit_current(struct bq2560x_charger_info *info,
 
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
+		limit_cur = info->actual_limit_cur;
 	}
 
 	if (limit_cur >= BQ2560X_LIMIT_CURRENT_MAX)

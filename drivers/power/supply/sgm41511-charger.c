@@ -231,7 +231,8 @@ static u32 sgm41511_charger_get_limit_current(struct sgm41511_charger_info *info
 	return 0;
 }
 
-static int sgm41511_charger_set_limit_current(struct sgm41511_charger_info *info, u32 cur, bool enable)
+static int sgm41511_charger_set_limit_current(struct sgm41511_charger_info *info,
+					      u32 limit_cur, bool enable)
 {
 	u8 reg_val;
 	int ret = 0;
@@ -246,15 +247,16 @@ static int sgm41511_charger_set_limit_current(struct sgm41511_charger_info *info
 
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
+		limit_cur = info->actual_limit_cur;
 	}
 
-	if (cur >= SGM41511_LIMIT_CURRENT_MAX)
-		cur = SGM41511_LIMIT_CURRENT_MAX;
+	if (limit_cur >= SGM41511_LIMIT_CURRENT_MAX)
+		limit_cur = SGM41511_LIMIT_CURRENT_MAX;
 
-	cur = cur / 1000;
-	if (cur < REG00_IINLIM_BASE)
-		cur = REG00_IINLIM_BASE;
-	reg_val = (cur - REG00_IINLIM_BASE) / REG00_IINLIM_LSB;
+	limit_cur = limit_cur / 1000;
+	if (limit_cur < REG00_IINLIM_BASE)
+		limit_cur = REG00_IINLIM_BASE;
+	reg_val = (limit_cur - REG00_IINLIM_BASE) / REG00_IINLIM_LSB;
 	info->actual_limit_cur = ((reg_val * REG00_IINLIM_LSB) + REG00_IINLIM_BASE) * 1000;
 	ret = sgm41511_update_bits(info, SGM4151X_REG_00, REG00_IINLIM_MASK,
 				   reg_val << REG00_IINLIM_SHIFT);
