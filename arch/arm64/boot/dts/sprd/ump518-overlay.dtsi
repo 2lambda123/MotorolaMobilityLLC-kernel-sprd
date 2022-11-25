@@ -90,18 +90,26 @@
 		};
 
 		aud_pabst_vcal_518: calib@20 {
-			reg = <0x20 0x2>;
+			reg = <0x2a 0x2>;
 		};
 
-		neg_cp_efuse_518: calib@22 {
-			reg = <0x22 0x2>;
+		neg_cp_efuse_518: calib@30 {
+			reg = <0x30 0x2>;
 		};
 
 		headset_adc_fir_518: calib@17 {
 			reg = <0x16 0x2>;
 		};
 
-		headset_adc_sec_518: calib@16 {
+		headset_adc_fir_1_518: calib@3a {
+			reg = <0x3a 0x2>;
+		};
+
+		headset_adc_fir_2_518: calib@3c {
+			reg = <0x3c 0x2>;
+		};
+
+		headset_adc_sec_518: calib@2c {
 			reg = <0x2c 0x2>;
 		};
 
@@ -158,6 +166,7 @@
 };
 
 &sprd_audio_codec_ana {
+	compatible = "unisoc,ump518-audio-codec";
 	nvmem-cells = <&aud_pabst_vcal_518>,
 		<&neg_cp_efuse_518>,
 		<&fgu_calib2>,
@@ -185,7 +194,7 @@
 
 /*sprd-sound-fe-be.dtsi*/
 &sprd_headset {
-	nvmem-cells = <&headset_adc_fir_518>, <&headset_adc_sec_518>;
-	nvmem-cell-names = "hp_adc_fir_calib", "hp_adc_sec_calib";
+	nvmem-cells = <&headset_adc_fir_1_518>, <&headset_adc_fir_2_518>,<&headset_adc_sec_518>;
+	nvmem-cell-names = "hp_adc_fir_calib_1","hp_adc_fir_calib_2", "hp_adc_sec_calib";
 };
 
