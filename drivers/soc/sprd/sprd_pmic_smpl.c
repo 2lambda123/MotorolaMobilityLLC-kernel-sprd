@@ -299,6 +299,7 @@ static const struct of_device_id sc27xx_smpl_of_match[] = {
 	{.compatible = "sprd,sc2721-smpl", .data = &sc2721_info},
 	{.compatible = "sprd,sc2730-smpl", .data = &sc2730_info},
 	{.compatible = "sprd,ump9620-smpl", .data = &ump9620_info},
+	{.compatible = "sprd,ump518-smpl", .data = &sc2730_info},
 	{}
 };
 
