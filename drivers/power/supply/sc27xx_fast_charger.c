@@ -36,14 +36,29 @@
 #define SC2721_CLK_EN0				0xC10
 #define SC2721_IB_CTRL				0xEA4
 #define SC2721_IB_TRIM_OFFSET			0x1e
+#define SC2721_IB_TRIM_EFUSE_MASK		GENMASK(15, 9)
+#define SC2721_IB_TRIM_EFUSE_SHIFT		9
+
 #define SC2730_MODULE_EN0			0x1808
 #define SC2730_CLK_EN0				0x1810
 #define SC2730_IB_CTRL				0x1b84
 #define SC2730_IB_TRIM_OFFSET			0x1e
+#define SC2730_IB_TRIM_EFUSE_MASK		GENMASK(15, 9)
+#define SC2730_IB_TRIM_EFUSE_SHIFT		9
+
 #define UMP9620_MODULE_EN0			0x2008
 #define UMP9620_CLK_EN0				0x2010
 #define UMP9620_IB_CTRL				0x2384
 #define UMP9620_IB_TRIM_OFFSET			0x0
+#define UMP9620_IB_TRIM_EFUSE_MASK		GENMASK(15, 9)
+#define UMP9620_IB_TRIM_EFUSE_SHIFT		9
+
+#define UMP518_MODULE_EN0			0x1808
+#define UMP518_CLK_EN0				0x1810
+#define UMP518_IB_CTRL				0x1b84
+#define UMP518_IB_TRIM_OFFSET			0x0
+#define UMP518_IB_TRIM_EFUSE_MASK		GENMASK(6, 0)
+#define UMP518_IB_TRIM_EFUSE_SHIFT		0
 
 #define ANA_REG_IB_TRIM_MASK			GENMASK(6, 0)
 #define ANA_REG_IB_TRIM_SHIFT			2
@@ -90,6 +105,8 @@ struct sc27xx_fast_chg_data {
 	u32 clk_en;
 	u32 ib_ctrl;
 	u32 ib_trim_offset;
+	u32 ib_trim_efuse_mask;
+	u32 ib_trim_efuse_shift;
 };
 
 static const struct sc27xx_fast_chg_data sc2721_info = {
@@ -97,6 +114,8 @@ static const struct sc27xx_fast_chg_data sc2721_info = {
 	.clk_en = SC2721_CLK_EN0,
 	.ib_ctrl = SC2721_IB_CTRL,
 	.ib_trim_offset = SC2721_IB_TRIM_OFFSET,
+	.ib_trim_efuse_mask = SC2721_IB_TRIM_EFUSE_MASK,
+	.ib_trim_efuse_shift = SC2721_IB_TRIM_EFUSE_SHIFT,
 };
 
 static const struct sc27xx_fast_chg_data sc2730_info = {
@@ -104,6 +123,8 @@ static const struct sc27xx_fast_chg_data sc2730_info = {
 	.clk_en = SC2730_CLK_EN0,
 	.ib_ctrl = SC2730_IB_CTRL,
 	.ib_trim_offset = SC2730_IB_TRIM_OFFSET,
+	.ib_trim_efuse_mask = SC2730_IB_TRIM_EFUSE_MASK,
+	.ib_trim_efuse_shift = SC2730_IB_TRIM_EFUSE_SHIFT,
 };
 
 static const struct sc27xx_fast_chg_data ump9620_info = {
@@ -111,6 +132,17 @@ static const struct sc27xx_fast_chg_data ump9620_info = {
 	.clk_en = UMP9620_CLK_EN0,
 	.ib_ctrl = UMP9620_IB_CTRL,
 	.ib_trim_offset = UMP9620_IB_TRIM_OFFSET,
+	.ib_trim_efuse_mask = UMP9620_IB_TRIM_EFUSE_MASK,
+	.ib_trim_efuse_shift = UMP9620_IB_TRIM_EFUSE_SHIFT,
+};
+
+static const struct sc27xx_fast_chg_data ump518_info = {
+	.module_en = UMP518_MODULE_EN0,
+	.clk_en = UMP518_CLK_EN0,
+	.ib_ctrl = UMP518_IB_CTRL,
+	.ib_trim_offset = UMP518_IB_TRIM_OFFSET,
+	.ib_trim_efuse_mask = UMP518_IB_TRIM_EFUSE_MASK,
+	.ib_trim_efuse_shift = UMP518_IB_TRIM_EFUSE_SHIFT,
 };
 
 struct sc27xx_fchg_info {
@@ -155,13 +187,14 @@ static int sc27xx_fchg_internal_cur_calibration(struct sc27xx_fchg_info *info)
 	 * of the fast charge internal module is small, we improve it
 	 * by set the register ANA_REG_IB_CTRL. Now we add 30 level compensation.
 	 */
-	calib_current = (calib_data & FCHG_CALI_MASK) >> FCHG_CALI_SHIFT;
+	calib_current = (calib_data & pdata->ib_trim_efuse_mask) >> pdata->ib_trim_efuse_shift;
 	calib_current += pdata->ib_trim_offset;
 
 	if (calib_current < 0 || calib_current > ANA_REG_IB_TRIM_MAX) {
 		dev_info(info->dev, "The compensated calib_current exceeds the range of IB_TRIM,"
 			 " calib_current=%d\n", calib_current);
-		calib_current = (calib_data & FCHG_CALI_MASK) >> FCHG_CALI_SHIFT;
+		calib_current = (calib_data & pdata->ib_trim_efuse_mask) >>
+				pdata->ib_trim_efuse_shift;
 	}
 
 	ret = regmap_update_bits(info->regmap,
@@ -657,6 +690,7 @@ static const struct of_device_id sc27xx_fchg_of_match[] = {
 	{ .compatible = "sprd,sc2730-fast-charger", .data = &sc2730_info },
 	{ .compatible = "sprd,ump9620-fast-chg", .data = &ump9620_info },
 	{ .compatible = "sprd,sc2721-fast-charger", .data = &sc2721_info },
+	{ .compatible = "sprd,ump518-fast-charger", .data = &ump518_info },
 	{ }
 };
 
