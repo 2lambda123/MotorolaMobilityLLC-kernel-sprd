@@ -232,6 +232,8 @@
 			};
 			sprd_marlin3: sprd-marlin3 {
 				compatible = "unisoc,marlin3_pcie";
+				#address-cells = <2>;
+				#size-cells = <2>;
 				reset-gpios = <&ap_gpio 172 GPIO_ACTIVE_LOW>;
 				enable-gpios = <&ap_gpio 171 GPIO_ACTIVE_LOW>;
 				m2-to-ap-irq-gpios = <&ap_gpio 173 GPIO_ACTIVE_LOW>;
@@ -256,30 +258,30 @@
 					compatible = "sprd,gnss";
 					sprd,name = "gnss_common_ctl";
 				};
-			};
 
-			sprd-mtty {
-				compatible = "sprd,mtty";
-				sprd,name = "ttyBT";
-			};
+				sprd-mtty {
+					compatible = "sprd,mtty";
+					sprd,name = "ttyBT";
+				};
 
-			sprd-fm {
-				compatible = "sprd,marlin3-fm";
-				sprd,name = "sprd-fm";
-			};
+				sprd-fm {
+					compatible = "sprd,marlin3-fm";
+					sprd,name = "sprd-fm";
+				};
 
-			sprd-wlan {
-				compatible = "sprd,sc2355-pcie-wifi";
-				reg = <0 0x21040064 0 0x0A>,
-				<0 0x25200000 0 0x3000>;
-				reg-names = "wifi_ipaqos",
-						"pam_wifi_reg_base_remap";
-				syscons = <&ipa_apb_regs
-						REG_IPA_APB_IPA_EB
-						MASK_IPA_APB_PAM_WIFI_EB>;
-				syscon-names = "enable";
-				interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>;
-				interrupt-names = "pam-wifi-irq";
+				sprd-wlan {
+					compatible = "sprd,sc2355-pcie-wifi";
+					reg = <0 0x21040064 0 0x0A>,
+					<0 0x25200000 0 0x3000>;
+					reg-names = "wifi_ipaqos",
+							"pam_wifi_reg_base_remap";
+					syscons = <&ipa_apb_regs
+							REG_IPA_APB_IPA_EB
+							MASK_IPA_APB_PAM_WIFI_EB>;
+					syscon-names = "enable";
+					interrupts = <GIC_SPI 139 IRQ_TYPE_LEVEL_HIGH>;
+					interrupt-names = "pam-wifi-irq";
+				};
 			};
 
 			tboard_thermistor: thermal-sensor {
