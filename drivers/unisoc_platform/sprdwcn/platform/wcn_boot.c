@@ -2151,6 +2151,9 @@ static void pre_btwifi_download_sdio(struct work_struct *work)
 			check_cp_clock_mode();
 			marlin_write_cali_data();
 			mem_pd_save_bin();
+		} else {
+			pr_info("n6p-1 disable vddsim2\n");
+			marlin_avdd18_dcxo_enable(false);
 		}
 #ifdef WCN_RDCDBG
 		/*rdc_debug.c*/
@@ -2641,6 +2644,10 @@ static int marlin_set_power(enum wcn_sub_sys subsys, int val)
 
 		pr_info("wcn chip power on and run finish: [%s]\n",
 				  strno(subsys));
+		if (g_match_config && g_match_config->unisoc_wcn_pcie) {
+				pr_info("n6p-1 sync log status\n");
+				wcn_firmware_init();
+			}
 	/* power off */
 	} else {
 		if (marlin_dev->power_state == 0) {
