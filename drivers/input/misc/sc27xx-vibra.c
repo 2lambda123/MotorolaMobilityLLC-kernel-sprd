@@ -20,6 +20,9 @@
 #define UMP9620_CUR_DRV_CAL_SEL		0
 #define UMP9620_SLP_LDOVIBR_PD_EN	BIT(14)
 #define UMP9620_LDO_VIBR_PD		BIT(13)
+#define UMP518_CUR_DRV_CAL_SEL		0
+#define UMP518_SLP_LDOVIBR_PD_EN	BIT(14)
+#define UMP518_LDO_VIBR_PD		BIT(13)
 
 struct sc27xx_vibra_data {
 	u32 cur_drv_cal_sel;
@@ -59,6 +62,12 @@ struct sc27xx_vibra_data ump9620_data = {
 	.cur_drv_cal_sel = UMP9620_CUR_DRV_CAL_SEL,
 	.slp_pd_en = UMP9620_SLP_LDOVIBR_PD_EN,
 	.ldo_pd = UMP9620_LDO_VIBR_PD,
+};
+
+static const struct sc27xx_vibra_data ump518_data = {
+	.cur_drv_cal_sel = UMP518_CUR_DRV_CAL_SEL,
+	.slp_pd_en = UMP518_SLP_LDOVIBR_PD_EN,
+	.ldo_pd = UMP518_LDO_VIBR_PD,
 };
 
 static void sc27xx_vibra_set(struct vibra_info *info, bool on)
@@ -189,6 +198,7 @@ static const struct of_device_id sc27xx_vibra_of_match[] = {
 	{ .compatible = "sprd,sc2730-vibrator", .data = &sc2730_data },
 	{ .compatible = "sprd,sc2721-vibrator", .data = &sc2721_data },
 	{ .compatible = "sprd,ump9620-vibrator", .data = &ump9620_data },
+	{ .compatible = "sprd,ump518-vibrator", .data = &ump518_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, sc27xx_vibra_of_match);
