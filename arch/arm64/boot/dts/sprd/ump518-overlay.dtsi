@@ -19,6 +19,12 @@
 		reg = <0x1800>, <0x1ba0>, <0x1b98>, <0x1d1c>;
 	};
 
+	refout@1AEC {
+		compatible = "sprd,sc27xx-refout";
+		regsw = <0x1AEC>;
+		refnum = <5>;
+	};
+
 	eic_dbnc@2000 {
 		compatible = "sprd,ump518-eic-dbnc";
 		reg = <0x200>;
