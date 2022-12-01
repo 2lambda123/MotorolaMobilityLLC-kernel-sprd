@@ -178,8 +178,6 @@
 				charge-unknown-current-microamp = <1050000 1050000>;
 				charge-fchg-current-microamp = <3250000 2000000>;
 				charge-flash-current-microamp = <5000000 2700000>;
-				charge-wl-bpp-current-microamp = <1000000 1000000>;
-				charge-wl-epp-current-microamp = <2000000 1000000>;
 
 				cap-calib-energy-density-ocv-table = <3350000 3800000>, <4150000 4350000>;
 				cap-track-energy-density-ocv-table = <3400000 3722000>;
@@ -256,8 +254,8 @@
 				cm-keep-awake;
 
 				phys = <&hsphy>;
-				extcon = <&pmic_typec>;
-
+				extcon = <&pmic_typec>, <&pmic_pd>;
+				pd-extcon-enable;
 			};
 
 			tboard_thermistor: thermal-sensor {
