@@ -641,6 +641,13 @@ static void ufs_sprd_debug_send_uic_cmd(struct ufs_hba *hba,
 	struct ufs_uic_cmd_info uic_tmp = {};
 
 	if (sprd_ufs_debug_is_supported(hba) == TRUE) {
+		if (ucmd->command == UIC_CMD_DME_HIBER_ENTER &&
+		    strcmp(str, "send")) {
+			uic_tmp.cmd = ucmd->command;
+			ufshcd_common_trace(hba, UFS_TRACE_UIC_CMPL, &uic_tmp);
+			return;
+		}
+
 		uic_tmp.argu1 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_1);
 		uic_tmp.argu2 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_2);
 		uic_tmp.argu3 = ufshcd_readl(hba, REG_UIC_COMMAND_ARG_3);
