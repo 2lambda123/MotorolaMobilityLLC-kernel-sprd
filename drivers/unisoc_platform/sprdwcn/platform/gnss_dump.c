@@ -639,6 +639,9 @@ static int gnss_integrated_dump_mem(void)
 			return ret;
 		}
 	}
+	if (wcn_platform_chip_type() == WCN_PLATFORM_TYPE_SHARKL3) {
+		gnss_hold_cpu();
+	}
 	gnss_dump_iram();
 	gnss_dump_register();
 	GNSSDUMP_INFO("%s finish\n", __func__);
