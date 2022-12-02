@@ -341,7 +341,10 @@ static int ufs_sprd_init(struct ufs_hba *hba)
 	hba->quirks |= UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION |
 		       UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS;
 
-	hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_CRYPTO | UFSHCD_CAP_WB_EN;
+	hba->caps |= UFSHCD_CAP_CLK_GATING |
+				UFSHCD_CAP_CRYPTO |
+				UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
+				UFSHCD_CAP_WB_EN;
 #ifdef CONFIG_SCSI_UFS_HPB
 	hba->quirks |= UFSHCD_QUIRK_BROKEN_HPB_READ_CMD;
 #endif
@@ -651,6 +654,10 @@ static int ufs_sprd_hce_enable_notify(struct ufs_hba *hba,
 			dev_err(hba->dev, "%s: ufs hardware init failed!\n", __func__);
 			return err;
 		}
+		hba->capabilities &= ~MASK_AUTO_HIBERN8_SUPPORT;
+		hba->ahit = 0;
+		hba->clk_gating.delay_ms = 10;
+
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO)
 		ufshcd_writel(hba, CONTROLLER_ENABLE, REG_CONTROLLER_ENABLE);
 		svc_handle = sprd_sip_svc_get_handle();
