@@ -863,3 +863,13 @@
 			<17 0x1844>, <19 0x1844>, <21 0x1864>, <30 0x1820>,
 			<32 0x197c>, <33 0x1988>, <35 0x19b8>, <39 0x19ac>;
 };
+
+&lcd_g40396_truly_mipi_fhd {
+	sprd,sr-width = <720>;
+	sprd,sr-height = <1600>;
+};
+
+&lcd_nt36672e_truly_mipi_fhd_nodsc {
+	sprd,sr-width = <720>;
+	sprd,sr-height = <1600>;
+};
