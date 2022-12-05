@@ -9249,8 +9249,8 @@ CONFIG_ION
 	[function] An memory allocator for android.
 CONFIG_ION_CMA_HEAP
 	[arch] arm64
-	[plat] sharkl3
-	[missing plat] sharkl5Pro
+	[plat] sharkl3,sharkl5Pro
+	[missing plat] none
 	[field]
 	[subsys]
 	[must]
@@ -15003,15 +15003,6 @@ CONFIG_REGULATOR_SC2730
 	[must] user
 	[missing plat description] SC2730 is used in roc1,sharkl5 and sharkl5pro so far
 	[function] SUPPORT SC2730 regulator function.
-CONFIG_REGULATOR_UMP518
-	[arch] arm64
-	[plat] sharkl5Pro,qogirl6
-	[missing plat] qogirn6pro
-	[field] make
-	[subsys] regulator
-	[must] user
-	[missing plat description] UMP518 is used in qogirl6.
-	[function] SUPPORT UMP518 regulator function.
 CONFIG_RELAY
 	[arch] arm
 	[plat] pike2
@@ -17333,6 +17324,15 @@ CONFIG_SPRD_TSHM
 	[missing plat description] none
 	[function] Enable tshm driver for GPAPI used.
 CONFIG_SPRD_UID
+	[arch] all
+	[plat] all
+	[missing plat] none
+	[field]
+	[subsys]
+	[must]
+	[missing plat description] none
+	[function]
+CONFIG_SPRD_UMP96XX_BC1P2
 	[arch] all
 	[plat] all
 	[missing plat] none

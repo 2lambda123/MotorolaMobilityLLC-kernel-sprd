@@ -11,6 +11,46 @@
 #include <linux/regmap.h>
 #include <linux/power/sprd-ump96xx-bc1p2.h>
 
+static const struct ump96xx_bc1p2_data sc2720_data = {
+	.charge_status = SC2720_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = SC2720_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = 0,
+	.chg_int_delay_mask = SC27XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
+};
+
+static const struct ump96xx_bc1p2_data sc2721_data = {
+	.charge_status = SC2721_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = SC2721_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = 0,
+	.chg_int_delay_mask = SC27XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
+};
+
+static const struct ump96xx_bc1p2_data sc2730_data = {
+	.charge_status = SC2730_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = SC2730_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = 0,
+	.chg_int_delay_mask = SC27XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
+};
+
+static const struct ump96xx_bc1p2_data sc2731_data = {
+	.charge_status = SC2731_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = SC2731_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = 0,
+	.chg_int_delay_mask = SC27XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
+};
+
+static const struct ump96xx_bc1p2_data ump9620_data = {
+	.charge_status = UMP9620_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = UMP9620_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = UMP9620_CHG_BC1P2_CTRL2,
+	.chg_int_delay_mask = UMP96XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = UMP96XX_CHG_INT_DELAY_OFFSET,
+};
+
 static u32 det_delay_ms;
 static struct ump96xx_bc1p2 *bc1p2;
 
@@ -19,11 +59,11 @@ static int sprd_bc1p2_redetect_control(bool enable)
 	int ret;
 
 	if (enable)
-		ret = regmap_update_bits(bc1p2->regmap, bc1p2->chg_bc1p2_ctrl2,
+		ret = regmap_update_bits(bc1p2->regmap, bc1p2->data->chg_bc1p2_ctrl2,
 					 UMP96XX_CHG_DET_EB_MASK,
 					 UMP96XX_CHG_BC1P2_REDET_ENABLE);
 	else
-		ret = regmap_update_bits(bc1p2->regmap, bc1p2->chg_bc1p2_ctrl2,
+		ret = regmap_update_bits(bc1p2->regmap, bc1p2->data->chg_bc1p2_ctrl2,
 					 UMP96XX_CHG_DET_EB_MASK,
 					 UMP96XX_CHG_BC1P2_REDET_DISABLE);
 
@@ -42,15 +82,15 @@ static enum usb_charger_type sprd_bc1p2_detect(void)
 	det_delay_ms = 0;
 
 	do {
-		ret = regmap_read(bc1p2->regmap, bc1p2->charge_status, &val);
+		ret = regmap_read(bc1p2->regmap, bc1p2->data->charge_status, &val);
 		if (ret) {
-			sprd_bc1p2_redetect_control(false);
-			return UNKNOWN_TYPE;
+			type = UNKNOWN_TYPE;
+			goto bc1p2_detect_end;
 		}
 
 		if (!(val & BIT_CHGR_INT) && cnt < UMP96XX_CHG_DET_RETRY_COUNT) {
-			sprd_bc1p2_redetect_control(false);
-			return UNKNOWN_TYPE;
+			type = UNKNOWN_TYPE;
+			goto bc1p2_detect_end;
 		}
 
 		if (val & BIT_CHG_DET_DONE) {
@@ -75,7 +115,43 @@ static enum usb_charger_type sprd_bc1p2_detect(void)
 		type = UNKNOWN_TYPE;
 	}
 
-	sprd_bc1p2_redetect_control(false);
+bc1p2_detect_end:
+	if (bc1p2->redetect_enable)
+		sprd_bc1p2_redetect_control(false);
+	return type;
+}
+
+static enum usb_charger_type sprd_bc1p2_try_once_detect(void)
+{
+	enum usb_charger_type type = UNKNOWN_TYPE;
+	u32 status = 0, val;
+	int ret;
+
+
+	ret = regmap_read(bc1p2->regmap, bc1p2->data->charge_status, &val);
+	if (ret)
+		return UNKNOWN_TYPE;
+
+	if (!(val & BIT_CHGR_INT))
+		return UNKNOWN_TYPE;
+
+	if (val & BIT_CHG_DET_DONE) {
+		status = val & (BIT_CDP_INT | BIT_DCP_INT | BIT_SDP_INT);
+		switch (status) {
+		case BIT_CDP_INT:
+			type = CDP_TYPE;
+			break;
+		case BIT_DCP_INT:
+			type = DCP_TYPE;
+			break;
+		case BIT_SDP_INT:
+			type = SDP_TYPE;
+			break;
+		default:
+			type = UNKNOWN_TYPE;
+		}
+	}
+
 	return type;
 }
 
@@ -88,9 +164,9 @@ static int sprd_bc1p2_redetect_trigger(u32 time_ms)
 		time_ms = UMP96XX_CHG_DET_DELAY_MS_MAX;
 
 	reg_val = time_ms / UMP96XX_CHG_DET_DELAY_STEP_MS;
-	ret = regmap_update_bits(bc1p2->regmap, bc1p2->chg_det_fgu_ctrl,
-				 UMP96XX_CHG_DET_DELAY_MASK,
-				 reg_val << UMP96XX_CHG_DET_DELAY_OFFSET);
+	ret = regmap_update_bits(bc1p2->regmap, bc1p2->data->chg_det_fgu_ctrl,
+				 UMP96XX_CHG_REDET_DELAY_MASK,
+				 reg_val << UMP96XX_CHG_REDET_DELAY_OFFSET);
 	if (ret)
 		return UMP96XX_ERROR_REGMAP_UPDATE;
 
@@ -99,7 +175,7 @@ static int sprd_bc1p2_redetect_trigger(u32 time_ms)
 		return UMP96XX_ERROR_REGMAP_UPDATE;
 
 	msleep(UMP96XX_CHG_DET_DELAY_MS);
-	ret = regmap_read(bc1p2->regmap, bc1p2->charge_status, &reg_val);
+	ret = regmap_read(bc1p2->regmap, bc1p2->data->charge_status, &reg_val);
 	if (ret)
 		return UMP96XX_ERROR_REGMAP_READ;
 
@@ -158,12 +234,10 @@ static void usb_phy_notify_charger(struct usb_phy *x)
 	switch (x->chg_state) {
 	case USB_CHARGER_PRESENT:
 		usb_phy_get_charger_current(x, &min, &max);
-
 		atomic_notifier_call_chain(&x->notifier, max, x);
 		break;
 	case USB_CHARGER_ABSENT:
 		usb_phy_set_default_current(x);
-
 		atomic_notifier_call_chain(&x->notifier, 0, x);
 		break;
 	default:
@@ -180,20 +254,36 @@ enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 	enum usb_charger_type type = UNKNOWN_TYPE;
 
 	if (!bc1p2) {
-		pr_err("%s:line%d: phy NULL pointer!!!\n", __func__, __LINE__);
+		pr_err("%s:line%d: bc1p2 NULL pointer!!!\n", __func__, __LINE__);
 		return UNKNOWN_TYPE;
 	}
 
 	mutex_lock(&bc1p2->bc1p2_lock);
 	if (x->chg_state != USB_CHARGER_PRESENT) {
+		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
+		type = UNKNOWN_TYPE;
+		goto bc1p2_done;
+	}
+
+	if (x->flags & CHARGER_DETECT_DONE) {
+		if (bc1p2->type == UNKNOWN_TYPE)
+			bc1p2->type = sprd_bc1p2_try_once_detect();
+		dev_info(x->dev, "%s:line%d: type = %d\n", __func__,  __LINE__, bc1p2->type);
 		mutex_unlock(&bc1p2->bc1p2_lock);
-		return UNKNOWN_TYPE;
+		return bc1p2->type;
 	}
 
 	type = sprd_bc1p2_detect();
 	if (x->chg_state != USB_CHARGER_PRESENT) {
-		mutex_unlock(&bc1p2->bc1p2_lock);
-		return UNKNOWN_TYPE;
+		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
+		type = UNKNOWN_TYPE;
+		goto bc1p2_done;
+	}
+
+	if (!bc1p2->redetect_enable) {
+		x->flags |= CHARGER_2NDDETECT_ENABLE | CHARGER_DETECT_DONE;
+		dev_info(x->dev, "%s:line%d: type = %d\n", __func__,  __LINE__, type);
+		goto bc1p2_done;
 	}
 
 	if (type == UNKNOWN_TYPE) {
@@ -201,18 +291,29 @@ enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 		dev_info(x->dev, "first_detect:type:0x%x\n", x->chg_type);
 		usb_phy_notify_charger(x);
 		type = sprd_bc1p2_retry_detect(x);
-		dev_info(x->dev, "retry detected charger type:0x%x\n", type);
 	}
 
+	if (x->chg_state != USB_CHARGER_PRESENT) {
+		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
+		type = UNKNOWN_TYPE;
+		goto bc1p2_done;
+	}
+
+	x->flags |= CHARGER_DETECT_DONE;
+	dev_info(x->dev, "%s:line%d: type = %d\n", __func__,  __LINE__, type);
+bc1p2_done:
+	bc1p2->type = type;
 	mutex_unlock(&bc1p2->bc1p2_lock);
-	return type;
+	return bc1p2->type;
 }
 EXPORT_SYMBOL_GPL(sprd_bc1p2_charger_detect);
 
 void sprd_bc1p2_notify_charger(struct usb_phy *x)
 {
-	if (!x->charger_detect)
+	if (!bc1p2 || !x->charger_detect) {
+		pr_err("%s:line%d: charger_detect NULL pointer!!!\n", __func__, __LINE__);
 		return;
+	}
 
 	switch (x->chg_state) {
 	case USB_CHARGER_PRESENT:
@@ -220,66 +321,71 @@ void sprd_bc1p2_notify_charger(struct usb_phy *x)
 		if (x->chg_state == USB_CHARGER_ABSENT) {
 			x->chg_type = UNKNOWN_TYPE;
 			dev_info(x->dev, "detected bc1p2 type:0x%x, absent\n", x->chg_type);
-		} else if (x->chg_type != UNKNOWN_TYPE) {
+		} else {
+			if (bc1p2->redetect_enable && (x->chg_type == UNKNOWN_TYPE) &&
+			    (x->flags & CHARGER_DETECT_DONE))
+				return;
 			dev_info(x->dev, "detected bc1p2 type:0x%x\n", x->chg_type);
 		}
 
 		break;
 	case USB_CHARGER_ABSENT:
+		dev_info(x->dev, "usb_charger_absent\n");
 		x->chg_type = UNKNOWN_TYPE;
 		break;
 	default:
 		dev_warn(x->dev, "Unknown USB charger state: %d\n", x->chg_state);
 		return;
 	}
+
 	usb_phy_notify_charger(x);
 }
 EXPORT_SYMBOL_GPL(sprd_bc1p2_notify_charger);
 
 static int ump96xx_bc1p2_probe(struct platform_device *pdev)
 {
-	int err;
+	int err = 0;
 	struct device *dev = &pdev->dev;
-	struct device_node *np = dev->of_node;
 
 	bc1p2 = devm_kzalloc(dev, sizeof(struct ump96xx_bc1p2), GFP_KERNEL);
 	if (!bc1p2)
 		return -ENOMEM;
 
-	err = of_property_read_u32_index(np, "reg", 0, &bc1p2->charge_status);
-	if (err) {
-		dev_err(dev, "failed to get charge_status\n");
-		bc1p2->charge_status = 0;
-		return err;
+	bc1p2->data = of_device_get_match_data(dev);
+	if (!bc1p2->data) {
+		dev_err(dev, "no matching driver data found\n");
+		return -EINVAL;
 	}
 
-	err = of_property_read_u32_index(np, "reg", 1, &bc1p2->chg_det_fgu_ctrl);
-	if (err) {
-		dev_err(dev, "no chg_det_fgu_ctrl setting\n");
-		bc1p2->chg_det_fgu_ctrl = 0;
-		return err;
-	}
-
-	err = of_property_read_u32_index(np, "reg", 2, &bc1p2->chg_bc1p2_ctrl2);
-	if (err) {
-		dev_err(dev, "no chg_bc1p2_ctrl2 setting\n");
-		bc1p2->chg_bc1p2_ctrl2 = 0;
-		return err;
-	}
-
-	mutex_init(&bc1p2->bc1p2_lock);
 	bc1p2->regmap = dev_get_regmap(dev->parent, NULL);
 	if (!bc1p2->regmap) {
 		dev_err(dev, "failed to get regmap\n");
-		mutex_destroy(&bc1p2->bc1p2_lock);
 		return -ENODEV;
 	}
 
+	err = regmap_update_bits(bc1p2->regmap, bc1p2->data->chg_det_fgu_ctrl,
+				 bc1p2->data->chg_int_delay_mask,
+				 CHG_INT_DELAY_128MS << bc1p2->data->chg_int_delay_offset);
+	if (err)
+		return err;
+
+	if (bc1p2->data->chg_bc1p2_ctrl2 == 0) {
+		dev_warn(dev, "no support chg_bc1p2 redetect\n");
+		bc1p2->redetect_enable = false;
+	} else {
+		bc1p2->redetect_enable = true;
+	}
+
+	mutex_init(&bc1p2->bc1p2_lock);
 	return err;
 }
 
 static const struct of_device_id ump96xx_bc1p2_of_match[] = {
-	{ .compatible = "sprd,ump9620-bc1p2", },
+	{ .compatible = "sprd,sc2720-bc1p2", .data = &sc2720_data},
+	{ .compatible = "sprd,sc2721-bc1p2", .data = &sc2721_data},
+	{ .compatible = "sprd,sc2730-bc1p2", .data = &sc2730_data},
+	{ .compatible = "sprd,sc2731-bc1p2", .data = &sc2731_data},
+	{ .compatible = "sprd,ump9620-bc1p2", .data = &ump9620_data},
 	{ }
 };
 

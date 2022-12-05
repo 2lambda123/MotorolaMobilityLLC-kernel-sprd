@@ -48,7 +48,6 @@ struct sprd_hsphy {
 	bool			is_host;
 	spinlock_t		vbus_event_lock;
 	bool vbus_events;
-	struct mutex lock;
 };
 
 #define TUNEHSAMP_2_6MA		(3 << 25)
@@ -502,7 +501,7 @@ static void sprd_hsphy_get_bc1p2_type_work(struct kthread_work *work)
 		return;
 	}
 
-	mutex_lock(&phy->lock);
+	dev_dbg(usb_phy->dev, "%s\n", __func__);
 	spin_lock(&phy->vbus_event_lock);
 	while (phy->vbus_events) {
 		vbus_events = phy->vbus_events;
@@ -513,19 +512,20 @@ static void sprd_hsphy_get_bc1p2_type_work(struct kthread_work *work)
 
 		spin_lock(&phy->vbus_event_lock);
 	}
-
 	spin_unlock(&phy->vbus_event_lock);
-	mutex_unlock(&phy->lock);
 }
 
 static void sprd_hsphy_usb_changed(struct sprd_hsphy *phy, enum usb_charger_state state)
 {
 	struct usb_phy *usb_phy = &phy->phy;
 
+	dev_dbg(usb_phy->dev, "%s\n", __func__);
 	spin_lock(&phy->vbus_event_lock);
 	phy->vbus_events = true;
 
 	usb_phy->chg_state = state;
+	if (usb_phy->chg_state == USB_CHARGER_ABSENT)
+		usb_phy->flags &= ~CHARGER_DETECT_DONE;
 
 	spin_unlock(&phy->vbus_event_lock);
 
@@ -683,7 +683,6 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 	otg->usb_phy = &phy->phy;
 
 	platform_set_drvdata(pdev, phy);
-	mutex_init(&phy->lock);
 	spin_lock_init(&phy->vbus_event_lock);
 	kthread_init_worker(&phy->bc1p2_kworker);
 	kthread_init_work(&phy->bc1p2_kwork, sprd_hsphy_get_bc1p2_type_work);

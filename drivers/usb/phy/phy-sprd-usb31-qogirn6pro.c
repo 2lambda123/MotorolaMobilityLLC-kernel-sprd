@@ -61,7 +61,6 @@ struct sprd_ssphy {
 	bool			is_host;
 	spinlock_t		vbus_event_lock;
 	bool vbus_events;
-	struct mutex lock;
 };
 
 #define PHY_INIT_TIMEOUT 500
@@ -702,7 +701,8 @@ static void sprd_ssphy_get_bc1p2_type_work(struct kthread_work *work)
 		return;
 	}
 
-	mutex_lock(&phy->lock);
+	dev_dbg(usb_phy->dev, "%s\n", __func__);
+
 	spin_lock(&phy->vbus_event_lock);
 	while (phy->vbus_events) {
 		vbus_events = phy->vbus_events;
@@ -714,18 +714,19 @@ static void sprd_ssphy_get_bc1p2_type_work(struct kthread_work *work)
 	}
 
 	spin_unlock(&phy->vbus_event_lock);
-	mutex_unlock(&phy->lock);
 }
 
 static void sprd_ssphy_usb_changed(struct sprd_ssphy *phy, enum usb_charger_state state)
 {
 	struct usb_phy *usb_phy = &phy->phy;
 
+	dev_dbg(usb_phy->dev, "%s\n", __func__);
 	spin_lock(&phy->vbus_event_lock);
 	phy->vbus_events = true;
 
 	usb_phy->chg_state = state;
-
+	if (usb_phy->chg_state == USB_CHARGER_ABSENT)
+		usb_phy->flags &= ~CHARGER_DETECT_DONE;
 	spin_unlock(&phy->vbus_event_lock);
 
 	if (phy->bc1p2_thread)
@@ -971,7 +972,6 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	 */
 	phy->phy.notify_connect			= sprd_ssphy_notify_connect;
 	phy->phy.notify_disconnect		= sprd_ssphy_notify_disconnect;
-	mutex_init(&phy->lock);
 	spin_lock_init(&phy->vbus_event_lock);
 	kthread_init_worker(&phy->bc1p2_kworker);
 	kthread_init_work(&phy->bc1p2_kwork, sprd_ssphy_get_bc1p2_type_work);

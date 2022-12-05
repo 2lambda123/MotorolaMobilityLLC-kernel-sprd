@@ -7,21 +7,43 @@
 #include <linux/usb/phy.h>
 #include <uapi/linux/usb/charger.h>
 
+#define SC2720_CHARGE_STATUS	(0xe14)
+#define SC2720_CHG_DET_FGU_CTRL	(0xe18)
+#define SC2721_CHARGE_STATUS	(0xec8)
+#define SC2721_CHG_DET_FGU_CTRL	(0xecc)
+#define SC2730_CHARGE_STATUS	(0x1b9c)
+#define SC2730_CHG_DET_FGU_CTRL	(0x1ba0)
+#define SC2731_CHARGE_STATUS	(0xedc)
+#define SC2731_CHG_DET_FGU_CTRL	(0xed8)
+#define UMP9620_CHARGE_STATUS	(0x239c)
+#define UMP9620_CHG_DET_FGU_CTRL	(0x23a0)
+#define UMP9620_CHG_BC1P2_CTRL2	(0x243c)
+
+/* Pls keep the same definition as musb_sprd */
+#define CHARGER_DETECT_DONE			BIT(0)
+#define CHARGER_2NDDETECT_ENABLE	BIT(30)
+#define CHARGER_2NDDETECT_SELECT	BIT(31)
+
 #define BIT_CHG_DET_DONE		BIT(11)
 #define BIT_SDP_INT			BIT(7)
 #define BIT_DCP_INT			BIT(6)
 #define BIT_CDP_INT			BIT(5)
 #define BIT_CHGR_INT			BIT(2)
 
-#define UMP96XX_CHG_DET_DELAY_MASK	GENMASK(7, 4)
-#define UMP96XX_CHG_DET_DELAY_OFFSET	4
+#define CHG_INT_DELAY_128MS	2
+#define SC27XX_CHG_INT_DELAY_MASK	GENMASK(11, 9)
+#define SC27XX_CHG_INT_DELAY_OFFSET	9
+#define UMP96XX_CHG_INT_DELAY_MASK	GENMASK(11, 8)
+#define UMP96XX_CHG_INT_DELAY_OFFSET	8
+#define UMP96XX_CHG_REDET_DELAY_MASK	GENMASK(7, 4)
+#define UMP96XX_CHG_REDET_DELAY_OFFSET	4
 
 #define UMP96XX_CHG_DET_EB_MASK		GENMASK(0, 0)
 #define UMP96XX_CHG_DET_DELAY_STEP_MS	(64)
 #define UMP96XX_CHG_DET_DELAY_MS_MAX	(15 * UMP96XX_CHG_DET_DELAY_STEP_MS)
 #define UMP96XX_CHG_BC1P2_REDET_ENABLE	1
 #define UMP96XX_CHG_BC1P2_REDET_DISABLE 0
-#define UMP96XX_CHG_DET_RETRY_COUNT	50
+#define UMP96XX_CHG_DET_RETRY_COUNT	60
 #define UMP96XX_CHG_DET_DELAY_MS	20
 
 #define UMP96XX_ERROR_NO_ERROR		0
@@ -44,12 +66,20 @@
 #define DEFAULT_ACA_CUR_MIN	1500
 #define DEFAULT_ACA_CUR_MAX	5000
 
-struct ump96xx_bc1p2 {
-	struct mutex bc1p2_lock;
-	struct regmap *regmap;
+struct ump96xx_bc1p2_data {
 	u32 charge_status;
 	u32 chg_det_fgu_ctrl;
 	u32 chg_bc1p2_ctrl2;
+	u32 chg_int_delay_mask;
+	u32 chg_int_delay_offset;
+};
+
+struct ump96xx_bc1p2 {
+	struct mutex bc1p2_lock;
+	struct regmap *regmap;
+	const struct ump96xx_bc1p2_data *data;
+	enum usb_charger_type type;
+	bool redetect_enable;
 };
 
 #if IS_ENABLED(CONFIG_SPRD_UMP96XX_BC1P2)
