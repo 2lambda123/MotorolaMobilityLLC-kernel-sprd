@@ -2317,10 +2317,10 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	trace_android_vh_ufs_send_command(hba, lrbp);
 	ufshcd_add_command_trace(hba, task_tag, "send");
 	ufshcd_clk_scaling_start_busy(hba);
-	__set_bit(task_tag, &hba->outstanding_reqs);
 	if (hba->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE)
 		return ;
 
+	__set_bit(task_tag, &hba->outstanding_reqs);
 	ufshcd_writel(hba, 1 << task_tag, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	/* Make sure that doorbell is committed immediately */
 	wmb();
