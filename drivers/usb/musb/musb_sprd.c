@@ -45,6 +45,11 @@
 #define CHARGER_2NDDETECT_ENABLE	BIT(30)
 #define CHARGER_2NDDETECT_SELECT	BIT(31)
 
+struct musb_reg_info {
+	struct regmap		*regmap_ptr;
+	u32			args[2];
+};
+
 struct sprd_glue {
 	struct device		*dev;
 	struct platform_device		*musb;
@@ -54,7 +59,7 @@ struct sprd_glue {
 	struct regulator	*vbus;
 	struct wakeup_source	*pd_wake_lock;
 	struct regmap		*pmu;
-
+	struct musb_reg_info		usb31pllv_frc_on;
 	enum usb_dr_mode		dr_mode;
 	enum usb_dr_mode		wq_mode;
 	int		vbus_irq;
@@ -1329,6 +1334,13 @@ static int musb_sprd_probe(struct platform_device *pdev)
 		glue->usb_pub_slp_poll_mask = buf[1];
 	}
 
+	glue->usb31pllv_frc_on.regmap_ptr = syscon_regmap_lookup_by_phandle_args(dev->of_node,
+						"usb31pllv_frc_on", 2, glue->usb31pllv_frc_on.args);
+	if (IS_ERR(glue->usb31pllv_frc_on.regmap_ptr)) {
+		dev_warn(&pdev->dev, "failed to get usb31pllv_frc_on regmap!\n");
+		glue->usb31pllv_frc_on.regmap_ptr = NULL;
+	}
+
 	spin_lock_init(&glue->lock);
 	INIT_WORK(&glue->work, sprd_musb_work);
 	INIT_DELAYED_WORK(&glue->recover_work, sprd_musb_recover_work);
@@ -1596,6 +1608,19 @@ static int musb_sprd_suspend(struct device *dev)
 			regmap_update_bits(glue->pmu,
 					   glue->usb_pub_slp_poll_offset,
 					   msk, val);
+		}
+		if (glue->usb31pllv_frc_on.regmap_ptr) {
+			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
+					   glue->usb31pllv_frc_on.args[0],
+					   glue->usb31pllv_frc_on.args[1],
+					   ~glue->usb31pllv_frc_on.args[1]);
+		}
+	} else if (musb->is_offload && musb->offload_used) {
+		if (glue->usb31pllv_frc_on.regmap_ptr) {
+			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
+					   glue->usb31pllv_frc_on.args[0],
+					   glue->usb31pllv_frc_on.args[1],
+					   glue->usb31pllv_frc_on.args[1]);
 		}
 	}
 	glue->is_suspend = true;
