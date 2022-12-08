@@ -85,7 +85,7 @@ void sdiohal_debug_point_store(int type, int channel, int num, struct mbuf_t *he
 		break;
 	};
 
-	if (*index >= SDIO_DEBUG_POINT_NUM)
+	if (index != NULL && *index >= SDIO_DEBUG_POINT_NUM)
 		*index = 0;
 
 	__sdiohal_debug_point_store(channel, num, head, tail, &point[(*index)++], tx_direct);

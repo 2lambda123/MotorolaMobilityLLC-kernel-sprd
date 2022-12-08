@@ -360,7 +360,9 @@ int wcn_pm_qos_init(void)
 	wpq = pqos;
 	mutex_init(&pqos->mutex);
 
-	wcn_pm_qos_condition_config(&pm_qos_cond[sprdwcn_bus_get_hwintf_type()]);
+	ret = sprdwcn_bus_get_hwintf_type();
+	if (ret != HW_TYPE_INVALIED)
+		wcn_pm_qos_condition_config(&pm_qos_cond[sprdwcn_bus_get_hwintf_type()]);
 
 	pm_qos_add_request(&pqos->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 		PM_QOS_DEFAULT_VALUE);
