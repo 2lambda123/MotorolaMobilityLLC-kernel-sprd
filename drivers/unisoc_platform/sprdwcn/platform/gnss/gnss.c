@@ -32,7 +32,9 @@
 #include <misc/wcn_bus.h>
 #include "gnss.h"
 #include "sprd_wcn.h"
-
+#ifdef BUILD_WCN_PCIE
+#include "pcie.h"
+#endif
 #define GNSS_CALI_DONE_FLAG 0x1314520
 
 struct gnss_cali {
@@ -219,6 +221,16 @@ int gnss_boot_wait(void)
 		return -ENOMEM;
 	}
 	while (i--) {
+#ifdef BUILD_WCN_PCIE
+	/* if wcn reset will unconfig pcie,when it happend,visit or use pcie can cause bus-busy */
+		if (g_match_config && g_match_config->unisoc_wcn_pcie) {
+			if (!wcn_get_edma_status()) {
+			pr_err("%s:card removed.stop boot gnss", __func__);
+			kfree(buffer);
+			return -1;
+			}
+		}
+#endif
 		sprdwcn_bus_direct_read(gnss_bootsts_addr, buffer,
 					GNSS_BOOTSTATUS_SIZE);
 		pr_err("boot read %d time,val=0x%x\n", i, *buffer);
