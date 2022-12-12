@@ -540,7 +540,7 @@
 
 	rebootescrow@0 {
 		compatible = "pmem-region";
-		reg = <0x0 0xbff70000 0x0 0x00010000>;
+		reg = <0x0 0xfff70000 0x0 0x00010000>;
 	};
 
 	autotest: autotest {
