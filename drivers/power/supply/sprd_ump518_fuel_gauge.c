@@ -1330,8 +1330,15 @@ static int ump518_fgu_switch_512k_clk(struct sprd_fgu_info *info)
 
 	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_CONFIG,
 				 UMP518_FGU_DISABLE_EN, 0);
-	if (ret)
+	if (ret) {
 		dev_err(info->dev, "%s failed to enable fgu module!!!\n", __func__);
+		return ret;
+	}
+
+	/* switch the 512kHZ clk is complete, need to wait for a voltage
+	 * sample period (delay_time > 250ms) before reading the voltage.
+	 */
+	mdelay(252);
 
 	return ret;
 }
