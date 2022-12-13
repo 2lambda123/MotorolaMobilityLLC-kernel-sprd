@@ -1058,6 +1058,10 @@ static int sgm41511_charger_enable_otg(struct regulator_dev *dev)
 		goto out;
 	}
 
+	ret = sgm41511_exit_hiz_mode(info);
+	if (ret)
+		dev_err(info->dev, "Failed to enable power path\n");
+
 	info->otg_enable = true;
 	schedule_delayed_work(&info->wdt_work,
 			      msecs_to_jiffies(SGM41511_FEED_WATCHDOG_VALID_MS));
@@ -1347,6 +1351,10 @@ static void sgm41511_charger_shutdown(struct i2c_client *client)
 					   0);
 		if (ret)
 			dev_err(info->dev, "disable sgm41511 otg failed ret = %d\n", ret);
+
+		ret = sgm41511_enter_hiz_mode(info);
+		if (ret)
+			dev_err(info->dev, "Failed to disable power path\n");
 
 		/* Enable charger detection function to identify the charger type */
 		ret = regmap_update_bits(info->pmic, info->charger_detect,
