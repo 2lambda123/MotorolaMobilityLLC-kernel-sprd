@@ -634,19 +634,27 @@ static int musb_sprd_audio_notifier(struct notifier_block *nb,
 	dev_dbg(glue->dev, "[%s]event(%ld)\n", __func__, event);
 
 	if (event) {
+		__pm_stay_awake(glue->wake_lock);
 		spin_lock_irqsave(&glue->lock, flags);
 		if (glue->vbus_active == 1 || glue->dr_mode == USB_DR_MODE_PERIPHERAL) {
 			spin_unlock_irqrestore(&glue->lock, flags);
 			dev_info(glue->dev, "ignore host connection detected from audio.\n");
 			return 0;
 		}
-
+		if (glue->usb31pllv_frc_on.regmap_ptr) {
+			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
+					   glue->usb31pllv_frc_on.args[0],
+					   glue->usb31pllv_frc_on.args[1],
+					   glue->usb31pllv_frc_on.args[1]);
+		}
 		glue->vbus_active = 1;
 		glue->wq_mode = USB_DR_MODE_HOST;
 		queue_work(system_unbound_wq, &glue->work);
 		spin_unlock_irqrestore(&glue->lock, flags);
 		dev_info(glue->dev,
 			"host connection detected from audio.\n");
+		msleep(5000);
+		__pm_relax(glue->wake_lock);
 	} else {
 		spin_lock_irqsave(&glue->lock, flags);
 		if (glue->vbus_active == 0 || glue->dr_mode == USB_DR_MODE_PERIPHERAL) {
@@ -655,6 +663,12 @@ static int musb_sprd_audio_notifier(struct notifier_block *nb,
 			return 0;
 		}
 
+		if (glue->usb31pllv_frc_on.regmap_ptr) {
+			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
+					   glue->usb31pllv_frc_on.args[0],
+					   glue->usb31pllv_frc_on.args[1],
+					   ~glue->usb31pllv_frc_on.args[1]);
+		}
 		glue->vbus_active = 0;
 		glue->wq_mode = USB_DR_MODE_HOST;
 		queue_work(system_unbound_wq, &glue->work);
@@ -1608,19 +1622,6 @@ static int musb_sprd_suspend(struct device *dev)
 			regmap_update_bits(glue->pmu,
 					   glue->usb_pub_slp_poll_offset,
 					   msk, val);
-		}
-		if (glue->usb31pllv_frc_on.regmap_ptr) {
-			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
-					   glue->usb31pllv_frc_on.args[0],
-					   glue->usb31pllv_frc_on.args[1],
-					   ~glue->usb31pllv_frc_on.args[1]);
-		}
-	} else if (musb->is_offload && musb->offload_used) {
-		if (glue->usb31pllv_frc_on.regmap_ptr) {
-			regmap_update_bits(glue->usb31pllv_frc_on.regmap_ptr,
-					   glue->usb31pllv_frc_on.args[0],
-					   glue->usb31pllv_frc_on.args[1],
-					   glue->usb31pllv_frc_on.args[1]);
 		}
 	}
 	glue->is_suspend = true;
