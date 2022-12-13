@@ -438,7 +438,7 @@ static irqreturn_t sc27xx_typec_interrupt(int irq, void *data)
 	struct sc27xx_typec *sc = data;
 	u32 event;
 	int ret;
-	u32 last_int;
+	u32 last_int = 0;
 
 	ret = regmap_read(sc->regmap, sc->base + SC27XX_INT_MASK, &event);
 	if (ret)
