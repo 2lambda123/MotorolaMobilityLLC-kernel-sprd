@@ -401,6 +401,8 @@ DEFINE_SIMPLE_ATTRIBUTE(fops_ldo, debugfs_voltage_get, debugfs_voltage_set, "%ll
 
 static void ump518_regulator_debugfs_init(struct regulator_dev *rdev)
 {
+	if (rdev == NULL | rdev->desc == NULL | rdev->desc->name == NULL)
+		return;
 
 	debugfs_root = debugfs_create_dir(rdev->desc->name, NULL);
 
