@@ -455,7 +455,7 @@ static int ump518_fgu_get_fgu_sts(struct sprd_fgu_info *info,
 
 static int ump518_fgu_suspend_calib_check_power_low_sts(struct sprd_fgu_info *info)
 {
-	int ret = -EINVAL, cur_sts, power_sts;
+	int ret = -EINVAL, cur_sts = 0, power_sts = 0;
 
 	ret = ump518_fgu_get_fgu_sts(info, SPRD_FGU_CURT_LOW_STS_CMD, &cur_sts);
 	if (ret) {
@@ -507,7 +507,7 @@ static int ump518_fgu_get_calib_efuse(struct sprd_fgu_info *info,
 {
 	struct nvmem_cell *cell;
 	void *buf;
-	size_t len;
+	size_t len = 0;
 
 	*calib_data = 0;
 	cell = nvmem_cell_get(info->dev, calib_str);
@@ -759,7 +759,7 @@ static int ump518_fgu_get_poci(struct sprd_fgu_info *info, int *val)
 static int ump518_fgu_get_pocv(struct sprd_fgu_info *info, int *val)
 {
 	int ret = 0;
-	u32 vol_adc;
+	u32 vol_adc = 0;
 
 	ret = regmap_read(info->regmap, info->base + UMP518_FGU_POCV, &vol_adc);
 	if (ret) {
@@ -883,7 +883,7 @@ static int ump518_fgu_read_last_cap(struct sprd_fgu_info *info, int *cap)
 static int ump518_fgu_read_normal_temperature_cap(struct sprd_fgu_info *info, int *cap)
 {
 	int ret;
-	unsigned int value;
+	unsigned int value = 0;
 
 	ret = regmap_read(info->regmap,
 			  info->base + UMP518_FGU_USER_AREA_STATUS1, &value);
@@ -1032,7 +1032,7 @@ static int ump518_fgu_save_normal_temperature_cap(struct sprd_fgu_info *info, in
 
 static int ump518_fgu_get_clbcnt(struct sprd_fgu_info *info, s64 *clb_cnt)
 {
-	int ret = 0, cc0, cc1, cc2;
+	int ret = 0, cc0 = 0, cc1 = 0, cc2 = 0;
 
 	ret = regmap_read(info->regmap, info->base + UMP518_FGU_CLBCNT_VAL0, &cc0);
 	if (ret)
@@ -1188,7 +1188,7 @@ static inline int ump518_fgu_set_power_low_counter_thre(struct sprd_fgu_info *in
 
 static int ump518_fgu_get_relax_cur_low(struct sprd_fgu_info *info, int *cur_sts)
 {
-	int sts, ret = 0;
+	int sts = 0, ret = 0;
 
 	ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &sts);
 	if (ret) {
@@ -1203,7 +1203,7 @@ static int ump518_fgu_get_relax_cur_low(struct sprd_fgu_info *info, int *cur_sts
 
 static int ump518_fgu_get_relax_power_low(struct sprd_fgu_info *info, int *power_sts)
 {
-	int sts, ret = 0;
+	int sts = 0, ret = 0;
 
 	ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &sts);
 	if (ret) {
@@ -1469,7 +1469,7 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 {
 	struct sprd_fgu_info *info = NULL;
 	int ret = 0, i;
-	const char *value;
+	const char *value = {0};
 	struct device_node *np = dev->of_node;
 
 	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
@@ -1487,8 +1487,10 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 	info->dev = dev;
 
 	info->regmap = dev_get_regmap(dev->parent, NULL);
-	if (!info->regmap)
-		dev_err(dev, "failed to get regmap\n");
+	if (!info->regmap) {
+		dev_err(dev, "%s: %d failed to get regmap\n", __func__, __LINE__);
+		return ERR_PTR(-ENODEV);
+	}
 
 	ret = of_property_read_string_index(np, "compatible", 0, &value);
 	if (ret)
