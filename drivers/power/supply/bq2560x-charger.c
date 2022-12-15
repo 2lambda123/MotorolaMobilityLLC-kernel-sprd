@@ -164,6 +164,7 @@ struct bq2560x_charger_info {
 
 	int reg_id;
 	bool disable_power_path;
+	bool use_typec_extcon;
 };
 
 struct bq2560x_charger_reg_tab {
@@ -1517,11 +1518,13 @@ static int bq2560x_charger_enable_otg(struct regulator_dev *dev)
 	 * Disable charger detection function in case
 	 * affecting the OTG timing sequence.
 	 */
-	ret = regmap_update_bits(info->pmic, info->charger_detect,
-				 BIT_DP_DM_BC_ENB, BIT_DP_DM_BC_ENB);
-	if (ret) {
-		dev_err(info->dev, "failed to disable bc1.2 detect function.\n");
-		goto out;
+	if (!info->use_typec_extcon) {
+		ret = regmap_update_bits(info->pmic, info->charger_detect,
+					 BIT_DP_DM_BC_ENB, BIT_DP_DM_BC_ENB);
+		if (ret) {
+			dev_err(info->dev, "failed to disable bc1.2 detect function.\n");
+			goto out;
+		}
 	}
 
 	ret = bq2560x_update_bits(info, BQ2560X_REG_1,
@@ -1574,9 +1577,11 @@ static int bq2560x_charger_disable_otg(struct regulator_dev *dev)
 	}
 
 	/* Enable charger detection function to identify the charger type */
-	ret = regmap_update_bits(info->pmic, info->charger_detect, BIT_DP_DM_BC_ENB, 0);
-	if (ret)
-		dev_err(info->dev, "enable BC1.2 failed\n");
+	if (!info->use_typec_extcon) {
+		ret = regmap_update_bits(info->pmic, info->charger_detect, BIT_DP_DM_BC_ENB, 0);
+		if (ret)
+			dev_err(info->dev, "enable BC1.2 failed\n");
+	}
 
 out:
 	mutex_unlock(&info->lock);
@@ -1695,6 +1700,8 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 		dev_err(dev, "sc27xx_fgu not ready.\n");
 		return -EPROBE_DEFER;
 	}
+
+	info->use_typec_extcon = device_property_read_bool(dev, "use-typec-extcon");
 
 	ret = device_property_read_bool(dev, "role-slave");
 	if (ret)
@@ -1840,6 +1847,7 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 	mutex_unlock(&info->lock);
 
 	bq2560x_dump_register(info);
+	dev_info(dev, "use_typec_extcon = %d\n", info->use_typec_extcon);
 
 	return 0;
 
