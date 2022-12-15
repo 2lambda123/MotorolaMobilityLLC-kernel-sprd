@@ -629,6 +629,13 @@ static void wcn_sipc_sblk_push_list_dequeue(struct sipc_chn_info *sipc_chn)
 
 	mbuf = sipc_chn->push_queue.mbuf_head;
 	while (free_blk_num-- && mbuf) {
+		if (!virt_addr_valid(mbuf)) {
+			WCN_ERR("%s : mbuf addr is not in kernel space\n", __func__);
+			sipc_chn->push_queue.mbuf_head = NULL;
+			sipc_chn->push_queue.mbuf_tail = NULL;
+			sipc_chn->push_queue.mbuf_num = 0;
+			break;
+		}
 		ret  = wcn_sipc_sblk_send(sipc_chn, mbuf->buf, mbuf->len);
 		WCN_DEBUG("%s %d free_blk_num %d ret %d ",
 			  __func__, __LINE__, free_blk_num, ret);
