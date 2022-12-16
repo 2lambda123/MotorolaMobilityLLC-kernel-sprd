@@ -195,6 +195,10 @@
 	compatible = "sprd,ump518-vibrator";
 };
 
+&pmic_bc1p2 {
+	compatible = "sprd,sc27xx-bc1p2", "sprd,ump518-bc1p2";
+};
+
 &pmic_smpl {
 	compatible = "sprd,sc27xx-smpl", "sprd,ump518-smpl";
 };
