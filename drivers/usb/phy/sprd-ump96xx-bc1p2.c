@@ -116,6 +116,10 @@ static enum usb_charger_type sprd_bc1p2_detect(void)
 	}
 
 bc1p2_detect_end:
+	if (val & BIT_CHGR_INT)
+		bc1p2->chg_state = USB_CHARGER_PRESENT;
+	else
+		bc1p2->chg_state = USB_CHARGER_ABSENT;
 	if (bc1p2->redetect_enable)
 		sprd_bc1p2_redetect_control(false);
 	return type;
@@ -195,11 +199,6 @@ static enum usb_charger_type sprd_bc1p2_retry_detect(struct usb_phy *x)
 	enum usb_charger_type type = UNKNOWN_TYPE;
 	int ret = 0;
 
-	if (x->chg_state != USB_CHARGER_PRESENT) {
-		dev_warn(x->dev, "unplug usb during redetect\n");
-		return UNKNOWN_TYPE;
-	}
-
 	ret = sprd_bc1p2_redetect_trigger(UMP96XX_CHG_REDET_DELAY_MS);
 	if (ret) {
 		sprd_bc1p2_redetect_control(false);
@@ -259,11 +258,6 @@ enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 	}
 
 	mutex_lock(&bc1p2->bc1p2_lock);
-	if (x->chg_state != USB_CHARGER_PRESENT) {
-		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
-		type = UNKNOWN_TYPE;
-		goto bc1p2_done;
-	}
 
 	if (x->flags & CHARGER_DETECT_DONE) {
 		if (bc1p2->type == UNKNOWN_TYPE)
@@ -274,7 +268,7 @@ enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 	}
 
 	type = sprd_bc1p2_detect();
-	if (x->chg_state != USB_CHARGER_PRESENT) {
+	if (bc1p2->chg_state != USB_CHARGER_PRESENT) {
 		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
 		type = UNKNOWN_TYPE;
 		goto bc1p2_done;
@@ -293,7 +287,7 @@ enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 		type = sprd_bc1p2_retry_detect(x);
 	}
 
-	if (x->chg_state != USB_CHARGER_PRESENT) {
+	if (bc1p2->chg_state != USB_CHARGER_PRESENT) {
 		dev_info(x->dev, "%s:line%d: type = UNKNOWN_TYPE\n", __func__,  __LINE__);
 		type = UNKNOWN_TYPE;
 		goto bc1p2_done;

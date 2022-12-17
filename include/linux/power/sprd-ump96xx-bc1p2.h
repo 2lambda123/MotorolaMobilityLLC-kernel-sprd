@@ -79,6 +79,7 @@ struct ump96xx_bc1p2 {
 	struct regmap *regmap;
 	const struct ump96xx_bc1p2_data *data;
 	enum usb_charger_type type;
+	enum usb_charger_state	chg_state;
 	bool redetect_enable;
 };
 
