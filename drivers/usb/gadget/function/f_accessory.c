@@ -1131,6 +1131,14 @@ __acc_function_bind(struct usb_configuration *c,
 			acc_fullspeed_in_desc.bEndpointAddress;
 		acc_highspeed_out_desc.bEndpointAddress =
 			acc_fullspeed_out_desc.bEndpointAddress;
+		acc_superspeed_in_desc.bEndpointAddress =
+			acc_fullspeed_in_desc.bEndpointAddress;
+		acc_superspeed_out_desc.bEndpointAddress =
+			acc_fullspeed_out_desc.bEndpointAddress;
+		acc_superspeedplus_in_desc.bEndpointAddress =
+			acc_fullspeed_in_desc.bEndpointAddress;
+		acc_superspeedplus_out_desc.bEndpointAddress =
+			acc_fullspeed_out_desc.bEndpointAddress;
 	}
 
 	DBG(cdev, "%s speed %s: IN/%s, OUT/%s\n",
