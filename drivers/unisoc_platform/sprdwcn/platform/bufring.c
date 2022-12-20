@@ -75,6 +75,8 @@ struct mdbg_ring_t *mdbg_ring_alloc(unsigned long int size)
 			WCN_ERR("Ring malloc Failed.\n");
 			break;
 		}
+		ring->pbuff = NULL;
+		ring->plock = NULL;
 		ring->pbuff = kmalloc((unsigned int)size, GFP_KERNEL);
 		if (ring->pbuff == NULL) {
 			WCN_ERR("Ring buff malloc Failed.\n");
