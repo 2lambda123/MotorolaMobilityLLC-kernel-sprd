@@ -81,6 +81,7 @@ struct sprd_fgu_sleep_capacity_calibration {
  * @vol_1000mv_adc: ADC1 value corresponding to 1000 mV
  * @cur_zero_point_adc: ADC0 current zero point adc value
  * @calib_resist: the real resistance of coulomb counter chip in uOhm
+ * @standard_calib_resist: the standard resistance of coulomb counter chip in uOhm
  * @ops: pointer of sprd fgu device
  * @slp_cap_calib: struct of sleep capacity calib
  * @pdata: struct of pdata
@@ -95,6 +96,7 @@ struct sprd_fgu_info {
 	int vol_1000mv_adc;
 	int cur_zero_point_adc;
 	int calib_resist;
+	int standard_calib_resist;
 	struct sprd_fgu_device_ops *ops;
 	struct sprd_fgu_sleep_capacity_calibration slp_cap_calib;
 	const struct sprd_fgu_variant_data *pdata;

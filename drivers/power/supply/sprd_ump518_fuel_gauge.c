@@ -253,6 +253,85 @@ static int ump518_fgu_clbcnt2mah(struct sprd_fgu_info *info, s64 clbcnt)
 	return (int)div_s64(mah, info->cur_1000ma_adc);
 }
 
+static int ump518_fgu_parse_cmdline_match(struct sprd_fgu_info *info, char *match_str,
+					  char *result, int size)
+{
+	struct device_node *cmdline_node = NULL;
+	const char *cmdline;
+	char *match, *match_end;
+	int len, match_str_len, ret;
+
+	if (!result || !match_str)
+		return -EINVAL;
+
+	memset(result, '\0', size);
+	match_str_len = strlen(match_str);
+
+	cmdline_node = of_find_node_by_path("/chosen");
+	ret = of_property_read_string(cmdline_node, "bootargs", &cmdline);
+	if (ret) {
+		dev_warn(info->dev, "%s failed to read bootargs\n", __func__);
+		return ret;
+	}
+
+	match = strstr(cmdline, match_str);
+	if (!match) {
+		dev_warn(info->dev, "Match: %s fail in cmdline\n", match_str);
+		return -EINVAL;
+	}
+
+	match_end = strstr((match + match_str_len), " ");
+	if (!match_end) {
+		dev_warn(info->dev, "Match end of : %s fail in cmdline\n", match_str);
+		return -EINVAL;
+	}
+
+	len = match_end - (match + match_str_len);
+	if (len < 0) {
+		dev_warn(info->dev, "Match cmdline :%s fail, len = %d\n", match_str, len);
+		return -EINVAL;
+	}
+
+	memcpy(result, (match + match_str_len), len);
+
+	return 0;
+}
+
+static int ump518_fgu_get_calib_resist(struct sprd_fgu_info *info)
+{
+	char result[32] = {0};
+	int ret = 0, calib_resist_ratio = 0, calib_resist = 0;
+	char *str = "charge.fgu_res=";
+
+	ret = ump518_fgu_parse_cmdline_match(info, str, result, sizeof(result));
+	if (ret) {
+		dev_err(info->dev, "parse_cmdline fail, ret = %d\n", ret);
+		return ret;
+	}
+
+	ret = kstrtoint(result, 10, &calib_resist_ratio);
+	if (ret) {
+		dev_err(info->dev, "covert calib_resist_ratio fail, ret = %d, result = %s\n",
+			ret, result);
+		return ret;
+	}
+
+	/*
+	 * To obtain the scaling factor of a calib resist from the miscdata partion,
+	 * need to multiply it by the standard calib resist.
+	 */
+	calib_resist = calib_resist_ratio * info->standard_calib_resist / 1000;
+
+	if ((calib_resist > info->standard_calib_resist * 8 / 10) &&
+	    (calib_resist < info->standard_calib_resist * 12 / 10))
+		info->calib_resist = calib_resist;
+
+	dev_info(info->dev, "product line calib_resist = %d, dts define calib_resist = %d.\n",
+		 calib_resist, info->standard_calib_resist);
+
+	return ret;
+}
+
 static int ump518_fgu_enable_fgu_module(struct sprd_fgu_info *info, bool enable)
 {
 	int ret = 0;
@@ -531,6 +610,11 @@ static int ump518_fgu_calibration(struct sprd_fgu_info *info)
 {
 	int ret = 0, calib_data1, calib_data2, calib_data3, cal_4200mv, cal_42mv, cal_0mv;
 
+	ret = ump518_fgu_get_calib_resist(info);
+	if (ret)
+		dev_info(info->dev, "failed to get calib resist from production, "
+			 "use the value defined by dts!!!\n");
+
 	/* block38 */
 	ret = ump518_fgu_get_calib_efuse(info, "fgu_calib1", &calib_data1);
 	if (ret) {
@@ -573,6 +657,11 @@ static int ump518_fgu_calibration(struct sprd_fgu_info *info)
 	cal_4200mv = ((calib_data2 & UMP518_FGU_VOL_CAL) >>
 		      UMP518_FGU_VOL_CAL_SHIFT) + 6963 - 4096 - 256;
 	info->vol_1000mv_adc = DIV_ROUND_CLOSEST(cal_4200mv * 10, 42);
+
+	dev_info(info->dev, "%s cal_0mv = %d, cal_42mv = %d, cur_1mv_adc = %d, "
+		 "cur_1code_lsb = %d, cur_1000ma_adc = %d, cal_4200mv = %d, vol_1000mv_adc = %d\n",
+		 __func__, cal_0mv, cal_42mv, info->cur_1mv_adc, info->cur_1code_lsb,
+		 info->cur_1000ma_adc, cal_4200mv, info->vol_1000mv_adc);
 
 	return 0;
 }
@@ -1397,10 +1486,13 @@ static void ump518_fgu_dump_fgu_info(struct sprd_fgu_info *info,
 		dev_info(info->dev, "dump_level = %d is too low and has no premission to dump fgu info!!!");
 		break;
 	case DUMP_FGU_INFO_LEVEL_1:
-		dev_info(info->dev, "ump518_fgu_info : init_clbcnt = %lld, start_work_clbcnt = %lld, "
-			 "cur_clbcnt = %lld, cur_1000ma_adc = %d, vol_1000mv_adc = %d, fgu_clk_sample_hz = %d\n",
+		dev_info(info->dev, "ump518_fgu_info : init_clbcnt = %lld, "
+			 "start_work_clbcnt = %lld, cur_clbcnt = %lld, "
+			 "cur_1000ma_adc = %d, vol_1000mv_adc = %d, "
+			 "fgu_clk_sample_hz = %d, calib_resist = %d\n",
 			 init_clbcnt, start_work_clbcnt, latest_clbcnt,
-			 info->cur_1000ma_adc, info->vol_1000mv_adc, fgu_clk_sample_hz);
+			 info->cur_1000ma_adc, info->vol_1000mv_adc,
+			 fgu_clk_sample_hz, info->calib_resist);
 		break;
 	default:
 		dev_err(info->dev, "failed to identify dump_level or dump_level is greater than %d!\n",
@@ -1500,8 +1592,10 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 	}
 
 	ret = of_property_read_string_index(np, "compatible", 0, &value);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "read_string failed!\n");
+		return ERR_PTR(ret);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(ump518_fgu_dev_match_arr); i++) {
 		if (strcmp(ump518_fgu_dev_match_arr[i].compatible, value) == 0) {
@@ -1511,13 +1605,18 @@ struct sprd_fgu_info *sprd_fgu_info_register(struct device *dev)
 	}
 
 	ret = device_property_read_u32(dev, "reg", &info->base);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "failed to get fgu address\n");
+		return ERR_PTR(ret);
+	}
 
 	ret = device_property_read_u32(dev, "sprd,calib-resistance-micro-ohms",
 				       &info->calib_resist);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "failed to get fgu calibration resistance\n");
+		return ERR_PTR(ret);
+	}
+	info->standard_calib_resist = info->calib_resist;
 
 	/* parse sleep calibration parameters from dts */
 	info->slp_cap_calib.support_slp_calib =
