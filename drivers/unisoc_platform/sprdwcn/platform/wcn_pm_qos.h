@@ -19,25 +19,34 @@ struct wcn_pm_qos_condition {
 	bool blank_cond;
 	bool cpu_pd_forbid;
 	bool cpu_freq_change;
+	bool ddr_freq_change;
 };
+
+/* Number of CPU to be updated */
+#define CPU_CORE_NUM				6
+#define CPU_CORE_NUM_OFFSET		0
+#define CPU_FREQ_TABLE_NUM_MAX	20
+/* freq index, max level: struct wcn_pm_qos:cpu_freq_table_num[cpu_idx] */
+#define CPU_FREQ_LEVEL_INDEX		4
 
 struct wcn_pm_qos {
 	unsigned long active_modules;
 	unsigned long active_modules_pending;
 	struct mutex mutex;
 	struct pm_qos_request pm_qos_req;
-	struct freq_qos_request big_core_min_freq;
+	struct freq_qos_request wcn_freq_qos_req[CPU_CORE_NUM];
 	struct cpufreq_policy *policy;
 	struct device *dev;
 	struct wcn_pm_qos_condition cond;
 	bool cond_set;
-	unsigned int min_freq, max_freq, cur_min_freq;
+	unsigned int min_freq[CPU_CORE_NUM], max_freq[CPU_CORE_NUM];
+	unsigned int cpu_freq_table[CPU_CORE_NUM][CPU_FREQ_TABLE_NUM_MAX];
+	unsigned int cpu_freq_table_num[CPU_CORE_NUM];
 	bool freq_set_flag;
 	bool cpu_pd_set_flag;
+	bool ddr_freq_set_flag;
 	bool pm_qos_disable;
-	struct task_struct *test_task;
 };
-
 
 #define CPU_FREQ_BIG_CORE_INDEX	6
 #define CPU_DMA_FORBID_POWER_DOWN_LATENCY	100
