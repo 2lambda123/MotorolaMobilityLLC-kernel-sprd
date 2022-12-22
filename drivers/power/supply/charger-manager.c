@@ -435,27 +435,25 @@ static int get_cp_ibat_uA(struct charger_manager *cm, int *uA)
 {
 	union power_supply_propval val;
 	struct power_supply *cp_psy;
-	int i, ret = -ENODEV;
+	int ret = -ENODEV;
 
 	if (!cm || !cm->desc || !cm->desc->psy_cp_stat)
 		return ret;
 
 	*uA = 0;
 
-	for (i = 0; cm->desc->psy_cp_stat[i]; i++) {
-		cp_psy = power_supply_get_by_name(cm->desc->psy_cp_stat[i]);
-		if (!cp_psy) {
-			dev_err(cm->dev, "Cannot find charge pump power supply \"%s\"\n",
-				cm->desc->psy_cp_stat[i]);
-			continue;
-		}
-
-		val.intval = CM_IBAT_CURRENT_NOW_CMD;
-		ret = power_supply_get_property(cp_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &val);
-		power_supply_put(cp_psy);
-		if (ret == 0)
-			*uA += val.intval;
+	cp_psy = power_supply_get_by_name(cm->desc->psy_cp_stat[0]);
+	if (!cp_psy) {
+		dev_err(cm->dev, "Cannot find charge pump power supply \"%s\"\n",
+			cm->desc->psy_cp_stat[0]);
+		return ret;
 	}
+
+	val.intval = CM_IBAT_CURRENT_NOW_CMD;
+	ret = power_supply_get_property(cp_psy, POWER_SUPPLY_PROP_CURRENT_NOW, &val);
+	power_supply_put(cp_psy);
+	if (ret == 0)
+		*uA = val.intval;
 
 	return ret;
 }
@@ -2831,10 +2829,10 @@ static void cm_check_cp_soft_monitor_alarm_status(struct charger_manager *cm)
 	cp->alm.bus_ocp_alarm = !!(val.intval & CM_CHARGER_BUS_OCP_ALARM_MASK);
 	cp->alm.bat_ucp_alarm = !!(val.intval & CM_CHARGER_BAT_UCP_ALARM_MASK);
 
-	dev_dbg(cm->dev, "%s, bat_ucp_alarm = %d, bat_ocp_alarm = %d, bat_ovp_alarm = %d,"
-		" bus_ovp_alarm = %d, bus_ocp_alarm = %d\n",
-		__func__, cp->alm.bat_ucp_alarm, cp->alm.bat_ocp_alarm, cp->alm.bat_ovp_alarm,
-		cp->alm.bus_ovp_alarm, cp->alm.bus_ocp_alarm);
+	dev_info(cm->dev, "%s, bat_ucp_alarm = %d, bat_ocp_alarm = %d, bat_ovp_alarm = %d,"
+		 " bus_ovp_alarm = %d, bus_ocp_alarm = %d\n",
+		 __func__, cp->alm.bat_ucp_alarm, cp->alm.bat_ocp_alarm, cp->alm.bat_ovp_alarm,
+		 cp->alm.bus_ovp_alarm, cp->alm.bus_ocp_alarm);
 }
 
 static void cm_check_cp_fault_status(struct charger_manager *cm)
