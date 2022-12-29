@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * ump96xx-usb-charger.c -- USB BC1.2 handling
+ * sprd-bc1p2.c -- USB BC1.2 handling
  *
  * Copyright (C) 2022 Chen Yongzhi <yongzhi.chen@unisoc.com>
  */
@@ -9,9 +9,9 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/power/sprd-ump96xx-bc1p2.h>
+#include <linux/power/sprd-bc1p2.h>
 
-static const struct ump96xx_bc1p2_data sc2720_data = {
+static const struct sprd_bc1p2_data sc2720_data = {
 	.charge_status = SC2720_CHARGE_STATUS,
 	.chg_det_fgu_ctrl = SC2720_CHG_DET_FGU_CTRL,
 	.chg_bc1p2_ctrl2 = 0,
@@ -19,7 +19,7 @@ static const struct ump96xx_bc1p2_data sc2720_data = {
 	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
 };
 
-static const struct ump96xx_bc1p2_data sc2721_data = {
+static const struct sprd_bc1p2_data sc2721_data = {
 	.charge_status = SC2721_CHARGE_STATUS,
 	.chg_det_fgu_ctrl = SC2721_CHG_DET_FGU_CTRL,
 	.chg_bc1p2_ctrl2 = 0,
@@ -27,7 +27,7 @@ static const struct ump96xx_bc1p2_data sc2721_data = {
 	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
 };
 
-static const struct ump96xx_bc1p2_data sc2730_data = {
+static const struct sprd_bc1p2_data sc2730_data = {
 	.charge_status = SC2730_CHARGE_STATUS,
 	.chg_det_fgu_ctrl = SC2730_CHG_DET_FGU_CTRL,
 	.chg_bc1p2_ctrl2 = 0,
@@ -35,7 +35,7 @@ static const struct ump96xx_bc1p2_data sc2730_data = {
 	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
 };
 
-static const struct ump96xx_bc1p2_data sc2731_data = {
+static const struct sprd_bc1p2_data sc2731_data = {
 	.charge_status = SC2731_CHARGE_STATUS,
 	.chg_det_fgu_ctrl = SC2731_CHG_DET_FGU_CTRL,
 	.chg_bc1p2_ctrl2 = 0,
@@ -43,7 +43,7 @@ static const struct ump96xx_bc1p2_data sc2731_data = {
 	.chg_int_delay_offset = SC27XX_CHG_INT_DELAY_OFFSET,
 };
 
-static const struct ump96xx_bc1p2_data ump9620_data = {
+static const struct sprd_bc1p2_data ump9620_data = {
 	.charge_status = UMP9620_CHARGE_STATUS,
 	.chg_det_fgu_ctrl = UMP9620_CHG_DET_FGU_CTRL,
 	.chg_bc1p2_ctrl2 = UMP9620_CHG_BC1P2_CTRL2,
@@ -51,8 +51,16 @@ static const struct ump96xx_bc1p2_data ump9620_data = {
 	.chg_int_delay_offset = UMP96XX_CHG_INT_DELAY_OFFSET,
 };
 
+static const struct sprd_bc1p2_data ump518_data = {
+	.charge_status = SC2730_CHARGE_STATUS,
+	.chg_det_fgu_ctrl = SC2730_CHG_DET_FGU_CTRL,
+	.chg_bc1p2_ctrl2 = UMP518_CHG_BC1P2_CTRL2,
+	.chg_int_delay_mask = UMP96XX_CHG_INT_DELAY_MASK,
+	.chg_int_delay_offset = UMP96XX_CHG_INT_DELAY_OFFSET,
+};
+
 static u32 det_delay_ms;
-static struct ump96xx_bc1p2 *bc1p2;
+static struct sprd_bc1p2 *bc1p2;
 
 static int sprd_bc1p2_redetect_control(bool enable)
 {
@@ -226,7 +234,79 @@ static void usb_phy_set_default_current(struct usb_phy *x)
 	x->chg_cur.aca_max = DEFAULT_ACA_CUR_MAX;
 }
 
-static void usb_phy_notify_charger(struct usb_phy *x)
+static void sprd_get_bc1p2_type_work(struct kthread_work *work)
+{
+	struct sprd_bc1p2_priv *bc1p2_info = container_of(work, struct sprd_bc1p2_priv, bc1p2_kwork);
+
+	dev_dbg(bc1p2_info->phy->dev, "%s\n", __func__);
+
+	spin_lock(&bc1p2_info->vbus_event_lock);
+	while (bc1p2_info->vbus_events) {
+		bc1p2_info->vbus_events = false;
+		spin_unlock(&bc1p2_info->vbus_event_lock);
+		sprd_bc1p2_notify_charger(bc1p2_info->phy);
+		spin_lock(&bc1p2_info->vbus_event_lock);
+	}
+
+	spin_unlock(&bc1p2_info->vbus_event_lock);
+}
+
+void sprd_usb_changed(struct sprd_bc1p2_priv *bc1p2_info, enum usb_charger_state state)
+{
+	struct usb_phy *usb_phy = bc1p2_info->phy;
+
+	dev_dbg(usb_phy->dev, "%s\n", __func__);
+	spin_lock(&bc1p2_info->vbus_event_lock);
+	bc1p2_info->vbus_events = true;
+
+	usb_phy->chg_state = state;
+	if (usb_phy->chg_state == USB_CHARGER_ABSENT)
+		usb_phy->flags &= ~CHARGER_DETECT_DONE;
+	spin_unlock(&bc1p2_info->vbus_event_lock);
+
+	if (bc1p2_info->bc1p2_thread)
+		kthread_queue_work(&bc1p2_info->bc1p2_kworker, &bc1p2_info->bc1p2_kwork);
+}
+EXPORT_SYMBOL_GPL(sprd_usb_changed);
+
+int usb_add_bc1p2_init(struct sprd_bc1p2_priv *bc1p2_info, struct usb_phy *x)
+{
+	struct sched_param param = { .sched_priority = 1 };
+
+	if (!x->dev) {
+		dev_err(x->dev, "no device provided for PHY\n");
+		return -EINVAL;
+	}
+
+	bc1p2_info->phy = x;
+	spin_lock_init(&bc1p2_info->vbus_event_lock);
+	kthread_init_worker(&bc1p2_info->bc1p2_kworker);
+	kthread_init_work(&bc1p2_info->bc1p2_kwork, sprd_get_bc1p2_type_work);
+	bc1p2_info->bc1p2_thread = kthread_run(kthread_worker_fn, &bc1p2_info->bc1p2_kworker,
+					       "sprd_bc1p2_worker");
+	if (IS_ERR(bc1p2_info->bc1p2_thread)) {
+		bc1p2_info->bc1p2_thread = NULL;
+		dev_err(x->dev, "failed to run bc1p2_thread\n");
+		return PTR_ERR(bc1p2_info->bc1p2_thread);
+	}
+
+	sched_setscheduler(bc1p2_info->bc1p2_thread, SCHED_FIFO, &param);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(usb_add_bc1p2_init);
+
+void usb_remove_bc1p2(struct sprd_bc1p2_priv *bc1p2_info)
+{
+	if (bc1p2_info->bc1p2_thread) {
+		kthread_flush_worker(&bc1p2_info->bc1p2_kworker);
+		kthread_stop(bc1p2_info->bc1p2_thread);
+		bc1p2_info->bc1p2_thread = NULL;
+	}
+}
+EXPORT_SYMBOL_GPL(usb_remove_bc1p2);
+
+void usb_phy_notify_charger(struct usb_phy *x)
 {
 	unsigned int min, max;
 
@@ -247,6 +327,7 @@ static void usb_phy_notify_charger(struct usb_phy *x)
 
 	kobject_uevent(&x->dev->kobj, KOBJ_CHANGE);
 }
+EXPORT_SYMBOL_GPL(usb_phy_notify_charger);
 
 enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)
 {
@@ -336,12 +417,12 @@ void sprd_bc1p2_notify_charger(struct usb_phy *x)
 }
 EXPORT_SYMBOL_GPL(sprd_bc1p2_notify_charger);
 
-static int ump96xx_bc1p2_probe(struct platform_device *pdev)
+static int sprd_bc1p2_probe(struct platform_device *pdev)
 {
 	int err = 0;
 	struct device *dev = &pdev->dev;
 
-	bc1p2 = devm_kzalloc(dev, sizeof(struct ump96xx_bc1p2), GFP_KERNEL);
+	bc1p2 = devm_kzalloc(dev, sizeof(struct sprd_bc1p2_data), GFP_KERNEL);
 	if (!bc1p2)
 		return -ENOMEM;
 
@@ -371,32 +452,34 @@ static int ump96xx_bc1p2_probe(struct platform_device *pdev)
 	}
 
 	mutex_init(&bc1p2->bc1p2_lock);
+
 	return err;
 }
 
-static const struct of_device_id ump96xx_bc1p2_of_match[] = {
+static const struct of_device_id sprd_bc1p2_of_match[] = {
 	{ .compatible = "sprd,sc2720-bc1p2", .data = &sc2720_data},
 	{ .compatible = "sprd,sc2721-bc1p2", .data = &sc2721_data},
 	{ .compatible = "sprd,sc2730-bc1p2", .data = &sc2730_data},
 	{ .compatible = "sprd,sc2731-bc1p2", .data = &sc2731_data},
 	{ .compatible = "sprd,ump9620-bc1p2", .data = &ump9620_data},
+	{ .compatible = "sprd,ump518-bc1p2", .data = &ump518_data},
 	{ }
 };
 
-MODULE_DEVICE_TABLE(of, ump96xx_bc1p2_of_match);
+MODULE_DEVICE_TABLE(of, sprd_bc1p2_of_match);
 
-static struct platform_driver ump96xx_bc1p2_driver = {
+static struct platform_driver sprd_bc1p2_driver = {
 	.driver = {
-		.name = "ump96xx-bc1p2",
-		.of_match_table = ump96xx_bc1p2_of_match,
+		.name = "sprd-bc1p2",
+		.of_match_table = sprd_bc1p2_of_match,
 	 },
-	.probe = ump96xx_bc1p2_probe,
+	.probe = sprd_bc1p2_probe,
 };
 
-module_platform_driver(ump96xx_bc1p2_driver);
+module_platform_driver(sprd_bc1p2_driver);
 
 MODULE_AUTHOR("Yongzhi Chen <yongzhi.chen@unisoc.com>");
-MODULE_DESCRIPTION("ump96xx bc1p2 driver");
+MODULE_DESCRIPTION("sprd bc1p2 driver");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:ump96xx_bc1p2");
+MODULE_ALIAS("platform:sprd_bc1p2");
 

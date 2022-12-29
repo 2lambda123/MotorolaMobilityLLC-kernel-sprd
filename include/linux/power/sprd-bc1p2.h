@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef __LINUX_SPRD_UMP96XX_BC1P2_INCLUDED
-#define __LINUX_SPRD_UMP96XX_BC1P2_INCLUDED
+#ifndef __LINUX_SPRD_SPRD_BC1P2_INCLUDED
+#define __LINUX_SPRD_SPRD_BC1P2_INCLUDED
 
 #include <linux/delay.h>
+#include <linux/kthread.h>
 #include <linux/regmap.h>
 #include <linux/usb/phy.h>
+#include <uapi/linux/sched/types.h>
 #include <uapi/linux/usb/charger.h>
 
 #define SC2720_CHARGE_STATUS	(0xe14)
@@ -18,6 +20,7 @@
 #define UMP9620_CHARGE_STATUS	(0x239c)
 #define UMP9620_CHG_DET_FGU_CTRL	(0x23a0)
 #define UMP9620_CHG_BC1P2_CTRL2	(0x243c)
+#define UMP518_CHG_BC1P2_CTRL2	(0x1d24)
 
 /* Pls keep the same definition as musb_sprd */
 #define CHARGER_DETECT_DONE			BIT(0)
@@ -66,7 +69,7 @@
 #define DEFAULT_ACA_CUR_MIN	1500
 #define DEFAULT_ACA_CUR_MAX	5000
 
-struct ump96xx_bc1p2_data {
+struct sprd_bc1p2_data {
 	u32 charge_status;
 	u32 chg_det_fgu_ctrl;
 	u32 chg_bc1p2_ctrl2;
@@ -74,20 +77,41 @@ struct ump96xx_bc1p2_data {
 	u32 chg_int_delay_offset;
 };
 
-struct ump96xx_bc1p2 {
+struct sprd_bc1p2_priv {
+	struct usb_phy *phy;
+	struct kthread_worker bc1p2_kworker;
+	struct kthread_work bc1p2_kwork;
+	struct task_struct *bc1p2_thread;
+	spinlock_t vbus_event_lock;
+	bool vbus_events;
+};
+
+struct sprd_bc1p2 {
 	struct mutex bc1p2_lock;
 	struct regmap *regmap;
-	const struct ump96xx_bc1p2_data *data;
+	const struct sprd_bc1p2_data *data;
 	enum usb_charger_type type;
-	enum usb_charger_state	chg_state;
+	enum usb_charger_state chg_state;
 	bool redetect_enable;
 };
 
-#if IS_ENABLED(CONFIG_SPRD_UMP96XX_BC1P2)
+#if IS_ENABLED(CONFIG_SPRD_BC1P2)
+extern void sprd_usb_changed(struct sprd_bc1p2_priv *bc1p2_info, enum usb_charger_state state);
+extern int usb_add_bc1p2_init(struct sprd_bc1p2_priv *bc1p2_info, struct usb_phy *x);
+extern void usb_remove_bc1p2(struct sprd_bc1p2_priv *bc1p2_info);
+extern void usb_phy_notify_charger(struct usb_phy *x);
 extern void sprd_bc1p2_notify_charger(struct usb_phy *x);
 
 extern enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x);
 #else
+static inline void sprd_usb_changed(struct sprd_bc1p2_priv *bc1p2_info,
+				    enum usb_charger_state state) {}
+static inline int usb_add_bc1p2_init(struct sprd_bc1p2_priv *bc1p2_info, struct usb_phy *x)
+{
+	return 0;
+}
+static inline void usb_remove_bc1p2(struct sprd_bc1p2_priv *bc1p2_info) {}
+static inline void usb_phy_notify_charger(struct usb_phy *x) {}
 static inline void sprd_bc1p2_notify_charger(struct usb_phy *x) {}
 
 static inline enum usb_charger_type sprd_bc1p2_charger_detect(struct usb_phy *x)

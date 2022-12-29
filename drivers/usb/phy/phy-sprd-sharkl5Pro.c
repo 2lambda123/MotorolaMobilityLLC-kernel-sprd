@@ -24,7 +24,7 @@
 #include <linux/slab.h>
 #include <linux/usb/otg.h>
 #include <linux/usb/phy.h>
-#include <linux/power/sprd-ump96xx-bc1p2.h>
+#include <linux/power/sprd-bc1p2.h>
 #include <dt-bindings/soc/sprd,sharkl5-mask.h>
 #include <dt-bindings/soc/sprd,sharkl5-regs.h>
 #include <uapi/linux/usb/charger.h>

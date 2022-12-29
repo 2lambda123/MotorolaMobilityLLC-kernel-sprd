@@ -24,7 +24,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/usb/phy.h>
-#include <linux/power/sprd-ump96xx-bc1p2.h>
+#include <linux/power/sprd-bc1p2.h>
 #include <linux/usb/otg.h>
 #include <uapi/linux/usb/charger.h>
 #include <dt-bindings/soc/sprd,sharkle-mask.h>
