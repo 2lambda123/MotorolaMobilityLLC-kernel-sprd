@@ -1315,7 +1315,7 @@
 			};
 
 			apb_bm: apb-busmonitor@32370000 {
-				compatible = "sprd,sharkl5-apb-busmonitor";
+				compatible = "sprd,apb-busmonitor";
 				reg = <0 0x32370000 0 0x1000>;
 				interrupts = <GIC_SPI 102 IRQ_TYPE_LEVEL_HIGH>;
 				sprd,target-addr = <0 0>;
@@ -1360,8 +1360,7 @@
 			djtag: djtag@324e0000 {
 				compatible = "sprd,djtag";
 				reg = <0 0x324e0000 0 0x1000>;
-				syscon-names = "soft_rst";
-				syscons = <&aon_apb_regs REG_AON_APB_APB_RST3
+				syscon = <&aon_apb_regs REG_AON_APB_APB_RST3
 					MASK_AON_APB_DJTAG_SOFT_RST>;
 				clock-names = "enable", "tck";
 				clocks = <&aonapb_gate CLK_DJTAG_EB>,
@@ -1387,12 +1386,12 @@
 					sprd,bm-dap = <0>, <1>, <2>, <3>,
 						<4>, <5>;
 					sprd,bm-config =
-						<ENABLE MON_WRITE MON_INSIDE>,
-						<ENABLE MON_WRITE MON_INSIDE>,
-						<ENABLE MON_WRITE MON_INSIDE>,
-						<ENABLE MON_WRITE MON_INSIDE>,
 						<DISABLE MON_WRITE MON_INSIDE>,
-						<ENABLE MON_WRITE MON_INSIDE>;
+						<DISABLE MON_WRITE MON_INSIDE>,
+						<DISABLE MON_WRITE MON_INSIDE>,
+						<DISABLE MON_WRITE MON_INSIDE>,
+						<DISABLE MON_WRITE MON_INSIDE>,
+						<DISABLE MON_WRITE MON_INSIDE>;
 					sprd,bm-id =
 						<DISABLE 0 AXIID>,
 						<DISABLE 0 AXIID>,
@@ -1401,12 +1400,12 @@
 						<DISABLE 0 AXIID>,
 						<DISABLE 0 AXIID>;
 					sprd,bm-ranges =
-						<0x327d0000 0x327d0018>,
-						<0x327d0000 0x327d0018>,
-						<0x327d0000 0x327d0018>,
-						<0x027d0000 0x027d0018>,
 						<0 0>,
-						<0x327d0000 0x327d0018>;
+						<0 0>,
+						<0 0>,
+						<0 0>,
+						<0 0>,
+						<0 0>;
 				};
 			};
 
@@ -1533,12 +1532,12 @@
 				reg = <0 0x31030000 0 0x10000>;
 				interrupts = <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH>;
 				syscon-names = "irq_clr", "irq_en";
-				syscons = <&pub_apb_regs
-					REG_PUB_APB_PUB_INT_CTRL
-					MASK_PUB_APB_DMC_MPU_VIO_INT_CLR>,
-					<&pub_apb_regs
-					REG_PUB_APB_PUB_INT_CTRL
-					MASK_PUB_APB_DMC_MPU_VIO_INT_EN>;
+				mpu-irq-clr-syscon = <&pub_apb_regs
+						REG_PUB_APB_PUB_INT_CTRL
+						MASK_PUB_APB_DMC_MPU_VIO_INT_CLR>;
+				mpu-irq-en-syscon = <&pub_apb_regs
+						REG_PUB_APB_PUB_INT_CTRL
+						MASK_PUB_APB_DMC_MPU_VIO_INT_EN>;
 				sprd,channel-num = <7>;
 				sprd,mpu-num = <16>;
 				sprd,channel-names =
