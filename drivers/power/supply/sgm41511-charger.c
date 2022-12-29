@@ -52,6 +52,8 @@
 #define SGM41511_DISABLE_PIN_MASK_2730		BIT(0)
 #define SGM41511_DISABLE_PIN_MASK_2721		BIT(15)
 #define SGM41511_DISABLE_PIN_MASK_2720		BIT(0)
+#define SGM41511_DISABLE_PIN_MASK_518		BIT(0)
+#define SGM41511_DISABLE_PIN_MASK_SLAVE_518	BIT(2)
 
 #define VENDOR_SGM41511				(0x1)
 
@@ -101,6 +103,8 @@ struct sgm41511_charger_info {
 	u32 charger_detect;
 	u32 charger_pd;
 	u32 charger_pd_mask;
+	u32 slave_charger_pd;
+	u32 slave_charger_pd_mask;
 	struct gpio_desc *gpiod;
 	struct extcon_dev *typec_extcon;
 	u32 last_limit_current;
@@ -540,7 +544,16 @@ static int sgm41511_charger_start_charge(struct sgm41511_charger_info *info)
 			return ret;
 		}
 	} else if (info->role == SGM41511_ROLE_SLAVE) {
-		gpiod_set_value_cansleep(info->gpiod, 0);
+		if (!IS_ERR(info->gpiod)) {
+			gpiod_set_value_cansleep(info->gpiod, 0);
+		} else {
+			ret = regmap_update_bits(info->pmic, info->slave_charger_pd,
+						 info->slave_charger_pd_mask, 0);
+			if (ret) {
+				dev_err(info->dev, "enable sgm41511 slave charge failed\n");
+				return ret;
+			}
+		}
 	}
 
 	sgm41511_dump_register(info);
@@ -576,7 +589,15 @@ static void sgm41511_charger_stop_charge(struct sgm41511_charger_info *info)
 				dev_err(info->dev, "enable HIZ mode failed\n");
 		}
 
-		gpiod_set_value_cansleep(info->gpiod, 1);
+		if (!IS_ERR(info->gpiod)) {
+			gpiod_set_value_cansleep(info->gpiod, 1);
+		} else {
+			ret = regmap_update_bits(info->pmic, info->slave_charger_pd,
+						 info->slave_charger_pd_mask,
+						 info->slave_charger_pd_mask);
+			if (ret)
+				dev_err(info->dev, "disable sgm41511 slave charge failed\n");
+		}
 	}
 
 	if (info->disable_power_path) {
@@ -786,11 +807,20 @@ static int sgm41511_charger_usb_get_property(struct power_supply *psy,
 				dev_err(info->dev, "get sgm41511 charge status failed\n");
 				goto out;
 			}
+			val->intval = !(enabled & info->charger_pd_mask);
 		} else if (info->role == SGM41511_ROLE_SLAVE) {
-			enabled = gpiod_get_value_cansleep(info->gpiod);
+			if(!IS_ERR(info->gpiod)) {
+				enabled = gpiod_get_value_cansleep(info->gpiod);
+				val->intval = !enabled;
+			} else {
+				ret = regmap_read(info->pmic, info->slave_charger_pd, &enabled);
+				if (ret) {
+					dev_err(info->dev, "get sgm41511 slave charge status failed\n");
+					goto out;
+				}
+				val->intval = !(enabled & info->slave_charger_pd_mask);
+			}
 		}
-
-		val->intval = !enabled;
 		break;
 	default:
 		ret = -EINVAL;
@@ -1221,7 +1251,13 @@ static int sgm41511_charger_probe(struct i2c_client *client,
 		info->gpiod = devm_gpiod_get(dev, "enable", GPIOD_OUT_HIGH);
 		if (IS_ERR(info->gpiod)) {
 			dev_err(dev, "failed to get enable gpio\n");
-			return PTR_ERR(info->gpiod);
+
+			ret = of_property_read_u32_index(regmap_np, "reg", 3,
+							 &info->slave_charger_pd);
+			if (ret) {
+				dev_err(dev, "failed to get slave_charger_pd reg\n");
+				return ret;
+                        }
 		}
 	}
 
@@ -1236,7 +1272,10 @@ static int sgm41511_charger_probe(struct i2c_client *client,
 			info->charger_pd_mask = SGM41511_DISABLE_PIN_MASK_2721;
 		else if (of_device_is_compatible(regmap_np->parent, "sprd,sc2720"))
 			info->charger_pd_mask = SGM41511_DISABLE_PIN_MASK_2720;
-		else if (of_device_is_compatible(regmap_np, "sprd,ump962x-syscon"))
+		else if (of_device_is_compatible(regmap_np->parent, "sprd,ump518")) {
+			info->charger_pd_mask = SGM41511_DISABLE_PIN_MASK_518;
+			info->slave_charger_pd_mask = SGM41511_DISABLE_PIN_MASK_SLAVE_518;
+		} else if (of_device_is_compatible(regmap_np, "sprd,ump962x-syscon"))
 			info->charger_pd_mask = SGM41511_DISABLE_PIN_MASK;
 		else {
 			dev_err(dev, "failed to get charger_pd mask\n");
