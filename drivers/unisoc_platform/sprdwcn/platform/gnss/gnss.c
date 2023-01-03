@@ -225,9 +225,14 @@ int gnss_boot_wait(void)
 	/* if wcn reset will unconfig pcie,when it happend,visit or use pcie can cause bus-busy */
 		if (g_match_config && g_match_config->unisoc_wcn_pcie) {
 			if (!wcn_get_edma_status()) {
-			pr_err("%s:card removed.stop boot gnss", __func__);
-			kfree(buffer);
-			return -1;
+				pr_err("%s:card removed.stop boot gnss", __func__);
+				kfree(buffer);
+				return -1;
+			}
+			if (sprdwcn_bus_get_carddump_status()) {
+				pr_err("%s:stop boot gnss in dump status", __func__);
+				kfree(buffer);
+				return -1;
 			}
 		}
 #endif
