@@ -1142,13 +1142,8 @@ static void dwc3_sprd_hotplug_sm_work(struct work_struct *work)
 			rework = true;
 		} else if (test_bit(A_AUDIO, &sdwc->inputs)) {
 			dev_dbg(sdwc->dev, "A_AUDIO\n");
-			if (regulator_is_enabled(sdwc->vbus)) {
-				ret = regulator_disable(sdwc->vbus);
-				if (ret)
-					dev_err(sdwc->dev,
-						"Failed to disable vbus: %d\n", ret);
-			}
-			usb_role_switch_set_role(dwc->role_sw, USB_ROLE_DEVICE);
+			dwc3_sprd_otg_start_host(sdwc, 0);
+
 			/* start musb */
 			call_sprd_usbm_event_notifiers(SPRD_USBM_EVENT_HOST_MUSB,
 										true, NULL);
@@ -1167,12 +1162,7 @@ static void dwc3_sprd_hotplug_sm_work(struct work_struct *work)
 			sdwc->drd_state = DRD_STATE_IDLE;
 			rework = true;
 			sdwc->glue_dr_mode = USB_DR_MODE_UNKNOWN;
-			dev_dbg(sdwc->dev, "audio exit\n");
-		} else if (test_bit(A_AUDIO, &sdwc->inputs)) {
-			usb_phy_vbus_off(sdwc->ss_phy);
-			pm_runtime_mark_last_busy(dwc->dev);
-			pm_runtime_put(dwc->dev);
-			dev_dbg(sdwc->dev, "digital headset, suspend dwc3 \n");
+			dev_dbg(sdwc->dev, "A_AUDIO exit\n");
 		}
 		break;
 	default:
