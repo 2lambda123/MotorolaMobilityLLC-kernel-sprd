@@ -42,17 +42,11 @@
 #define SC2730_CC_1_DETECT		BIT(0)
 #define SC2730_CC_2_DETECT		BIT(4)
 
-/* additional registers definitions in UMP518 */
-#define UMP518_CABLE_STATUS		0x78
-
 /* UMP518 ONLY registers definitions for controller GLOBAL */
 #define SC27XX_GLOBAL_RESERVED_REG_CORE	0x1b4c
 
 /* UMP518 ONLY SC27XX_GLOBAL__RESERVED_REG_CORE */
 #define UMP518_PULLDOWN_EN		BIT(12)
-
-/* UMP518_CABLE_STATUS */
-#define UMP518_ATTACHED_INT_IS_LAST	BIT(6)
 
 /* SC2721_STATUS */
 #define SC2721_CC_MASK			GENMASK(6, 0)
@@ -634,7 +628,6 @@ static irqreturn_t sc27xx_typec_interrupt(int irq, void *data)
 	struct sc27xx_typec *sc = data;
 	u32 event;
 	int ret;
-	u32 last_int = 0;
 
 	dev_info(sc->dev, "%s enter\n", __func__);
 	ret = regmap_read(sc->regmap, sc->base + SC27XX_INT_MASK, &event);
@@ -649,61 +642,15 @@ static irqreturn_t sc27xx_typec_interrupt(int irq, void *data)
 
 	sc->state &= sc->var_data->state_mask;
 
-	if(UMP518 == sc->var_data->pmic_name) {
-		/**
-		 * UMP518 adds a new regs TYPEC_CABLE_STATUS,
-		 * which can distinguish between attach and detach;
-		 * last_int=0 : detach int is last
-		 * last_int=1 : attach int is last
-		 * Does not consider the case of an interrupt error
-		 * when UMP518_CABLE_STATUS cannot be read.
-		 */
-		ret = regmap_read(sc->regmap, sc->base + UMP518_CABLE_STATUS, &last_int);
-		if (ret){
-			if (event & SC27XX_ATTACH_INT) {
-				ret = sc27xx_typec_connect(sc, sc->state);
-				if (ret)
-					dev_warn(sc->dev, "failed to register partner\n");
-			} else if (event & SC27XX_DETACH_INT) {
-				sc27xx_typec_disconnect(sc, sc->state);
-				ret = sc27xx_typec_random_tdrp(sc);
-				if (ret)
-					dev_warn(sc->dev, "failed to random tdrp\n");
-			}
-		}else{
-			last_int &= UMP518_ATTACHED_INT_IS_LAST;
-			if ((event & SC27XX_ATTACH_INT) && last_int) {
-				ret = sc27xx_typec_connect(sc, sc->state);
-				if (ret)
-					dev_warn(sc->dev, "failed to register partner\n");
-			} else if (((event & SC27XX_DETACH_INT) && (!last_int)) &&
-				   !(event & SC27XX_ATTACH_INT)) {
-				/**
-				 * Consideri the situation that last interrtup
-				 * is detach, but there is no connect function
-				 * excution
-				 */
-				sc27xx_typec_disconnect(sc, sc->state);
-				ret = sc27xx_typec_random_tdrp(sc);
-				if (ret)
-					dev_warn(sc->dev, "failed to random tdrp\n");
-			} else {
-				dev_warn(sc->dev, "event cannot match last_int.\n");
-                          	dev_warn(sc->dev, "last_int = %x event = %x \n", last_int, event);
-				goto clear_ints;
-			}
-		}
-	}else{
-		if (event & SC27XX_ATTACH_INT) {
-			ret = sc27xx_typec_connect(sc, sc->state);
-			if (ret)
-				dev_warn(sc->dev, "failed to register partner\n");
-		} else if (event & SC27XX_DETACH_INT) {
-			sc27xx_typec_disconnect(sc, sc->state);
-			ret = sc27xx_typec_random_tdrp(sc);
-			if (ret)
-				dev_warn(sc->dev, "failed to random tdrp\n");
-		}
+	if (event & SC27XX_ATTACH_INT) {
+		ret = sc27xx_typec_connect(sc, sc->state);
+		if (ret)
+			dev_warn(sc->dev, "failed to register partner\n");
+	} else if (event & SC27XX_DETACH_INT) {
+		sc27xx_typec_disconnect(sc, sc->state);
+		ret = sc27xx_typec_random_tdrp(sc);
+		if (ret)
+			dev_warn(sc->dev, "failed to random tdrp\n");
 	}
 
 clear_ints:
