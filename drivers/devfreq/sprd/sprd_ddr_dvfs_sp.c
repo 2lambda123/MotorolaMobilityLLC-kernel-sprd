@@ -41,6 +41,7 @@ static struct vote_data *find_point(const char *name)
 
 static void set_flag(struct vote_data *point)
 {
+	WARN_ON(point->flag);
 	spin_lock(&lock);
 	point->flag++;
 	spin_unlock(&lock);
