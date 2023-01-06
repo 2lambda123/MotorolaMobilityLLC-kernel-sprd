@@ -57,9 +57,13 @@ static int wcn_freq_qos_update_request_up(void)
 	return 0;
 
 out:
-	for (--i; i >= 0; i--)
-		freq_qos_update_request(&pqos->wcn_freq_qos_req[i],
+	for (--i; i >= 0; i--) {
+		ret = freq_qos_update_request(&pqos->wcn_freq_qos_req[i],
 				pqos->cpu_freq_table[i][CPU_FREQ_LEVEL_INDEX]);
+		if (ret < 0) {
+			WCN_ERR("%s freq restore failed(%d) %d\n", __func__, i, ret);
+		}
+	}
 
 	return -1;
 }
