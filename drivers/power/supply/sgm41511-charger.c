@@ -1247,20 +1247,6 @@ static int sgm41511_charger_probe(struct i2c_client *client,
 	else
 		info->role = SGM41511_ROLE_MASTER;
 
-	if (info->role == SGM41511_ROLE_SLAVE) {
-		info->gpiod = devm_gpiod_get(dev, "enable", GPIOD_OUT_HIGH);
-		if (IS_ERR(info->gpiod)) {
-			dev_err(dev, "failed to get enable gpio\n");
-
-			ret = of_property_read_u32_index(regmap_np, "reg", 3,
-							 &info->slave_charger_pd);
-			if (ret) {
-				dev_err(dev, "failed to get slave_charger_pd reg\n");
-				return ret;
-                        }
-		}
-	}
-
 	regmap_np = of_find_compatible_node(NULL, NULL, "sprd,sc27xx-syscon");
 	if (!regmap_np)
 		regmap_np = of_find_compatible_node(NULL, NULL, "sprd,ump962x-syscon");
@@ -1298,6 +1284,20 @@ static int sgm41511_charger_probe(struct i2c_client *client,
 	if (ret) {
 		dev_err(dev, "failed to get charger_pd reg\n");
 		return ret;
+	}
+
+	if (info->role == SGM41511_ROLE_SLAVE) {
+		info->gpiod = devm_gpiod_get(dev, "enable", GPIOD_OUT_HIGH);
+		if (IS_ERR(info->gpiod)) {
+			dev_err(dev, "failed to get enable gpio\n");
+
+			ret = of_property_read_u32_index(regmap_np, "reg", 3,
+							 &info->slave_charger_pd);
+			if (ret) {
+				dev_err(dev, "failed to get slave_charger_pd reg\n");
+				return ret;
+			}
+		}
 	}
 
 	regmap_pdev = of_find_device_by_node(regmap_np);
