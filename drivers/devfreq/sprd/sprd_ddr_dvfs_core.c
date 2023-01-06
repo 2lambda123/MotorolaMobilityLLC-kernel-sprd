@@ -166,6 +166,44 @@ static int ddrinfo_dfs_step_show(char **arg, char **step_status, char **scene,
 	case 6:
 		*arg = "set_backdoor";
 		break;
+	case 7:
+		*arg = "dfs_on_off";
+		break;
+	case 8:
+		*arg = "change_point";
+		break;
+	case 9:
+		*arg = "scene_freq_set";
+		break;
+	case 10:
+		*arg = "get_overflow_t";
+		break;
+	case 11:
+		*arg = "set_overflow_t";
+		*scene = ddr_dfs_step_s->data.scene;
+		break;
+	case 12:
+		*arg = "get_underflow_t";
+		break;
+	case 13:
+		*arg = "set_underflow_t";
+		*scene = ddr_dfs_step_s->data.scene;
+		break;
+	case 14:
+		*arg = "get_dvfs_status_t";
+		break;
+	case 15:
+		*arg = "get_dvfs_auto_status_t";
+		break;
+	case 16:
+		*arg = "get_cur_freq_t";
+		break;
+	case 17:
+		*arg = "get_freq_table_t";
+		break;
+	case 18:
+		*arg = "send_freq_request_t";
+		break;
 	default:
 		*arg = "NONE_STEP";
 		break;
