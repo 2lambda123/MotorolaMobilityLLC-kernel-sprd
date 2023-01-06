@@ -13,6 +13,8 @@
 
 #define pr_fmt(fmt) "WCN BOOT: " fmt
 
+extern unsigned char  flag_download_done;
+
 struct wcn_sync_info_t {
 	unsigned int init_status;
 	unsigned int mem_pd_bt_start_addr;
