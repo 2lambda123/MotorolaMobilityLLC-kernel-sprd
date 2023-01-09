@@ -153,6 +153,7 @@ struct sdhci_sprd_host {
 	struct register_hotplug reg_rmldo_en;
 	u32 int_status;
 	u32 sdhs_tuning;
+	struct mmc_data *data;
 };
 
 struct sdhci_sprd_phy_cfg {
@@ -220,15 +221,45 @@ static inline void sdhci_sprd_writew(struct sdhci_host *host, u16 val, int reg)
 
 static inline void sdhci_sprd_writeb(struct sdhci_host *host, u8 val, int reg)
 {
-	/*
-	 * Since BIT(3) of SDHCI_SOFTWARE_RESET is reserved according to the
-	 * standard specification, sdhci_reset() write this register directly
-	 * without checking other reserved bits, that will clear BIT(3) which
-	 * is defined as hardware reset on Spreadtrum's platform and clearing
-	 * it by mistake will lead the card not work. So here we need to work
-	 * around it.
-	 */
+	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+	u32 int_status = sprd_host->int_status;
+	u64 i = 0;
+
 	if (unlikely(reg == SDHCI_SOFTWARE_RESET)) {
+		/*
+		 * if send cmd with data err happened, sw reset immediately cannot
+		 * stop controller.It must check following bit before sw reset,
+		 * in SPRD SDIO IP
+		 */
+		if (sprd_host->data && sprd_host->data->error && !host->cmd) {
+			while (!(int_status &
+				(SDHCI_INT_TIMEOUT |
+				 SDHCI_INT_DATA_TIMEOUT |
+				 SDHCI_INT_DATA_END_BIT |
+				 SDHCI_INT_DATA_END
+			))) {
+				int_status |= sdhci_sprd_readl(host, SDHCI_INT_STATUS);
+				if (i++ > 10000000)
+					break;
+				cpu_relax();
+			}
+
+			if (unlikely(val == SDHCI_RESET_DATA) &&
+				(int_status & SDHCI_INT_CMD_MASK)) {
+				sprd_host->data = NULL;
+				return;
+			}
+		} else
+			sprd_host->data = NULL;
+
+		/*
+		 * Since BIT(3) of SDHCI_SOFTWARE_RESET is reserved according to the
+		 * standard specification, sdhci_reset() write this register directly
+		 * without checking other reserved bits, that will clear BIT(3) which
+		 * is defined as hardware reset on Spreadtrum's platform and clearing
+		 * it by mistake will lead the card not work. So here we need to work
+		 * around it.
+		 */
 		if (readb_relaxed(host->ioaddr + reg) & SDHCI_HW_RESET_CARD)
 			val |= SDHCI_HW_RESET_CARD;
 	}
@@ -974,6 +1005,11 @@ static void sdhci_sprd_dump_vendor_regs(struct sdhci_host *host)
 
 static u32 sdhci_sprd_int_status(struct sdhci_host *host, u32 intmask)
 {
+	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+
+	sprd_host->int_status = intmask;
+	sprd_host->data = host->data;
+
 	if (intmask & SDHCI_INT_ERROR_MASK)
 		sdhci_sprd_dump_vendor_regs(host);
 
