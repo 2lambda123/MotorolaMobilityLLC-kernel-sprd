@@ -150,7 +150,8 @@
 #define UMP518_FGU_RELAX_STATE_TIME_THRE_MASK	GENMASK(15, 0)
 #define UMP518_FGU_LOW_CNT_INT_THRE_MASK	GENMASK(15, 0)
 
-#define UMP518_WRITE_SELCLB_EN			BIT(0)
+#define UMP518_FGU_POCV_DISABLE_SOFTRESET	BIT(2)
+#define UMP518_FGU_WRITE_SELCLB_EN		BIT(0)
 #define UMP518_FGU_CLBCNT_MASK			GENMASK(15, 0)
 #define UMP518_FGU_HIGH_OVERLOAD_MASK		GENMASK(12, 0)
 #define UMP518_FGU_LOW_OVERLOAD_MASK		GENMASK(12, 0)
@@ -516,6 +517,13 @@ static int ump518_fgu_get_fgu_sts(struct sprd_fgu_info *info,
 	case SPRD_FGU_INVALID_POCV_STS_CMD:
 		*fgu_sts = (UMP518_FGU_INVALID_POCV_STS_MASK & *fgu_sts) >>
 			UMP518_FGU_INVALID_POCV_STS_SHIFT;
+		if (!(*fgu_sts)) {
+			ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_START,
+						 UMP518_FGU_POCV_DISABLE_SOFTRESET,
+						 UMP518_FGU_POCV_DISABLE_SOFTRESET);
+			if (ret)
+				dev_err(info->dev, "failed to set pocv disable softreset bit.\n");
+		}
 		break;
 	case SPRD_FGU_BATTERY_FLAG_STS_CMD:
 		*fgu_sts = (UMP518_FGU_BATTERY_FLAG_STS_MASK & *fgu_sts) >>
@@ -1167,7 +1175,7 @@ static int ump518_fgu_set_clbcnt(struct sprd_fgu_info *info, s64 clbcnt)
 		return ret;
 
 	return regmap_update_bits(info->regmap, info->base + UMP518_FGU_START,
-				  UMP518_WRITE_SELCLB_EN, UMP518_WRITE_SELCLB_EN);
+				  UMP518_FGU_WRITE_SELCLB_EN, UMP518_FGU_WRITE_SELCLB_EN);
 }
 
 static int ump518_fgu_reset_cc_mah(struct sprd_fgu_info *info, int total_mah, int init_cap)
