@@ -118,6 +118,7 @@ static void sipa_free_sent_items(void)
 	struct sipa_skb_sender *sender;
 	struct sipa_skb_dma_addr_pair *iter, *_iter;
 	struct sipa_plat_drv_cfg *ipa = sipa_get_ctrl_pointer();
+	struct skb_shared_info *shinfo;
 
 	if (!ipa)
 		return;
@@ -174,12 +175,51 @@ check_again:
 		}
 		spin_unlock_irqrestore(&sender->send_lock, flags);
 		if (status) {
+			shinfo = skb_shinfo(iter->skb);
 			if (iter->need_unmap) {
 				iter->need_unmap = false;
 				dma_unmap_single(sender->dev, iter->dma_addr,
 						 iter->skb->len +
 						 skb_headroom(iter->skb),
 						 DMA_TO_DEVICE);
+			}
+
+			if (shinfo->frag_list || shinfo->nr_frags) {
+				dev_err(sender->dev, "skb addr %p, skb nr frags is %d,"
+					"skb has frag list %d\n",
+					iter->skb,
+					shinfo->nr_frags,
+					skb_has_frag_list(iter->skb));
+#ifdef NET_SKBUFF_DATA_USES_OFFSET
+				dev_err(sender->dev, "skb len %d, skb data len %d,"
+					"skb head room %d, skb head pointer %p,"
+					"skb data pointer %p, skb tail pointer %d,"
+					"skb end poineter %d\n",
+					iter->skb->len, iter->skb->data_len,
+					skb_headroom(iter->skb), iter->skb->head,
+					iter->skb->data, iter->skb->tail,
+					iter->skb->end);
+#else
+				dev_err(sender->dev, "skb len %d, skb data len %d,"
+					"skb head room %d, skb head pointer %p,"
+					"skb data pointer %p, skb tail pointer %p,"
+					"skb end poineter %p\n",
+					iter->skb->len, iter->skb->data_len,
+					skb_headroom(iter->skb), iter->skb->head,
+					iter->skb->data, iter->skb->tail,
+					iter->skb->end);
+#endif
+				memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
+
+				/* when network deliver skb to dev, we should modify shinfo->dataref carefully,
+				 * because of other module holding payload dataref.
+				 * entire dataref count must greater than or equal to the payload dataref.
+				 * entire dataref include header part.
+				 */
+				dev_err(sender->dev, "payload dataref is %d, "
+					"entire dataref is %d\n",
+					atomic_read(&shinfo->dataref) >> SKB_DATAREF_SHIFT,
+					atomic_read(&shinfo->dataref) & SKB_DATAREF_MASK);
 			}
 
 			dev_kfree_skb_any(iter->skb);
