@@ -510,10 +510,6 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 		dev_warn(dev, "failed to get dp or dm channel\n");
 	}
 
-	/* enable usb module */
-	regmap_update_bits(phy->apahb, REG_AP_AHB_AHB_EB,
-		MASK_AP_AHB_OTG_EB, MASK_AP_AHB_OTG_EB);
-
 	regmap_update_bits(phy->hsphy_glb, REG_AON_APB_APB_EB2,
 		MASK_AON_APB_ANLG_APB_EB | MASK_AON_APB_ANLG_EB |
 		MASK_AON_APB_OTG_REF_EB,
