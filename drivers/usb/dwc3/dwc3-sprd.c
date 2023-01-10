@@ -28,6 +28,8 @@
 #include <linux/slab.h>
 #include <linux/usb.h>
 #include <linux/usb/phy.h>
+#include <linux/usb/sprd_commonphy.h>
+#include <linux/usb/sprd_typec.h>
 #include <linux/usb/usb_phy_generic.h>
 #include <linux/wait.h>
 #include <linux/extcon.h>
@@ -137,6 +139,7 @@ struct dwc3_sprd {
 	bool			gadget_suspended;
 	bool			in_restart;
 	bool			host_recover;
+	bool			use_pdhub_c2c;
 
 	atomic_t		runtime_suspended;
 	atomic_t		pm_suspended;
@@ -587,12 +590,14 @@ static int dwc3_sprd_otg_start_host(struct dwc3_sprd *sdwc, int on)
 
 	if (on) {
 		dev_info(sdwc->dev, "%s: turn on host\n", __func__);
-		if (!regulator_is_enabled(sdwc->vbus)) {
-			ret = regulator_enable(sdwc->vbus);
-			if (ret) {
-				dev_err(sdwc->dev,
-					"Failed to enable vbus: %d\n", ret);
-				return ret;
+		if (!sdwc->use_pdhub_c2c) {
+			if (!regulator_is_enabled(sdwc->vbus)) {
+				ret = regulator_enable(sdwc->vbus);
+				if (ret) {
+					dev_err(sdwc->dev,
+						"Failed to enable vbus: %d\n", ret);
+					return ret;
+				}
 			}
 		}
 
@@ -607,11 +612,13 @@ static int dwc3_sprd_otg_start_host(struct dwc3_sprd *sdwc, int on)
 		sdwc->glue_dr_mode = USB_DR_MODE_HOST;
 	} else {
 		dev_info(sdwc->dev, "%s: turn off host\n", __func__);
-		if (regulator_is_enabled(sdwc->vbus)) {
-			ret = regulator_disable(sdwc->vbus);
+		if (!sdwc->use_pdhub_c2c) {
+			if (regulator_is_enabled(sdwc->vbus)) {
+				ret = regulator_disable(sdwc->vbus);
 			if (ret)
 				dev_err(sdwc->dev,
 					"Failed to disable vbus: %d\n", ret);
+			}
 		}
 
 		usb_role_switch_set_role(dwc->role_sw, USB_ROLE_DEVICE);
@@ -736,14 +743,25 @@ static int dwc3_sprd_vbus_notifier(struct notifier_block *nb,
 		return NOTIFY_DONE;
 	}
 
+	if (sdwc->use_pdhub_c2c && sc27xx_get_dr_swap_executing() &&
+		!sc27xx_get_current_status_detach_or_attach()) {
+		spin_unlock_irqrestore(&sdwc->lock, flags);
+		dev_info(sdwc->dev, "ignore dr_swap: vbus, typec has been out.\n");
+		return NOTIFY_DONE;
+	}
+
 	dev_info(sdwc->dev, "vbus:%ld event received\n", event);
 
 	sdwc->vbus_active = event;
 
 	if (sdwc->vbus_active && sdwc->chg_state == USB_CHG_STATE_UNDETECT) {
-		spin_unlock_irqrestore(&sdwc->lock, flags);
-		queue_delayed_work(sdwc->sm_usb_wq, &sdwc->chg_detect_work, 0);
-		return NOTIFY_DONE;
+		if (sdwc->use_pdhub_c2c && sc27xx_get_dr_swap_executing()) {
+			sdwc->chg_state = USB_CHG_STATE_DETECTED;
+		} else {
+			spin_unlock_irqrestore(&sdwc->lock, flags);
+			queue_delayed_work(sdwc->sm_usb_wq, &sdwc->chg_detect_work, 0);
+			return NOTIFY_DONE;
+		}
 	}
 
 	if (!sdwc->vbus_active) {
@@ -773,6 +791,13 @@ static int dwc3_sprd_id_notifier(struct notifier_block *nb,
 	spin_lock_irqsave(&sdwc->lock, flags);
 	if (sdwc->id_state == id) {
 		spin_unlock_irqrestore(&sdwc->lock, flags);
+		return NOTIFY_DONE;
+	}
+
+	if (sdwc->use_pdhub_c2c && sc27xx_get_dr_swap_executing() &&
+		!sc27xx_get_current_status_detach_or_attach()) {
+		spin_unlock_irqrestore(&sdwc->lock, flags);
+		dev_info(sdwc->dev, "ignore dr_swap: id, typec has been out.\n");
 		return NOTIFY_DONE;
 	}
 
@@ -1008,6 +1033,10 @@ static void dwc3_sprd_hotplug_sm_work(struct work_struct *work)
 				delay = DWC3_RUNTIME_CHECK_DELAY;
 			} else {
 				pm_runtime_get_sync(sdwc->dev);
+				/*switch dpdm to phy*/
+				if (sdwc->use_pdhub_c2c)
+					call_sprd_usbphy_event_notifiers(SPRD_USBPHY_EVENT_TYPEC,
+						true, NULL);
 				dwc3_sprd_otg_start_peripheral(sdwc, 1);
 				sdwc->drd_state = DRD_STATE_PERIPHERAL;
 				rework = true;
@@ -1081,6 +1110,10 @@ static void dwc3_sprd_hotplug_sm_work(struct work_struct *work)
 			sdwc->start_host_retry_count = 0;
 			rework = true;
 		} else {
+			/*switch dpdm to phy*/
+			if (sdwc->use_pdhub_c2c)
+				call_sprd_usbphy_event_notifiers(SPRD_USBPHY_EVENT_TYPEC,
+						true, NULL);
 			ret = dwc3_sprd_otg_start_host(sdwc, 1);
 			if ((ret == -EPROBE_DEFER) &&
 				sdwc->start_host_retry_count < 3) {
@@ -1418,6 +1451,7 @@ static int dwc3_sprd_probe(struct platform_device *pdev)
 		goto err_extcon_id;
 	}
 
+	sdwc->use_pdhub_c2c = of_property_read_bool(node, "use_pdhub_c2c");
 	sdwc->wake_lock = wakeup_source_create("dwc3-sprd");
 	wakeup_source_add(sdwc->wake_lock);
 
