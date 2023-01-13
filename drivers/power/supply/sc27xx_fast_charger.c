@@ -59,6 +59,7 @@
 #define UMP518_IB_TRIM_OFFSET			0x0
 #define UMP518_IB_TRIM_EFUSE_MASK		GENMASK(6, 0)
 #define UMP518_IB_TRIM_EFUSE_SHIFT		0
+#define UMP518_FSTCHG_DET			0x1d28
 
 #define ANA_REG_IB_TRIM_MASK			GENMASK(6, 0)
 #define ANA_REG_IB_TRIM_SHIFT			2
@@ -91,6 +92,12 @@
 /* FCHG1_TIME2_VALUE is used for detect the time of V > VT2 */
 #define FCHG1_TIME2_VALUE			0x9c4
 
+/* This function is available only after ump518 */
+#define FSTCHG_LDO_BYPASS_MASK			BIT(2)
+#define FSTCHG_LDO_BYPASS_SHIFT			2
+#define FSTCHG_LDO_VSEL_MASK			GENMASK(1, 0)
+#define FSTCHG_LDO_VSEL_SHIFT			0
+
 #define FCHG_VOLTAGE_5V				5000000
 #define FCHG_VOLTAGE_9V				9000000
 #define FCHG_VOLTAGE_12V			12000000
@@ -100,49 +107,71 @@
 
 #define SC27XX_FCHG_TIMEOUT			msecs_to_jiffies(5000)
 
+#define PMIC_SC2721				1
+#define PMIC_SC2730				2
+#define PMIC_UMP9620				3
+#define PMIC_UMP518				4
+
+enum sc27xx_psu_mode {
+	SC27XX_PSU_BATTERY_MODE = 0,
+	SC27XX_PSU_LDO_MODE_3P4V,
+	SC27XX_PSU_LDO_MODE_3P6V,
+	SC27XX_PSU_LDO_MODE_3P8V,
+};
+
 struct sc27xx_fast_chg_data {
+	u32 id;
 	u32 module_en;
 	u32 clk_en;
 	u32 ib_ctrl;
 	u32 ib_trim_offset;
 	u32 ib_trim_efuse_mask;
 	u32 ib_trim_efuse_shift;
+	u32 fstchg_det;
 };
 
 static const struct sc27xx_fast_chg_data sc2721_info = {
+	.id = PMIC_SC2721,
 	.module_en = SC2721_MODULE_EN0,
 	.clk_en = SC2721_CLK_EN0,
 	.ib_ctrl = SC2721_IB_CTRL,
 	.ib_trim_offset = SC2721_IB_TRIM_OFFSET,
 	.ib_trim_efuse_mask = SC2721_IB_TRIM_EFUSE_MASK,
 	.ib_trim_efuse_shift = SC2721_IB_TRIM_EFUSE_SHIFT,
+	.fstchg_det = 0,
 };
 
 static const struct sc27xx_fast_chg_data sc2730_info = {
+	.id = PMIC_SC2730,
 	.module_en = SC2730_MODULE_EN0,
 	.clk_en = SC2730_CLK_EN0,
 	.ib_ctrl = SC2730_IB_CTRL,
 	.ib_trim_offset = SC2730_IB_TRIM_OFFSET,
 	.ib_trim_efuse_mask = SC2730_IB_TRIM_EFUSE_MASK,
 	.ib_trim_efuse_shift = SC2730_IB_TRIM_EFUSE_SHIFT,
+	.fstchg_det = 0,
 };
 
 static const struct sc27xx_fast_chg_data ump9620_info = {
+	.id = PMIC_UMP9620,
 	.module_en = UMP9620_MODULE_EN0,
 	.clk_en = UMP9620_CLK_EN0,
 	.ib_ctrl = UMP9620_IB_CTRL,
 	.ib_trim_offset = UMP9620_IB_TRIM_OFFSET,
 	.ib_trim_efuse_mask = UMP9620_IB_TRIM_EFUSE_MASK,
 	.ib_trim_efuse_shift = UMP9620_IB_TRIM_EFUSE_SHIFT,
+	.fstchg_det = 0,
 };
 
 static const struct sc27xx_fast_chg_data ump518_info = {
+	.id = PMIC_UMP518,
 	.module_en = UMP518_MODULE_EN0,
 	.clk_en = UMP518_CLK_EN0,
 	.ib_ctrl = UMP518_IB_CTRL,
 	.ib_trim_offset = UMP518_IB_TRIM_OFFSET,
 	.ib_trim_efuse_mask = UMP518_IB_TRIM_EFUSE_MASK,
 	.ib_trim_efuse_shift = UMP518_IB_TRIM_EFUSE_SHIFT,
+	.fstchg_det = UMP518_FSTCHG_DET,
 };
 
 struct sc27xx_fchg_info {
@@ -574,6 +603,45 @@ static void sc27xx_fchg_work(struct work_struct *data)
 	mutex_unlock(&info->lock);
 }
 
+static int sc27xx_select_module_psu(struct sc27xx_fchg_info *info,
+				    enum sc27xx_psu_mode psu_mode)
+{
+	const struct sc27xx_fast_chg_data *pdata = info->pdata;
+	u32 reg_val;
+
+	if (pdata->fstchg_det == 0) {
+		dev_err(info->dev, "%s, the pmic module can only be powered by battery\n",
+			__func__);
+		return 0;
+	}
+
+	switch (psu_mode) {
+	case SC27XX_PSU_BATTERY_MODE:
+		reg_val = (1 << FSTCHG_LDO_BYPASS_SHIFT) & FSTCHG_LDO_BYPASS_MASK;
+		break;
+	case SC27XX_PSU_LDO_MODE_3P8V:
+		reg_val = (0 << FSTCHG_LDO_BYPASS_SHIFT) & FSTCHG_LDO_BYPASS_MASK;
+		reg_val |= (2 << FSTCHG_LDO_VSEL_SHIFT) & FSTCHG_LDO_VSEL_MASK;
+		break;
+	case SC27XX_PSU_LDO_MODE_3P6V:
+		reg_val = (0 << FSTCHG_LDO_BYPASS_SHIFT) & FSTCHG_LDO_BYPASS_MASK;
+		reg_val |= (1 << FSTCHG_LDO_VSEL_SHIFT) & FSTCHG_LDO_VSEL_MASK;
+		break;
+	case SC27XX_PSU_LDO_MODE_3P4V:
+	default:
+		reg_val = (0 << FSTCHG_LDO_BYPASS_SHIFT) & FSTCHG_LDO_BYPASS_MASK;
+		reg_val |= (0 << FSTCHG_LDO_VSEL_SHIFT) & FSTCHG_LDO_VSEL_MASK;
+		break;
+	}
+
+	dev_info(info->dev, "%s , the module is powered by %s\n",
+		 __func__, (psu_mode == SC27XX_PSU_BATTERY_MODE) ? "battery" : "ldo");
+
+	return regmap_update_bits(info->regmap, pdata->fstchg_det,
+				  FSTCHG_LDO_BYPASS_MASK | FSTCHG_LDO_VSEL_MASK,
+				  reg_val);
+}
+
 static int sc27xx_fchg_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -631,6 +699,12 @@ static int sc27xx_fchg_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request irq.\n");
 		return ret;
+	}
+
+	ret = sc27xx_select_module_psu(info, SC27XX_PSU_LDO_MODE_3P4V);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to select module power supply, ret = %d\n", ret);
+		return -EPROBE_DEFER;
 	}
 
 	charger_cfg.drv_data = info;
