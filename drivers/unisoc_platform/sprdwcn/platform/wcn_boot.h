@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) "WCN BOOT: " fmt
 
 extern unsigned char  flag_download_done;
+extern unsigned char is_ums9620;
 
 struct wcn_sync_info_t {
 	unsigned int init_status;
@@ -113,5 +114,7 @@ struct marlin_device {
 	phys_addr_t	base_addr_gnss;
 	u32	maxsz_gnss;
 };
+
+int marlin_avdd18_dcxo_enable(bool enable);
 
 #endif

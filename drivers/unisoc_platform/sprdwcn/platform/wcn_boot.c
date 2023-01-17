@@ -1457,7 +1457,7 @@ static int marlin_clk_enable(bool enable)
 	return ret;
 }
 
-static int marlin_avdd18_dcxo_enable(bool enable)
+int marlin_avdd18_dcxo_enable(bool enable)
 {
 	int ret = 0;
 	struct wcn_match_data *g_match_config = get_wcn_match_config();

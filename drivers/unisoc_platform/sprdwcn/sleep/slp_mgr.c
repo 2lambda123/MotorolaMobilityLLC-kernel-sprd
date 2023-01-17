@@ -30,13 +30,13 @@
 
 #include <misc/wcn_bus.h>
 #include "../sdio/sdiohal.h"
+#include "../platform/wcn_boot.h"
 #include "slp_mgr.h"
 #include "slp_sdio.h"
 #include "wcn_glb.h"
 #include "slp_dbg.h"
 
 static struct slp_mgr_t slp_mgr;
-extern unsigned char is_ums9620;
 
 struct slp_mgr_t *slp_get_info(void)
 {
@@ -61,6 +61,7 @@ void slp_mgr_drv_sleep(enum slp_subsys subsys, bool enable)
 int slp_mgr_wakeup(enum slp_subsys subsys)
 {
 	unsigned char slp_sts = 0;
+	unsigned char cnt = 0;
 	int ret;
 	int do_dump = 0;
 	ktime_t time_end;
@@ -74,11 +75,7 @@ int slp_mgr_wakeup(enum slp_subsys subsys)
 	mutex_lock(&(slp_mgr.wakeup_lock));
 	if (STAY_SLPING == (atomic_read(&(slp_mgr.cp2_state)))) {
 		ap_wakeup_cp();
-		if (is_ums9620) {
-			time_end = ktime_add_ms(ktime_get(), 20);//wakeup fail 10->20
-		}
-		else
-			time_end = ktime_add_ms(ktime_get(), 5);
+		time_end = ktime_add_ms(ktime_get(), 5);
 		while (1) {
 			ret = sprdwcn_bus_aon_readb(get_btwf_slp_sts_reg(), &slp_sts);
 			if (ret < 0) {
@@ -87,7 +84,14 @@ int slp_mgr_wakeup(enum slp_subsys subsys)
 				goto try_timeout;
 			}
 			slp_sts &= 0xF0;
-
+			if (g_match_config && g_match_config->unisoc_wcn_m3lite && is_ums9620) {
+				if ((slp_sts != BTWF_WAKEUP_LOCK) && (cnt == 0)) {
+					marlin_avdd18_dcxo_enable(true);
+					WCN_INFO(" cnt-%d, subsys-%d\n",
+						cnt, subsys);
+					cnt++;
+				}
+			}
 			if (g_match_config && g_match_config->unisoc_wcn_m3lite) {
 				if ((slp_sts != BTWF_IN_DEEPSLEEP) &&
 				   (slp_sts != M3L_BTWF_PLL_PWR_WAIT) &&
