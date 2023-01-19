@@ -110,7 +110,7 @@ struct sprd_fgu_device_ops {
 	int (*enable_fgu_int)(struct sprd_fgu_info *info, enum sprd_fgu_int_command int_cmd, bool enable);
 	int (*get_fgu_int)(struct sprd_fgu_info *info, int *int_sts);
 	int (*enable_relax_cnt_mode)(struct sprd_fgu_info *info);
-	int (*suspend_calib_check_power_low_sts)(struct sprd_fgu_info *info);
+	int (*suspend_calib_check_relax_counter_sts)(struct sprd_fgu_info *info);
 	int (*cap2mah)(struct sprd_fgu_info *info, int total_mah, int cap);
 	int (*set_low_overload)(struct sprd_fgu_info *info, int vol);
 	int (*set_high_overload)(struct sprd_fgu_info *info, int vol);
@@ -124,12 +124,6 @@ struct sprd_fgu_device_ops {
 	int (*get_cc_uah)(struct sprd_fgu_info *info, int *cc_uah, bool is_adjust);
 	int (*adjust_cap)(struct sprd_fgu_info *info, int cap);
 	int (*set_cap_delta_thre)(struct sprd_fgu_info *info, int total_mah, int cap);
-	int (*set_relax_cur_thre)(struct sprd_fgu_info *info, int relax_cur_threshold);
-	int (*get_relax_cur_low)(struct sprd_fgu_info *info, int *cur_sts);
-	int (*get_relax_power_low)(struct sprd_fgu_info *info, int *power_sts);
-	int (*get_power_low_cnt_int)(struct sprd_fgu_info *info, int *int_sts);
-	int (*set_relax_state_time_thre)(struct sprd_fgu_info *info, int time);
-	int (*set_power_low_counter_thre)(struct sprd_fgu_info *info, int cnt);
 	int (*relax_mode_config)(struct sprd_fgu_info *info);
 	int (*fgu_calibration)(struct sprd_fgu_info *info);
 	int (*get_poci)(struct sprd_fgu_info *info, int *val);

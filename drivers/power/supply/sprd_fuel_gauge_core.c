@@ -1658,44 +1658,6 @@ static int sprd_fgu_suspend_calib_check_temp(struct sprd_fgu_data *data)
 	return ret;
 }
 
-/* static int sprd_fgu_suspend_calib_check_relax_cnt_int(struct sprd_fgu_data *data)
-{
-	int ret = -EINVAL;
-	u32 int_status;
-
-	mutex_lock(&data->lock);
-	if (data->slp_cap_calib.relax_cnt_int_ocurred) {
-		data->slp_cap_calib.relax_cnt_int_ocurred = false;
-		ret = 0;
-		dev_info(data->dev, "RELAX_CNT_INT ocurred 1!!\n");
-		goto no_relax_cnt_int;
-	}
-
-	ret = regmap_read(data->regmap, data->base + sprd_fgu_INT_STS, &int_status);
-	if (ret) {
-		dev_err(data->dev, "suspend_calib failed to get fgu interrupt status, ret = %d\n", ret);
-		goto no_relax_cnt_int;
-	}
-
-	if (!(int_status & SPRD_FGU_RELAX_CNT_STS)) {
-		dev_info(data->dev, "no RELAX_CNT_INT ocurred!!\n");
-		ret = -EINVAL;
-		goto no_relax_cnt_int;
-	}
-
-	ret = regmap_update_bits(data->regmap, data->base + sprd_fgu_INT_CLR,
-				 SPRD_FGU_RELAX_CNT_STS, SPRD_FGU_RELAX_CNT_STS);
-	if (ret)
-		dev_err(data->dev, "failed to clear  RELAX_CNT_STS interrupt status, ret = %d\n", ret);
-
-	dev_info(data->dev, "RELAX_CNT_INT ocurred!!\n");
-	ret = 0;
-
-no_relax_cnt_int:
-	mutex_unlock(&data->lock);
-	return ret;
-} */
-
 static int sprd_fgu_suspend_calib_check_sleep_time(struct sprd_fgu_data *data)
 {
 	s64 cur_time;
@@ -1826,13 +1788,9 @@ static void sprd_fgu_suspend_calib_check(struct sprd_fgu_data *data)
 	if (ret)
 		return;
 
-	ret = fgu_info->ops->suspend_calib_check_power_low_sts(fgu_info);
+	ret = fgu_info->ops->suspend_calib_check_relax_counter_sts(fgu_info);
 	if (ret)
 		return;
-
-/* 	ret = sprd_fgu_suspend_calib_check_relax_cnt_int(data);
-	if (ret)
-		return; */
 
 	ret = sprd_fgu_suspend_calib_check_sleep_time(data);
 	if (ret)

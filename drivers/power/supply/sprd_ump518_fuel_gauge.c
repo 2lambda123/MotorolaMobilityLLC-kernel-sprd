@@ -157,20 +157,16 @@
 #define UMP518_FGU_LOW_OVERLOAD_MASK		GENMASK(12, 0)
 
 #define UMP518_FGU_CURRENT_BUFF_CNT		8
-#define UMP518_FGU_DISCHG_CNT			4
 #define UMP518_FGU_VOLTAGE_BUFF_CNT		8
 
 #define UMP518_FGU_MODE_AREA_MASK		GENMASK(15, 12)
 #define UMP518_FGU_CAP_AREA_MASK		GENMASK(11, 0)
-#define UMP518_FGU_MODE_AREA_SHIFT		12
 #define UMP518_FGU_CAP_INTEGER_MASK		GENMASK(7, 0)
 #define UMP518_FGU_CAP_DECIMAL_MASK		GENMASK(3, 0)
-#define UMP518_FGU_CAP_DECIMAL_SHIFT		8
-
 #define UMP518_FGU_FIRST_POWERON		GENMASK(3, 0)
 #define UMP518_FGU_DEFAULT_CAP			GENMASK(11, 0)
-#define UMP518_FGU_NORMAL_POWERON		0x5
-#define UMP518_FGU_RTC2_RESET_VALUE		0xA05
+#define UMP518_FGU_MODE_AREA_SHIFT		12
+#define UMP518_FGU_CAP_DECIMAL_SHIFT		8
 
 #define UMP518_FGU_INT_MASK			GENMASK(3, 0)
 #define UMP518_FGU_MAGIC_NUMBER			0x5a5aa5a5
@@ -541,7 +537,7 @@ static int ump518_fgu_get_fgu_sts(struct sprd_fgu_info *info,
 	return ret;
 }
 
-static int ump518_fgu_suspend_calib_check_power_low_sts(struct sprd_fgu_info *info)
+static int ump518_fgu_suspend_calib_check_relax_counter_sts(struct sprd_fgu_info *info)
 {
 	int ret = -EINVAL, cur_sts = 0, power_sts = 0;
 
@@ -1286,58 +1282,6 @@ static inline int ump518_fgu_set_power_low_counter_thre(struct sprd_fgu_info *in
 				  UMP518_FGU_LOW_CNT_INT_THRE_MASK, cnt);
 }
 
-static int ump518_fgu_get_relax_cur_low(struct sprd_fgu_info *info, int *cur_sts)
-{
-	int sts = 0, ret = 0;
-
-	ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &sts);
-	if (ret) {
-		dev_err(info->dev, "failed to get fgu status\n");
-		return ret;
-	}
-
-	*cur_sts = (UMP518_FGU_RELAX_CURT_STS_MASK & sts) >> UMP518_FGU_RELAX_CURT_STS_SHIFT;
-
-	return ret;
-}
-
-static int ump518_fgu_get_relax_power_low(struct sprd_fgu_info *info, int *power_sts)
-{
-	int sts = 0, ret = 0;
-
-	ret = regmap_read(info->regmap, info->base + UMP518_FGU_STATUS, &sts);
-	if (ret) {
-		dev_err(info->dev, "failed to get fgu status\n");
-		return ret;
-	}
-
-	*power_sts = (UMP518_FGU_RELAX_POWER_STS_MASK & sts) >> UMP518_FGU_RELAX_POWER_STS_SHIFT;
-
-	return ret;
-}
-
-static int ump518_fgu_get_power_low_cnt_int(struct sprd_fgu_info *info, int *int_sts)
-{
-	int ret = 0;
-
-	ret = regmap_read(info->regmap, info->base + UMP518_FGU_INT_STS, int_sts);
-	if (ret) {
-		dev_err(info->dev, "failed to get fgu int status\n");
-		return ret;
-	}
-
-	ret = regmap_update_bits(info->regmap, info->base + UMP518_FGU_INT_CLR,
-				 *int_sts, *int_sts);
-	if (ret) {
-		dev_err(info->dev, "failed to clr power low cnt int, ret = %d\n", ret);
-		return ret;
-	}
-
-	*int_sts = (UMP518_FGU_POWER_LOW_CNT_INT & *int_sts) >> UMP518_FGU_POWER_LOW_CNT_INT_SHIFT;
-
-	return ret;
-}
-
 static int ump518_fgu_relax_mode_config(struct sprd_fgu_info *info)
 {
 	int ret = 0;
@@ -1539,7 +1483,7 @@ struct sprd_fgu_device_ops ump518_fgu_dev_ops = {
 	.set_high_overload = ump518_fgu_set_high_overload,
 	.enable_fgu_int = ump518_fgu_enable_fgu_int,
 	.get_fgu_int = ump518_fgu_get_fgu_int,
-	.suspend_calib_check_power_low_sts = ump518_fgu_suspend_calib_check_power_low_sts,
+	.suspend_calib_check_relax_counter_sts = ump518_fgu_suspend_calib_check_relax_counter_sts,
 	.cap2mah = ump518_fgu_cap2mah,
 	.get_vbat_now = ump518_fgu_get_vbat_now,
 	.get_vbat_avg = ump518_fgu_get_vbat_avg,
@@ -1551,12 +1495,6 @@ struct sprd_fgu_device_ops ump518_fgu_dev_ops = {
 	.get_cc_uah = ump518_fgu_get_cc_uah,
 	.adjust_cap = ump518_fgu_adjust_cap,
 	.set_cap_delta_thre = ump518_fgu_set_cap_delta_thre,
-	.set_relax_cur_thre = ump518_fgu_set_relax_cur_thre,
-	.set_relax_state_time_thre = ump518_fgu_set_relax_state_time_thre,
-	.set_power_low_counter_thre = ump518_fgu_set_power_low_counter_thre,
-	.get_relax_cur_low = ump518_fgu_get_relax_cur_low,
-	.get_relax_power_low = ump518_fgu_get_relax_power_low,
-	.get_power_low_cnt_int = ump518_fgu_get_power_low_cnt_int,
 	.relax_mode_config = ump518_fgu_relax_mode_config,
 	.get_poci = ump518_fgu_get_poci,
 	.get_pocv = ump518_fgu_get_pocv,
