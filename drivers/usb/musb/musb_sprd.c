@@ -1741,7 +1741,9 @@ static int musb_sprd_suspend(struct device *dev)
 	struct musb *musb = platform_get_drvdata(glue->musb);
 	u32 msk, val;
 	int ret;
+	unsigned long flags;
 
+	dev_info(glue->dev, "%s: enter\n", __func__);
 	if (musb->is_offload && !musb->offload_used) {
 		if (glue->vbus) {
 			ret = regulator_disable(glue->vbus);
@@ -1756,8 +1758,30 @@ static int musb_sprd_suspend(struct device *dev)
 					   msk, val);
 		}
 	}
-	glue->is_suspend = true;
 
+	/* in host audio offload mode, don't do suspend */
+ 	if (glue->dr_mode == USB_DR_MODE_HOST && musb->is_offload) {
+ 		dev_info(glue->dev, "don't do %s in offload mode\n", __func__);
+ 		return 0;
+ 	}
+
+	ret = pm_runtime_get_sync(musb->controller);
+	if (ret) {
+		dev_err(musb->controller,
+			"musb controller pm_runtime_get_sync failed with %d.\n", ret);
+	}
+
+	spin_lock_irqsave(&glue->lock, flags);
+ 	musb_sprd_disable_all_interrupts(musb);
+ 	glue->suspending = true;
+ 	spin_unlock_irqrestore(&glue->lock, flags);
+
+ 	clk_disable_unprepare(glue->clk);
+
+ 	if (!musb->shutdowning)
+ 		usb_phy_shutdown(glue->xceiv);
+
+	glue->is_suspend = true;
 	return 0;
 }
 
@@ -1767,7 +1791,9 @@ static int musb_sprd_resume(struct device *dev)
 	struct musb *musb = platform_get_drvdata(glue->musb);
 	u32 msk;
 	int ret;
+	unsigned long flags;
 
+	dev_info(glue->dev, "%s: enter\n", __func__);
 	if (musb->is_offload && !musb->offload_used) {
 		if (glue->vbus) {
 			ret = regulator_enable(glue->vbus);
@@ -1782,8 +1808,23 @@ static int musb_sprd_resume(struct device *dev)
 					   msk, 0);
 		}
 	}
-	glue->is_suspend = false;
 
+	if (glue->dr_mode == USB_DR_MODE_HOST && musb->is_offload) {
+		dev_info(glue->dev, "don't do %s in offload mode\n", __func__);
+		return 0;
+	}
+
+	glue->is_suspend = false;
+	clk_prepare_enable(glue->clk);
+	spin_lock_irqsave(&glue->lock, flags);
+	glue->suspending = false;
+	spin_unlock_irqrestore(&glue->lock, flags);
+
+	if (!musb->shutdowning)
+		usb_phy_init(glue->xceiv);
+
+	pm_runtime_mark_last_busy(musb->controller);
+	ret = pm_runtime_put_autosuspend(musb->controller);
 	return 0;
 }
 
