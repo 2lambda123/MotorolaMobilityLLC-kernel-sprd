@@ -112,11 +112,16 @@ void wcn_dump_process(enum wcn_source_type type)
 {
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
+
 	if (dump_cnt) {
 		WCN_ERR("dump_cnt: %d, not dump again!\n", dump_cnt);
 		return;
 	}
 
+	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
+	/* check pcie link status, reset if disconnected, or do nothing */
+		wcn_reset_pcie();
+	}
 	WCN_INFO("%s dumpmem begin\n", __func__);
 	sprdwcn_bus_set_carddump_status(true);
 

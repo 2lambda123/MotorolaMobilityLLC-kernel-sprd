@@ -126,6 +126,11 @@ static void pcie_remove_card(void *wcn_dev)
 	return sprd_pcie_remove_card(wcn_dev);
 }
 
+static void pcie_reset(void *wcn_dev)
+{
+	sprd_pcie_reset(wcn_dev);
+}
+
 static enum wcn_hard_intf_type pcie_get_hwintf_type(void)
 {
 	return HW_TYPE_PCIE;
@@ -155,6 +160,7 @@ static struct sprdwcn_bus_ops pcie_bus_ops = {
 	.register_rescan_cb = pcie_register_rescan_cb,
 	.rescan = pcie_rescan,
 	.remove_card = pcie_remove_card,
+	.reset = pcie_reset,
 };
 
 void module_bus_pcie_init(void)

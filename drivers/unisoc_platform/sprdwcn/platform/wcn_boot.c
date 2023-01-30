@@ -2307,6 +2307,13 @@ static int chip_power_off(enum wcn_sub_sys subsys)
 	return 0;
 }
 
+void wcn_reset_pcie(void)
+{
+	pr_info("%s\n", __func__);
+	sprdwcn_bus_reset(marlin_dev);
+}
+EXPORT_SYMBOL_GPL(wcn_reset_pcie);
+
 void wcn_chip_power_on(void)
 {
 	chip_power_on(0);
