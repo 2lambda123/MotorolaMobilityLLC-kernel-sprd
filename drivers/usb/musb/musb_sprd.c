@@ -1032,7 +1032,6 @@ static void sprd_musb_work(struct work_struct *work)
 
 		if (cnt <= 0) {
 			glue->dr_mode = USB_DR_MODE_UNKNOWN;
-			glue->vbus = NULL;
 			dev_err(musb->controller,
 				"Wait for musb controller enter suspend failed!\n");
 			goto end;
