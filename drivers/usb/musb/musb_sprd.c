@@ -1765,14 +1765,7 @@ static int musb_sprd_suspend(struct device *dev)
  		return 0;
  	}
 
-	ret = pm_runtime_get_sync(musb->controller);
-	if (ret) {
-		dev_err(musb->controller,
-			"musb controller pm_runtime_get_sync failed with %d.\n", ret);
-	}
-
 	spin_lock_irqsave(&glue->lock, flags);
- 	musb_sprd_disable_all_interrupts(musb);
  	glue->suspending = true;
  	spin_unlock_irqrestore(&glue->lock, flags);
 
@@ -1822,9 +1815,6 @@ static int musb_sprd_resume(struct device *dev)
 
 	if (!musb->shutdowning)
 		usb_phy_init(glue->xceiv);
-
-	pm_runtime_mark_last_busy(musb->controller);
-	ret = pm_runtime_put_autosuspend(musb->controller);
 	return 0;
 }
 
