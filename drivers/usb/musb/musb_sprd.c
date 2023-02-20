@@ -1741,7 +1741,6 @@ static int musb_sprd_suspend(struct device *dev)
 	struct musb *musb = platform_get_drvdata(glue->musb);
 	u32 msk, val;
 	int ret;
-	unsigned long flags;
 
 	dev_info(glue->dev, "%s: enter\n", __func__);
 	if (musb->is_offload && !musb->offload_used) {
@@ -1758,23 +1757,8 @@ static int musb_sprd_suspend(struct device *dev)
 					   msk, val);
 		}
 	}
-
-	/* in host audio offload mode, don't do suspend */
- 	if (glue->dr_mode == USB_DR_MODE_HOST && musb->is_offload) {
- 		dev_info(glue->dev, "don't do %s in offload mode\n", __func__);
- 		return 0;
- 	}
-
-	spin_lock_irqsave(&glue->lock, flags);
- 	glue->suspending = true;
- 	spin_unlock_irqrestore(&glue->lock, flags);
-
- 	clk_disable_unprepare(glue->clk);
-
- 	if (!musb->shutdowning)
- 		usb_phy_shutdown(glue->xceiv);
-
 	glue->is_suspend = true;
+
 	return 0;
 }
 
@@ -1784,7 +1768,6 @@ static int musb_sprd_resume(struct device *dev)
 	struct musb *musb = platform_get_drvdata(glue->musb);
 	u32 msk;
 	int ret;
-	unsigned long flags;
 
 	dev_info(glue->dev, "%s: enter\n", __func__);
 	if (musb->is_offload && !musb->offload_used) {
@@ -1801,20 +1784,8 @@ static int musb_sprd_resume(struct device *dev)
 					   msk, 0);
 		}
 	}
-
-	if (glue->dr_mode == USB_DR_MODE_HOST && musb->is_offload) {
-		dev_info(glue->dev, "don't do %s in offload mode\n", __func__);
-		return 0;
-	}
-
 	glue->is_suspend = false;
-	clk_prepare_enable(glue->clk);
-	spin_lock_irqsave(&glue->lock, flags);
-	glue->suspending = false;
-	spin_unlock_irqrestore(&glue->lock, flags);
 
-	if (!musb->shutdowning)
-		usb_phy_init(glue->xceiv);
 	return 0;
 }
 
