@@ -14,11 +14,11 @@
 
 / {
 
-	model = "Spreadtrum UMS9230-1H10-GO Board";
+	model = "Spreadtrum M170 Board";
 
-	compatible = "sprd,ums9230-1h10-go";
+	compatible = "sprd,M170";
 
-	sprd,sc-id = "ums9230 1h10 go";
+	sprd,sc-id = "M170";
 	fragment {
 		target-path = "/";
 		__overlay__ {

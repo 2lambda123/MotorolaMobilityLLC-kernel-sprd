@@ -1,0 +1,154 @@
+
+/*
+ * ili9882q  LCD config dtsi file for spreadtrum
+ *
+ * Copyright (C) 2022, Spreadtrum Communications Inc.
+ *
+ * SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ */
+
+/ {
+	fragment {
+		target-path = "/";
+		__overlay__ {
+			lcds {
+				lcd_ili9882q_boe_mipi_hd: lcd_ili9882q_boe_mipi_hd {
+
+					sprd,dsi-work-mode = <1>; /* video burst mode*/
+					sprd,dsi-lane-number = <4>;
+					sprd,dsi-color-format = "rgb888";
+
+					sprd,phy-bit-clock = <905000>;	/* kbps */
+					sprd,phy-escape-clock = <20000>;/* kHz */
+
+					sprd,power-gpio-delay = <20>;/* ms */
+
+					sprd,width-mm = <68>;
+					sprd,height-mm = <152>;
+
+					sprd,esd-check-enable = <1>;
+					sprd,esd-check-mode = <0>;
+					sprd,esd-check-period = <2000>;
+					sprd,esd-check-regs = <0xA>;
+					sprd,esd-return-code = <0x9c>;
+
+					sprd,reset-on-sequence = <1 5>, <0 5>, <1 10>;
+					//sprd,reset-off-sequence = <0 5>;
+
+					sprd,initial-command = [
+						39 00 00 04 FF 98 82 06
+						39 00 00 02 06 A4
+						39 00 00 04 FF 98 82 03
+						39 00 00 02 80 03
+						39 00 00 02 81 04
+						39 00 00 02 82 05
+						39 00 00 02 83 20
+						39 00 00 02 84 00
+						39 00 00 02 8C 97
+						39 00 00 02 8D A3
+						39 00 00 02 8E AD
+						39 00 00 02 8F BD
+						39 00 00 02 90 CC
+						39 00 00 02 91 DC
+						39 00 00 02 92 E6
+						39 00 00 02 93 F2
+						39 00 00 02 94 FA
+						39 00 00 02 95 FF
+						39 00 00 02 B4 e6
+
+						39 00 00 04 FF 98 82 00
+						39 00 00 02 35 00
+						39 00 00 03 51 00 00
+						39 00 00 02 53 2C
+						39 00 00 02 55 02
+						39 00 00 03 68 04 01
+						05 46 00 01 11
+
+						39 00 00 04 FF 98 82 01
+						39 00 00 02 06 00    //35 20220901
+						39 00 00 02 37 23 //01 VDS 20220824
+						39 00 00 02 4D 23  //01 VDS 20220824
+						39 00 00 02 62 23   //00 VSD 20220824
+						39 00 00 02 78 23    //00 VSD 20220824
+						39 00 00 02 D3 20    //STCH2 PON VGL   20220824 VDS/VSD
+						39 00 00 02 DA 20  //STCH2 POFF VGH 20220824 VDS/VSD
+						39 00 00 02 EE 00     //STCH TOGGLE DISABLE 20220824
+
+						39 00 00 04 FF 98 82 02
+						39 00 00 02 40 4A        // SDT=2.12us 20220823
+
+						39 00 00 04 FF 98 82 05
+						39 00 00 02 63 A1         //9C GVDDN = -5.7V
+						39 00 00 02 64 97        //9C GVDDP = 5.5V
+						39 00 00 02 18 22      // APO VGHO 20220824
+
+						39 00 00 04 FF 98 82 08
+						39 00 00 1C E0 00 24 5C 87 C0 54 F2 1A 4A 71 A5 B1 E5 14 41 AA 70 A6 C8 F2 FF 15 42 78 A5 03 DB
+						39 00 00 1C E1 00 24 5C 87 C0 54 F2 1A 4A 71 A5 B1 E5 14 41 AA 70 A6 C8 F2 FF 15 42 78 A5 03 DB
+
+						39 00 00 04 FF 98 82 0B
+						39 00 00 02 9A 88
+						39 00 00 02 9B E5
+						39 00 00 02 9C 06
+						39 00 00 02 9D 06
+						39 00 00 02 9E DE
+						39 00 00 02 9F DE
+						39 00 00 02 AA 22
+
+						39 00 00 04 FF 98 82 02
+						39 00 00 02 06 8D
+						39 00 00 02 0D 22
+						39 00 00 02 0E EE
+
+						39 00 00 04 FF 98 82 00
+						05 05 00 01 29
+						];
+
+					sprd,sleep-in-command = [
+						39 0A 00 01 28
+						39 78 00 01 10
+						];
+
+					sprd,sleep-out-command = [
+						39 78 00 01 11
+						39 14 00 01 29
+						];  
+
+					sprd,cabc-on-command = [
+						39 00 00 04 FF 98 82 00
+						39 00 00 02 55 02
+						];
+
+					sprd,cabc-off-command = [
+						39 00 00 04 FF 98 82 00
+						39 00 00 02 55 00
+						];
+
+					oled-backlight {
+						default-brightness = <900>;
+						sprd,max-level = <4095>;
+						brightness-levels = [
+						39 00 00 03 51 0C CC
+						];
+					};
+
+					display-timings {
+						native-mode = <&ili9882q_boe_timing0>;
+
+						ili9882q_boe_timing0: timing0 {
+							clock-frequency = <96000000>;
+							hactive = <720>;
+							vactive = <1600>;
+							hback-porch = <90>;
+							hfront-porch = <32>;
+							vback-porch = <26>;
+							vfront-porch = <238>;
+							hsync-len = <12>;
+							vsync-len = <8>;
+						};
+					};
+				};
+			};
+		};
+	};
+};

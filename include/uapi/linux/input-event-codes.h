@@ -273,6 +273,9 @@
 #define KEY_F22			192
 #define KEY_F23			193
 #define KEY_F24			194
+#define KEY_ANT			195
+
+#define KEY_AOD			199	/*display aod function*/
 
 #define KEY_PLAYCD		200
 #define KEY_PAUSECD		201
@@ -337,6 +340,13 @@
 #define KEY_RFKILL		247	/* Key that controls all radios */
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
+
+#define KEY_F25			249
+#define KEY_F26			250
+#define KEY_F27			251
+#define KEY_F28			252
+#define KEY_F29			253
+#define KEY_F30			254
 
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
