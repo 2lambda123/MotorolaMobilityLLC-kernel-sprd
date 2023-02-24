@@ -749,6 +749,40 @@ static ssize_t calibrator_data_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(calibrator_data);
 
+static ssize_t als_target_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct shub_data *sensor = dev_get_drvdata(dev);
+	int flag = 0;
+	struct sensor_batch_cmd batch_cmd;
+
+	if (sensor->mcu_mode <= SHUB_CALIDOWNLOAD) {
+		dev_info(&sensor->sensor_pdev->dev,
+			 "mcu_mode == %d!\n",  sensor->mcu_mode);
+		return -EAGAIN;
+	}
+
+	if (sscanf(buf, "%d %d %d %lld\n",&batch_cmd.handle, &flag,
+		   &batch_cmd.report_rate,&batch_cmd.batch_timeout) != 4)
+		return -EINVAL;
+
+	if(batch_cmd.handle != 5 || batch_cmd.report_rate < 0xFF || batch_cmd.report_rate > 0xFFFF){
+		dev_info(&sensor->sensor_pdev->dev,"handle = %d, target = %d,\n",batch_cmd.handle,batch_cmd.report_rate);
+		dev_info(&sensor->sensor_pdev->dev,"target is out of rang [0xFF~0xFFFF]\n");
+		return -EINVAL;
+	}
+
+	if (shub_send_command(sensor, batch_cmd.handle,
+			      SHUB_ALS_TARGET_TO_HUB_SUBTYPE,
+			      (char *)&batch_cmd.report_rate, 12) < 0) {
+		dev_err(&sensor->sensor_pdev->dev, "%s Fail\n", __func__);
+		return -EINVAL;
+	}
+	return count;
+}
+static DEVICE_ATTR_WO(als_target);
+
 static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
@@ -787,7 +821,7 @@ static ssize_t raw_data_als_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
 	struct shub_data *sensor = dev_get_drvdata(dev);
-	u8 data[2];
+	u8 data[6];
 	u16 *ptr;
 	int err;
 
@@ -804,7 +838,7 @@ static ssize_t raw_data_als_show(struct device *dev,
 			"read RegMapR_GetLightRawData failed!\n");
 		return err;
 	}
-	return sprintf(buf, "%d\n", ptr[0]);
+	return sprintf(buf, "%d %d %d\n", ptr[0], ptr[1], ptr[2]);
 }
 static DEVICE_ATTR_RO(raw_data_als);
 
@@ -989,6 +1023,7 @@ static struct attribute *sensorhub_attrs[] = {
 	&dev_attr_mcu_mode.attr,
 	&dev_attr_calibrator_cmd.attr,
 	&dev_attr_calibrator_data.attr,
+	&dev_attr_als_target.attr,
 	&dev_attr_version.attr,
 	&dev_attr_raw_data_als.attr,
 	&dev_attr_raw_data_ps.attr,
