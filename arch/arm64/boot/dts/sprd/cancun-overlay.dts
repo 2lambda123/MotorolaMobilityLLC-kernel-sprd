@@ -639,7 +639,7 @@
 	status = "okay";
 };
 
-&i2c2 {
+&i2c3 {
 	status = "okay";
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -655,6 +655,30 @@
 	};
 
 };
+
+&i2c2{
+    status = "okay";
+    clock-frequency = <400000>;
+    #address-cells = <1>;
+    #size-cells = <0>;
+    st21nfc: st21nfc@08 {
+        compatible = "st,st21nfc";
+        reg = <0x08>;
+        interrupt-parent = <&ap_gpio>;
+        interrupts = <126  0>;
+        reset-gpios = <&ap_gpio 63 0x00>;
+        irq-gpios = <&ap_gpio 126 0x00>;
+        // pidle-gpios = <&ap_gpio 48 0x00>;
+        //clkreq-gpios = <&ap_gpio 60 0x00>;
+        //clocks = <&clock_rpmh RPMH_RF_CLK3>;
+        clock-names = "nfc_ref_clk";
+        st,clk_pinctrl;
+        //i2c-retry = <0>;
+        status = "okay";
+    };
+
+};
+
 
 &i2c3 {
 	status = "okay";

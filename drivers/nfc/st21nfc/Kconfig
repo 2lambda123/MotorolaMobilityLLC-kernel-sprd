@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config NFC_ST21NFC
+	tristate
+	select CRC_CCITT
+	---help---
+	  ST21NFC core driver.
+	  This is a driver based on the HCI NFC kernel layers and
+	  will thus not work with ST21NFC libnfc library.
