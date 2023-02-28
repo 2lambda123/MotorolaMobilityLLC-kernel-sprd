@@ -81,15 +81,15 @@
 				/* vfp-supply = <&pm8994_l18>; */ // use regulator power
 			};
 
-			//goodix_fp {
-			//	compatible = "sprd,goodix-fp";
-			//	goodix_rst = <&ap_gpio 169 0x00>;
-			//	gf,gpio_irq = <&eic_async 168 0x00>;
-			//	goodix_vdd = <&ap_gpio 56 0x0>;
-				//interrupt-parent = <&pio>;
-				//interrupts = <8 IRQ_TYPE_EDGE_RISING 8 0>;
-			//	status = "okay";
-			//};
+			goodix_fp {
+				compatible = "sprd,goodix-fp";
+				goodix_rst = <&ap_gpio 169 0x00>;
+				gf,gpio_irq = <&eic_async 29 0x00>;
+				goodix_vdd = <&ap_gpio 56 0x0>;
+				interrupt-parent = <&eic_async>;
+				interrupts = <29 IRQ_TYPE_EDGE_RISING 29 0>;
+				status = "okay";
+			};
 
 			gpio-keys {
 				compatible = "gpio-keys";
