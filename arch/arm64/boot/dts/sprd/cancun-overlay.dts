@@ -768,19 +768,6 @@
 
 &sound_vbc_v4_sprd_codec {
 	status = "okay";
-	sprd-audio-card,routing =
-		"HPMIC Pin", "HP Mic Jack",
-		"MIC Pin", "Mic Jack",
-		"MIC2 Pin", "Aux Mic Jack",
-		"HeadPhone Jack", "HP Pin",
-		"Ext Spk", "SPK Pin",
-		"PDM DMIC2 ON", "SPK Pin",
-		"Ext Spk", "PDM_DMIC2",
-		"DMIC Pin", "DMic Jack",
-		"DMIC1 Pin", "DMic1 Jack",
-		"Ext Ear", "EAR Pin";
-
-
 
 	/*
 	 * node 54 and node 55 (index 36 and 37) are reserved for
