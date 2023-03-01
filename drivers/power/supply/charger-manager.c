@@ -115,6 +115,7 @@
 #define CM_CAP_CYCLE_TRACK_TIME_10S		10
 #define CM_CAP_CYCLE_TRACK_TIME_8S		8
 #define CM_INIT_BOARD_TEMP			250
+#define BAT_MAINTAIN				97
 
 static const char * const cm_cp_state_names[] = {
 	[CM_CP_STATE_UNKNOWN] = "Charge pump state: UNKNOWN",
@@ -4845,17 +4846,20 @@ static int cm_get_battery_technology(struct charger_manager *cm, union power_sup
 
 static void cm_get_uisoc(struct charger_manager *cm, int *uisoc)
 {
+	int fake_uisoc = 0;
 	if (!is_batt_present(cm)) {
 		/* There is no battery. Assume 100% */
 		*uisoc = 100;
 		return;
 	}
 
-	*uisoc = DIV_ROUND_CLOSEST(cm->desc->cap, 10);
+	fake_uisoc = cm->desc->cap * 100 / BAT_MAINTAIN;
+	*uisoc = DIV_ROUND_CLOSEST(fake_uisoc, 10);
 	if (*uisoc > 100)
 		*uisoc = 100;
 	else if (*uisoc < 0)
 		*uisoc = 0;
+	dev_err(cm->dev, "%s, fake_uisoc = %d,bat_cap = %d\n", __func__,fake_uisoc,cm->desc->cap);
 }
 
 static int cm_get_capacity_level_critical(struct charger_manager *cm)
