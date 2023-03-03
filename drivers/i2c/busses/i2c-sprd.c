@@ -707,6 +707,11 @@ static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 	struct sprd_i2c *i2c_dev = dev_id;
 	struct i2c_msg *msg = i2c_dev->msg;
 	u32 i2c_tran;
+	
+	if (msg->addr == 0x08 && i2c_dev->ack_flag) { 
+        writel(0x24, i2c_dev->base + ADDR_STA0_DVD);
+        pr_err("---slave is ST NFC---\n");
+    }
 
 	if (msg->flags & I2C_M_RD)
 		i2c_tran = i2c_dev->count >= I2C_FIFO_FULL_THLD;
@@ -732,8 +737,17 @@ static irqreturn_t sprd_i2c_isr_thread(int irq, void *dev_id)
 	 * If we did not get one ACK from slave when writing data, we should
 	 * return -EIO to notify users.
 	 */
-	if (!i2c_dev->ack_flag)
-		i2c_dev->err = -EIO;
+    if (!i2c_dev->ack_flag)
+    {
+        if (msg->addr == 0x08) {
+        writel(0x80000, i2c_dev->base + ADDR_STA0_DVD);
+        i2c_dev->err = -EIO;
+         pr_err("---i2c-NFC_is NACK---\n");
+        } else {
+        i2c_dev->err = -EIO;
+        pr_err("---i2c-other_is NACK---\n");
+        }
+    }
 	else if (msg->flags & I2C_M_RD && i2c_dev->count)
 		sprd_i2c_read_bytes(i2c_dev, i2c_dev->buf, i2c_dev->count);
 
