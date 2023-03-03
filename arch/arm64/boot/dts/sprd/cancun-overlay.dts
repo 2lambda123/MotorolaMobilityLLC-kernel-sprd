@@ -713,7 +713,7 @@
 		aw99703,turn-off-ramp = <0x04>;
 		aw99703,pwm-trans-dim = <0>;
 		aw99703,i2c-trans-dim = <0>;
-		aw99703,pwm-mode = <1>;
+		aw99703,pwm-mode = <0>;
 		aw99703,map-type = <1>;
 		aw99703,work-mode = <1>;
 		aw99703,flash-timeout-time = <0x05>;

@@ -159,7 +159,7 @@ static int aw99703_gpio_init(struct aw99703_data *drvdata)
 			pr_err("failed to request gpio\n");
 			return -1;
 		}
-		ret = gpio_direction_output(drvdata->hwen_gpio, 0);
+		ret = gpio_direction_output(drvdata->hwen_gpio, 1);
 		pr_info(" request gpio init\n");
 		if (ret < 0) {
 			pr_err("failed to set output");
@@ -465,6 +465,7 @@ static void aw99703_parse_efuse_dt_data(struct device *dev,
 
 static int aw99703_backlight_init(struct aw99703_data *drvdata)
 {
+	u8 value = 0;
 	pr_info("%s enter.\n", __func__);
 
 	/* Optimize chip PFM performance. */
@@ -526,6 +527,19 @@ static int aw99703_backlight_init(struct aw99703_data *drvdata)
 			drvdata->efuse_config[12]);
 
 	aw99703_max_brightness_setting(drvdata);
+
+	aw99703_i2c_read(drvdata->client, 0x00, &value);
+	if(value == 0x18)
+	{
+		aw99703_i2c_write(drvdata->client,0x02,0x99); //BL open;0x99:max I 20.2mA;0xc9:25mA
+		aw99703_i2c_write(drvdata->client,0x04,0x07); //0x04 ->low 3 bit, 04+05 7 bit address
+		aw99703_i2c_write(drvdata->client,0x05,0xFF); //0x05 ->hight 8 bit
+		aw99703_i2c_write(drvdata->client,0x06,0x1F); //0x1F 3 lu;0x01 1 lu
+		aw99703_i2c_write(drvdata->client,0x07,0x00); //delay BL open
+		aw99703_i2c_write(drvdata->client,0x08,0x00); //PWM BL smoothness
+		pr_err("%s ktd3136 backlight init end\n", __func__);
+
+	}
 
 	return 0;
 }
@@ -625,10 +639,13 @@ static int aw99703_read_chipid(struct aw99703_data *drvdata)
 		}
 		switch (value) {
 		case 0x03:
-			pr_info("%s aw99703 detected\n", __func__);
+			pr_err("%s AW99703_REG_ID: 0x%2x detected\n", __func__,value);
 			return 0;
+		case 0x18:
+			pr_err("%s KTD3136_REG_ID: 0x%2x detected\n", __func__,value);
+			return 1;
 		default:
-			pr_info("%s unsupported device revision (0x%x)\n",
+			pr_err("%s unsupported device revision (0x%x)\n",
 				__func__, value);
 			break;
 		}
