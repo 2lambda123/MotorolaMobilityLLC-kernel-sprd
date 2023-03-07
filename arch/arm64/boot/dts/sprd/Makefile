@@ -57,11 +57,13 @@ ifeq ($(BSP_BUILD_FAMILY),qogirn6pro)
 dtbo-$(CONFIG_ARCH_SPRD) += \
 	ums9620-1h10-overlay.dtbo \
 	ums9620-2h10-overlay.dtbo \
-	ums9620-2h10_uob-overlay.dtbo
+	ums9620-2h10_uob-overlay.dtbo \
+	ums9620-2h10_uob_marlin3-overlay.dtbo
 
 ums9620-1h10-overlay.dtbo-base := ums9620.dtb
 ums9620-2h10-overlay.dtbo-base := ums9620.dtb
 ums9620-2h10_uob-overlay.dtbo-base := ums9620.dtb
+ums9620-2h10_uob_marlin3-overlay.dtbo-base := ums9620.dtb
 endif
 
 endif #//BSP_BUILD_ANDROID_OS
@@ -95,7 +97,8 @@ dtbo-$(CONFIG_ARCH_SPRD) += \
 	ums9230-4h10-overlay.dtbo \
 	ums9620-1h10-overlay.dtbo \
 	ums9620-2h10-overlay.dtbo \
-	ums9620-2h10_uob-overlay.dtbo
+	ums9620-2h10_uob-overlay.dtbo \
+	ums9620-2h10_uob_marlin3-overlay.dtbo
 
 endif #//BSP_BUILD_DT_OVERLAY
 

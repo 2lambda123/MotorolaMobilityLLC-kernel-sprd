@@ -928,6 +928,7 @@ static int bq25890_charger_set_limit_current(struct bq25890_charger_info *info,
 
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
+		limit_cur = info->actual_limit_cur;
 	}
 
 	ret = bq25890_update_bits(info, BQ25890_REG_00, REG00_EN_ILIM_MASK,

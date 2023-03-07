@@ -18,6 +18,19 @@ enum sc27xx_typec_pd_swap {
 #define	EXTCON_SINK         3
 #define	EXTCON_SOURCE       4
 
+
+#if IS_ENABLED(CONFIG_USB_SC27XX_TYPEC)
 extern int sc27xx_get_dr_swap_executing(void);
 extern int sc27xx_get_current_status_detach_or_attach(void);
+#else
+static inline int sc27xx_get_dr_swap_executing(void)
+{
+	return 0;
+}
+static inline int sc27xx_get_current_status_detach_or_attach(void)
+{
+	return 0;
+}
+#endif /* IS_ENABLED(CONFIG_USB_SC27XX_TYPEC) */
+
 #endif /* __LINUX_USB_SPRD_TYPEC_H */

@@ -21,6 +21,18 @@ enum DDR_DFS_STATE_STEP {
 	scaling_force_ddr_freq,
 	scene_boost_enter,
 	set_backdoor,
+	dfs_on_off,
+	change_point,
+	scene_freq_set,
+	get_overflow_t,
+	set_overflow_t,
+	get_underflow_t,
+	set_underflow_t,
+	get_dvfs_status_t,
+	get_dvfs_auto_status_t,
+	get_cur_freq_t,
+	get_freq_table_t,
+	send_freq_request_t,
 };
 
 #define DDR_DB_NODE_NUM 50

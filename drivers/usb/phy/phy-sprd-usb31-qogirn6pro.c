@@ -25,19 +25,22 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
-#include <linux/kthread.h>
-#include <linux/power/sprd-ump96xx-bc1p2.h>
+#include <linux/power/sprd-bc1p2.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/usb/phy.h>
-#include <uapi/linux/sched/types.h>
+#include <linux/usb/sprd_commonphy.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-mask.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-regs.h>
 #include <linux/usb/sprd_usbm.h>
 #include "ptn38003a-i2c.h"
 
 struct sprd_ssphy {
+	struct device		*dev;
 	struct usb_phy		phy;
+	struct sprd_hsphy_ops		ops;
+	struct notifier_block		typec_nb;
+	struct sprd_bc1p2_priv bc1p2_info;
 	void __iomem		*base;
 	struct regmap		*aon_apb;
 	struct regmap		*ipa_apb;
@@ -47,9 +50,6 @@ struct sprd_ssphy {
 	struct regmap		*ana_g0l;
 	struct regmap           *pmic;
 	struct regulator	*vdd;
-	struct kthread_worker bc1p2_kworker;
-	struct kthread_work bc1p2_kwork;
-	struct task_struct *bc1p2_thread;
 	u32			vdd_vol;
 	u32			host_eye_pattern;
 	u32			device_eye_pattern;
@@ -59,9 +59,6 @@ struct sprd_ssphy {
 	atomic_t		inited;
 	atomic_t		susped;
 	bool			is_host;
-	spinlock_t		vbus_event_lock;
-	bool vbus_events;
-	struct mutex lock;
 };
 
 #define PHY_INIT_TIMEOUT 500
@@ -143,6 +140,64 @@ struct sprd_ssphy {
 
 #define DEFAULT_DEVICE_EYE_PATTERN			0x067bd1c0
 #define DEFAULT_HOST_EYE_PATTERN			0x067bd1c0
+
+#define CHGR_DET_FGU_CTRL		0x23a0
+#define DP_DM_FS_ENB			BIT(14)
+#define DP_DM_BC_ENB			BIT(0)
+
+static void sc27xx_dpdm_switch_to_phy(struct regmap *regmap, bool enable)
+{
+	int ret;
+	u32 val;
+
+	pr_info("switch dp/dm to %s\n", enable ? "usb" : "other");
+	ret = regmap_read(regmap, CHGR_DET_FGU_CTRL, &val);
+	if (ret) {
+		pr_err("%s, dp/dm switch reg read failed:%d\n",
+				__func__, ret);
+		return;
+	}
+
+	/*
+	 * bit14: 1 switch to USB phy, 0 switch to fast charger
+	 * bit0 : 1 switch to USB phy, 0 switch to BC1P2
+	 */
+	if (enable)
+		val = val | DP_DM_FS_ENB | DP_DM_BC_ENB;
+	else
+		val = val & ~(DP_DM_FS_ENB | DP_DM_BC_ENB);
+
+	ret = regmap_write(regmap, CHGR_DET_FGU_CTRL, val);
+	if (ret)
+		pr_err("%s, dp/dm switch reg write failed:%d\n",
+				__func__, ret);
+}
+
+static bool sc27xx_get_dpdm_from_phy(struct regmap *regmap)
+{
+	int ret;
+	u32 reg;
+	bool val;
+
+	ret = regmap_read(regmap, CHGR_DET_FGU_CTRL, &reg);
+	if (ret) {
+		pr_err("%s, dp/dm switch reg read failed:%d\n",
+				__func__, ret);
+		return false;
+	}
+
+	/*
+	 * bit14: 1 switch to USB phy, 0 switch to fast charger
+	 * bit0 : 1 switch to USB phy, 0 switch to BC1P2
+	 */
+	if ((reg & DP_DM_FS_ENB) && (reg & DP_DM_BC_ENB))
+		val = true;
+	else
+		val = false;
+	pr_info("get dpdm form %s\n", val ? "usb" : "other");
+
+	return val;
+}
 
 /* Rest USB Core*/
 static inline void sprd_ssphy_reset_core(struct sprd_ssphy *phy)
@@ -685,53 +740,6 @@ static struct attribute *usb_ssphy_attrs[] = {
 };
 ATTRIBUTE_GROUPS(usb_ssphy);
 
-static void sprd_ssphy_get_bc1p2_type_work(struct kthread_work *work)
-{
-	struct sprd_ssphy *phy = container_of(work, struct sprd_ssphy, bc1p2_kwork);
-	struct usb_phy *usb_phy;
-	bool vbus_events;
-
-	if (!phy) {
-		pr_err("%s:line%d: phy NULL pointer!!!\n", __func__, __LINE__);
-		return;
-	}
-
-	usb_phy = &phy->phy;
-	if (!usb_phy) {
-		pr_err("%s:line%d: usb_phy NULL pointer!!!\n", __func__, __LINE__);
-		return;
-	}
-
-	mutex_lock(&phy->lock);
-	spin_lock(&phy->vbus_event_lock);
-	while (phy->vbus_events) {
-		vbus_events = phy->vbus_events;
-		phy->vbus_events = false;
-		spin_unlock(&phy->vbus_event_lock);
-		if (vbus_events)
-			sprd_bc1p2_notify_charger(usb_phy);
-		spin_lock(&phy->vbus_event_lock);
-	}
-
-	spin_unlock(&phy->vbus_event_lock);
-	mutex_unlock(&phy->lock);
-}
-
-static void sprd_ssphy_usb_changed(struct sprd_ssphy *phy, enum usb_charger_state state)
-{
-	struct usb_phy *usb_phy = &phy->phy;
-
-	spin_lock(&phy->vbus_event_lock);
-	phy->vbus_events = true;
-
-	usb_phy->chg_state = state;
-
-	spin_unlock(&phy->vbus_event_lock);
-
-	if (phy->bc1p2_thread)
-		kthread_queue_work(&phy->bc1p2_kworker, &phy->bc1p2_kwork);
-}
-
 static int sprd_ssphy_vbus_notify(struct notifier_block *nb,
 				unsigned long event, void *data)
 {
@@ -749,11 +757,39 @@ static int sprd_ssphy_vbus_notify(struct notifier_block *nb,
 	}
 
 	if (event)
-		sprd_ssphy_usb_changed(phy, USB_CHARGER_PRESENT);
+		sprd_usb_changed(&phy->bc1p2_info, USB_CHARGER_PRESENT);
 	else
-		sprd_ssphy_usb_changed(phy, USB_CHARGER_ABSENT);
+		sprd_usb_changed(&phy->bc1p2_info, USB_CHARGER_ABSENT);
 
 	return 0;
+}
+
+static int sprd_ssphy_typec_notifier(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct sprd_ssphy *phy  = container_of(nb, struct sprd_ssphy, typec_nb);
+
+	pr_info("__func__:%s, event %s\n", __func__, event ? "true" : "false");
+	if (event)
+		sc27xx_dpdm_switch_to_phy(phy->pmic, true);
+	else
+		sc27xx_dpdm_switch_to_phy(phy->pmic, false);
+
+	return 0;
+}
+
+static void sprd_ssphy_dpdm_switch_to_phy(struct usb_phy *x, bool enable)
+{
+	struct sprd_ssphy *phy = container_of(x, struct sprd_ssphy, phy);
+
+	sc27xx_dpdm_switch_to_phy(phy->pmic, enable);
+}
+
+static bool sprd_ssphy_get_dpdm_from_phy(struct usb_phy *x)
+{
+	struct sprd_ssphy *phy = container_of(x, struct sprd_ssphy, phy);
+
+	return sc27xx_get_dpdm_from_phy(phy->pmic);
 }
 
 static enum usb_charger_type sprd_ssphy_charger_detect(struct usb_phy *x)
@@ -831,7 +867,6 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	struct sprd_ssphy *phy;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
-	struct sched_param param = { .sched_priority = 1 };
 	int ret;
 	u32 reg, msk;
 
@@ -957,6 +992,7 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 			 msk, reg);
 
 	platform_set_drvdata(pdev, phy);
+	phy->dev				= dev;
 	phy->phy.dev				= dev;
 	phy->phy.label				= "sprd-ssphy";
 	phy->phy.init				= sprd_ssphy_init;
@@ -971,17 +1007,19 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	 */
 	phy->phy.notify_connect			= sprd_ssphy_notify_connect;
 	phy->phy.notify_disconnect		= sprd_ssphy_notify_disconnect;
-	mutex_init(&phy->lock);
-	spin_lock_init(&phy->vbus_event_lock);
-	kthread_init_worker(&phy->bc1p2_kworker);
-	kthread_init_work(&phy->bc1p2_kwork, sprd_ssphy_get_bc1p2_type_work);
-	phy->bc1p2_thread = kthread_run(kthread_worker_fn, &phy->bc1p2_kworker,
-					"ssphy_bc1p2_worker");
-	if (IS_ERR(phy->bc1p2_thread)) {
-		phy->bc1p2_thread = NULL;
-		dev_err(dev, "failed to run bc1p2_thread\n");
-	} else {
-		sched_setscheduler(phy->bc1p2_thread, SCHED_FIFO, &param);
+	phy->ops.dpdm_switch_to_phy = sprd_ssphy_dpdm_switch_to_phy;
+	phy->ops.get_dpdm_from_phy = sprd_ssphy_get_dpdm_from_phy;
+	phy->typec_nb.notifier_call = sprd_ssphy_typec_notifier;
+	ret = register_sprd_usbphy_notifier(&phy->typec_nb, SPRD_USBPHY_EVENT_TYPEC);
+	if (ret) {
+		dev_err(dev, "fail to register sprd_usbphy_notifier\n");
+		return ret;
+	}
+
+	ret = usb_add_bc1p2_init(&phy->bc1p2_info, &phy->phy);
+	if (ret) {
+		dev_err(dev, "fail to add bc1p2\n");
+		return ret;
 	}
 
 	ret = usb_add_phy_dev(&phy->phy);
@@ -989,6 +1027,7 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 		dev_err(dev, "fail to add phy\n");
 		return ret;
 	}
+	sc27xx_dpdm_switch_to_phy(phy->pmic, false);
 
 	ret = sysfs_create_groups(&dev->kobj, usb_ssphy_groups);
 	if (ret)
@@ -997,7 +1036,7 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 
 	if (extcon_get_state(phy->phy.edev, EXTCON_USB) > 0)
-		sprd_ssphy_usb_changed(phy, USB_CHARGER_PRESENT);
+		sprd_usb_changed(&phy->bc1p2_info, USB_CHARGER_PRESENT);
 
 	return 0;
 }
@@ -1006,16 +1045,19 @@ static int sprd_ssphy_remove(struct platform_device *pdev)
 {
 	struct sprd_ssphy *phy = platform_get_drvdata(pdev);
 
-	if (phy->bc1p2_thread) {
-		kthread_flush_worker(&phy->bc1p2_kworker);
-		kthread_stop(phy->bc1p2_thread);
-		phy->bc1p2_thread = NULL;
-	}
+	usb_remove_bc1p2(&phy->bc1p2_info);
 	sysfs_remove_groups(&pdev->dev.kobj, usb_ssphy_groups);
 	usb_remove_phy(&phy->phy);
 	if (regulator_is_enabled(phy->vdd))
 		regulator_disable(phy->vdd);
 	return 0;
+}
+
+static void sprd_ssphy_drshutdown(struct platform_device *pdev)
+{
+	struct sprd_ssphy *phy = platform_get_drvdata(pdev);
+
+	sc27xx_dpdm_switch_to_phy(phy->pmic, false);
 }
 
 static const struct of_device_id sprd_ssphy_match[] = {
@@ -1028,6 +1070,7 @@ MODULE_DEVICE_TABLE(of, sprd_ssphy_match);
 static struct platform_driver sprd_ssphy_driver = {
 	.probe		= sprd_ssphy_probe,
 	.remove		= sprd_ssphy_remove,
+	.shutdown	= sprd_ssphy_drshutdown,
 	.driver		= {
 		.name	= "sprd-ssphy",
 		.of_match_table = sprd_ssphy_match,

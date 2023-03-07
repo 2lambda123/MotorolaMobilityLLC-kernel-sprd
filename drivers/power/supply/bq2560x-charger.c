@@ -164,6 +164,7 @@ struct bq2560x_charger_info {
 
 	int reg_id;
 	bool disable_power_path;
+	bool use_typec_extcon;
 };
 
 struct bq2560x_charger_reg_tab {
@@ -642,6 +643,7 @@ static int bq2560x_charger_set_limit_current(struct bq2560x_charger_info *info,
 
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
+		limit_cur = info->actual_limit_cur;
 	}
 
 	if (limit_cur >= BQ2560X_LIMIT_CURRENT_MAX)
@@ -1516,11 +1518,13 @@ static int bq2560x_charger_enable_otg(struct regulator_dev *dev)
 	 * Disable charger detection function in case
 	 * affecting the OTG timing sequence.
 	 */
-	ret = regmap_update_bits(info->pmic, info->charger_detect,
-				 BIT_DP_DM_BC_ENB, BIT_DP_DM_BC_ENB);
-	if (ret) {
-		dev_err(info->dev, "failed to disable bc1.2 detect function.\n");
-		goto out;
+	if (!info->use_typec_extcon) {
+		ret = regmap_update_bits(info->pmic, info->charger_detect,
+					 BIT_DP_DM_BC_ENB, BIT_DP_DM_BC_ENB);
+		if (ret) {
+			dev_err(info->dev, "failed to disable bc1.2 detect function.\n");
+			goto out;
+		}
 	}
 
 	ret = bq2560x_update_bits(info, BQ2560X_REG_1,
@@ -1532,6 +1536,10 @@ static int bq2560x_charger_enable_otg(struct regulator_dev *dev)
 				   BIT_DP_DM_BC_ENB, 0);
 		goto out;
 	}
+
+	ret = bq2560x_charger_set_power_path_status(info, true);
+	if (ret)
+		dev_err(info->dev, "Failed to enable power path\n");
 
 	info->otg_enable = true;
 	schedule_delayed_work(&info->wdt_work,
@@ -1569,9 +1577,11 @@ static int bq2560x_charger_disable_otg(struct regulator_dev *dev)
 	}
 
 	/* Enable charger detection function to identify the charger type */
-	ret = regmap_update_bits(info->pmic, info->charger_detect, BIT_DP_DM_BC_ENB, 0);
-	if (ret)
-		dev_err(info->dev, "enable BC1.2 failed\n");
+	if (!info->use_typec_extcon) {
+		ret = regmap_update_bits(info->pmic, info->charger_detect, BIT_DP_DM_BC_ENB, 0);
+		if (ret)
+			dev_err(info->dev, "enable BC1.2 failed\n");
+	}
 
 out:
 	mutex_unlock(&info->lock);
@@ -1690,6 +1700,8 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 		dev_err(dev, "sc27xx_fgu not ready.\n");
 		return -EPROBE_DEFER;
 	}
+
+	info->use_typec_extcon = device_property_read_bool(dev, "use-typec-extcon");
 
 	ret = device_property_read_bool(dev, "role-slave");
 	if (ret)
@@ -1835,6 +1847,7 @@ static int bq2560x_charger_probe(struct i2c_client *client,
 	mutex_unlock(&info->lock);
 
 	bq2560x_dump_register(info);
+	dev_info(dev, "use_typec_extcon = %d\n", info->use_typec_extcon);
 
 	return 0;
 
@@ -1864,6 +1877,10 @@ static void bq2560x_charger_shutdown(struct i2c_client *client)
 		if (ret)
 			dev_err(info->dev, "disable bq2560x otg failed ret = %d\n", ret);
 
+		ret = bq2560x_charger_set_power_path_status(info, false);
+		if (ret)
+			dev_err(info->dev, "Failed to disable power path\n");
+
 		/* Enable charger detection function to identify the charger type */
 		ret = regmap_update_bits(info->pmic, info->charger_detect,
 					 BIT_DP_DM_BC_ENB, 0);
@@ -1884,43 +1901,10 @@ static int bq2560x_charger_remove(struct i2c_client *client)
 }
 
 #if IS_ENABLED(CONFIG_PM_SLEEP)
-static int bq2560x_charger_alarm_prepare(struct device *dev)
-{
-	struct bq2560x_charger_info *info = dev_get_drvdata(dev);
-	ktime_t now, add;
-
-	if (!info) {
-		pr_err("%s: info is null!\n", __func__);
-		return 0;
-	}
-
-	if (!info->otg_enable)
-		return 0;
-
-	now = ktime_get_boottime();
-	add = ktime_set(BQ2560X_OTG_ALARM_TIMER_S, 0);
-	alarm_start(&info->otg_timer, ktime_add(now, add));
-	return 0;
-}
-
-static void bq2560x_charger_alarm_complete(struct device *dev)
-{
-	struct bq2560x_charger_info *info = dev_get_drvdata(dev);
-
-	if (!info) {
-		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
-		return;
-	}
-
-	if (!info->otg_enable)
-		return;
-
-	alarm_cancel(&info->otg_timer);
-}
-
 static int bq2560x_charger_suspend(struct device *dev)
 {
 	struct bq2560x_charger_info *info = dev_get_drvdata(dev);
+	ktime_t now, add;
 
 	if (!info) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
@@ -1934,6 +1918,10 @@ static int bq2560x_charger_suspend(struct device *dev)
 
 	cancel_delayed_work_sync(&info->wdt_work);
 	cancel_delayed_work_sync(&info->cur_work);
+
+	now = ktime_get_boottime();
+	add = ktime_set(BQ2560X_OTG_ALARM_TIMER_S, 0);
+	alarm_start(&info->otg_timer, ktime_add(now, add));
 
 	return 0;
 }
@@ -1953,6 +1941,8 @@ static int bq2560x_charger_resume(struct device *dev)
 	if (!info->otg_enable)
 		return 0;
 
+	alarm_cancel(&info->otg_timer);
+
 	schedule_delayed_work(&info->wdt_work, HZ * 15);
 	schedule_delayed_work(&info->cur_work, 0);
 
@@ -1961,8 +1951,6 @@ static int bq2560x_charger_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops bq2560x_charger_pm_ops = {
-	.prepare = bq2560x_charger_alarm_prepare,
-	.complete = bq2560x_charger_alarm_complete,
 	SET_SYSTEM_SLEEP_PM_OPS(bq2560x_charger_suspend,
 				bq2560x_charger_resume)
 };

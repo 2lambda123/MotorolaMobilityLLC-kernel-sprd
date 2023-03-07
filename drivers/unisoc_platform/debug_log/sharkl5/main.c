@@ -21,8 +21,6 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 
-#include <linux/pm_runtime.h>
-
 #include <dt-bindings/soc/sprd,sharkl5-mask.h>
 #include <dt-bindings/soc/sprd,sharkl5-regs.h>
 
@@ -97,17 +95,13 @@ static void sprd_sensor_set_mipi_level(u32 plus_level)
 
 static void inter_dbg_log_init(struct dbg_log_device *dbg)
 {
-	int ret = 0;
-
 	/* only sharkl5pro use */
-
 	if (L5proSwitchFlag) {
 		sprd_sensor_set_voltage(1800000);
 		sprd_sensor_set_mipi_level(1);
 		DEBUG_LOG_PRINT("L5pro switch on\n");
 	} else {
 		DEBUG_LOG_PRINT("L5proSwitchFlag=%d\n", L5proSwitchFlag);
-		return;
 	}
 
 	DEBUG_LOG_PRINT("entry\n");
@@ -131,16 +125,12 @@ static void inter_dbg_log_init(struct dbg_log_device *dbg)
 	/* enable ana eb */
 	clk_prepare_enable(dbg->clk_ana_eb);
 
-	DEBUG_LOG_PRINT("dbg->mm = %d", dbg->mm);
-	if (dbg->mm) {
-		DEBUG_LOG_PRINT("MIPI LOG use MM Power Domain\n");
-		ret = pm_runtime_get_sync(dbg->dev.parent);
-		if (ret < 0) {
-			DEBUG_LOG_PRINT("fail to sprd_cam_pw_on, ret=%d\n", ret);
-			pm_runtime_disable(dbg->dev.parent);
-			return;
-		}
-	}
+	/* clear force shutdown */
+	regmap_update_bits(dbg->phy->pmu_apb, 0x0024/*MM_TOP_CFG*/, 0x2000000, 0x0);
+
+	/* power on */
+	regmap_update_bits(dbg->phy->pmu_apb, 0x0024/*MM_TOP_CFG*/, 0x1000000, 0x0);
+
 	DEBUG_LOG_PRINT("power on ok!\n");
 
 	/* here need wait */
@@ -221,18 +211,6 @@ static void inter_dbg_log_init(struct dbg_log_device *dbg)
 
 static void inter_dbg_log_exit(struct dbg_log_device *dbg)
 {
-	int ret;
-
-	if (dbg->mm) {
-		ret = pm_runtime_put_sync(dbg->dev.parent);
-		if (ret < 0) {
-			DEBUG_LOG_PRINT("sprd cam power off fail, ret=%d\n", ret);
-			pm_runtime_disable(dbg->dev.parent);
-			return;
-		}
-	}
-	DEBUG_LOG_PRINT("sprd cam power off ok!\n");
-
 	/* disable serdes */
 	clk_disable_unprepare(dbg->clk_serdes_eb);
 
@@ -319,7 +297,7 @@ static int dbg_log_probe(struct platform_device *pdev)
 	struct resource *res;
 	void __iomem *addr, *serdes_apb;
 	struct dbg_log_device *dbg;
-	struct regmap *dsi_apb, *mm_ahb;
+	struct regmap *dsi_apb, *mm_ahb, *pmu_apb;
 	struct device_node *np = pdev->dev.of_node;
 	int count, i, rc;
 	int l5Proswitch, ret;
@@ -388,6 +366,13 @@ static int dbg_log_probe(struct platform_device *pdev)
 		pr_err("mm ahb get failed!\n");
 		return PTR_ERR(mm_ahb);
 	}
+
+	pmu_apb = syscon_regmap_lookup_by_phandle(pdev->dev.of_node, "sprd,syscon-pmu-apb");
+	if (IS_ERR(pmu_apb)) {
+		pr_err("pmu ahb get failed!\n");
+		return PTR_ERR(pmu_apb);
+	}
+
 	dbg = dbg_log_device_register(&pdev->dev, &ops, NULL, "debug-log");
 	if (!dbg)
 		return -ENOMEM;
@@ -395,8 +380,10 @@ static int dbg_log_probe(struct platform_device *pdev)
 	dbg->phy->freq = 1500000;
 	dbg->phy->dsi_apb = dsi_apb;
 	dbg->phy->mm_ahb = mm_ahb;
+	dbg->phy->pmu_apb = pmu_apb;
 	dbg->serdes.base = serdes_apb;
 	dbg->serdes.cut_off = 0x20;
+
 	if (of_property_read_bool(pdev->dev.of_node, "sprd,mm")) {
 		DEBUG_LOG_PRINT("mm enable\n");
 		dbg->mm = true;
@@ -505,10 +492,7 @@ static int dbg_log_probe(struct platform_device *pdev)
 
 	inter_dbg_log_is_freq_valid(dbg, dbg->phy->freq);
 
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
-
-	DEBUG_LOG_PRINT("Finish mipilog probe\n");
+	DEBUG_LOG_PRINT("Finish mipilog\n");
 	return 0;
 }
 

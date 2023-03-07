@@ -93,6 +93,7 @@ static const struct firmware *tsx_firmware;
 static bool is_tsx_found = true;
 unsigned char  is_ums9620;
 unsigned char  flag_reset;
+unsigned char  flag_download_done;
 char functionmask[8];
 static unsigned int reg_val;
 static unsigned int clk_wait_val;
@@ -1456,7 +1457,7 @@ static int marlin_clk_enable(bool enable)
 	return ret;
 }
 
-static int marlin_avdd18_dcxo_enable(bool enable)
+int marlin_avdd18_dcxo_enable(bool enable)
 {
 	int ret = 0;
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
@@ -1843,8 +1844,10 @@ static int check_cp_ready(void)
 			return ret;
 		}
 		usleep_range(3000, 5000);
-		if (marlin_dev->sync_f.init_status == SYNC_ALL_FINISHED)
+		if (marlin_dev->sync_f.init_status == SYNC_ALL_FINISHED) {
+			flag_download_done = 1;
 			return 0;
+		}
 	}
 
 	pr_err("%s sync val:0x%x, prj_type val:0x%x\n",
@@ -2144,13 +2147,16 @@ static void pre_gnss_download_firmware(struct work_struct *work)
 static void pre_btwifi_download_sdio(struct work_struct *work)
 {
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
+	flag_download_done = 0;
 	if (btwifi_download_firmware() == 0 &&
 		marlin_start_run() == 0) {
 		if (g_match_config && !g_match_config->unisoc_wcn_pcie) {
 			check_cp_clock_mode();
 			marlin_write_cali_data();
 			mem_pd_save_bin();
+		} else {
+			pr_info("n6p-1 disable vddsim2\n");
+			marlin_avdd18_dcxo_enable(false);
 		}
 #ifdef WCN_RDCDBG
 		/*rdc_debug.c*/
@@ -2161,10 +2167,6 @@ static void pre_btwifi_download_sdio(struct work_struct *work)
 	}
 	/* Runtime PM is useless, mainly to enable sdio_func1 and rx irq */
 	sprdwcn_bus_runtime_get();
-	if (g_match_config && !g_match_config->unisoc_wcn_pcie) {
-		pr_info("%s is not pcie\n", __func__);
-		wcn_firmware_init();
-	}
 }
 
 static int bus_scan_card(void)
@@ -2282,6 +2284,7 @@ static int chip_power_off(enum wcn_sub_sys subsys)
 		sprdwcn_bus_remove_card(marlin_dev);
 
 	marlin_dev->power_state = 0;
+	flag_download_done = 0;
 	wcn_avdd12_bound_xtl(false);
 	wcn_wifipa_bound_xtl(false);
 	wcn_avdd12_parent_bound_chip(true);
@@ -2303,6 +2306,13 @@ static int chip_power_off(enum wcn_sub_sys subsys)
 
 	return 0;
 }
+
+void wcn_reset_pcie(void)
+{
+	pr_info("%s\n", __func__);
+	sprdwcn_bus_reset(marlin_dev);
+}
+EXPORT_SYMBOL_GPL(wcn_reset_pcie);
 
 void wcn_chip_power_on(void)
 {
@@ -2500,10 +2510,9 @@ static int marlin_set_power(enum wcn_sub_sys subsys, int val)
 			atomic_set(&marlin_dev->download_finish_flag, 1);
 			pr_info("then marlin download finished and run ok\n");
 
-			if (g_match_config && g_match_config->unisoc_wcn_pcie) {
-				pr_info("then start wcn_firmware_init\n");
-				wcn_firmware_init();
-			}
+			pr_info("then start wcn_firmware_init\n");
+			wcn_firmware_init();
+
 			set_wifipa_status(subsys, val);
 			if (unlikely(locked))
 				mutex_unlock(&marlin_dev->power_lock);
@@ -2641,6 +2650,10 @@ static int marlin_set_power(enum wcn_sub_sys subsys, int val)
 
 		pr_info("wcn chip power on and run finish: [%s]\n",
 				  strno(subsys));
+
+		pr_info("sync log status\n");
+		wcn_firmware_init();
+
 	/* power off */
 	} else {
 		if (marlin_dev->power_state == 0) {
@@ -3005,6 +3018,7 @@ int marlin_probe(struct platform_device *pdev)
 
 	mutex_init(&(marlin_dev->power_lock));
 	marlin_dev->power_state = 0;
+	flag_download_done = 0;
 	err = marlin_parse_dt(pdev);
 	if (err < 0) {
 		pr_info("marlin parse_dt some para not config\n");

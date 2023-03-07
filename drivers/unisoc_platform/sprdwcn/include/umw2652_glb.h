@@ -56,6 +56,7 @@
 #define M3L_BTWF_XLT_WAIT		0x10
 #define M3L_BTWF_XLTBUF_WAIT	0x20
 #define M3L_BTWF_PLL_PWR_WAIT	0x40
+#define BTWF_WAKEUP_LOCK	0x60
 /**************WCN END**************/
 
 #define M3L_CP_RESET_REG		0x40088288

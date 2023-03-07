@@ -305,6 +305,10 @@ int mchn_init(struct mchn_ops_t *ops)
 	int ret = -1;
 	struct mchn_info_t *mchn = mchn_info();
 
+	if (ops == NULL) {
+		WCN_INFO("%s err, ops is null", __func__);
+		return -1;
+	}
 	WCN_DBG("[+]%s(chn=%d)\n", __func__, ops->channel);
 	if (ops->hif_type != HW_TYPE_PCIE || !wcn_get_edma_status()) {
 		WCN_INFO("%s err, hif_type %d, chn=%d\n", __func__, ops->hif_type, ops->channel);

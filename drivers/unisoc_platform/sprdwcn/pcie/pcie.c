@@ -33,6 +33,7 @@
 #include "wcn_procfs.h"
 #include "wcn_txrx.h"
 #include "sprd_wcn.h"
+#include "../../../pci/pci.h"
 
 #define WAIT_AT_DONE_MAX_CNT 5
 
@@ -730,6 +731,29 @@ static struct platform_device *to_pdev_from_ep_node(struct device_node *ep_node)
 	}
 
 	return of_find_device_by_node(pdev_node);
+}
+
+/* when pcie is disconnected,reset it */
+void sprd_pcie_reset(void *wcn_dev)
+{
+	struct wcn_pcie_info *priv = get_wcn_device_info();
+	struct platform_device *pdev;
+	struct marlin_device *marlin_dev = wcn_dev;
+
+	pdev = to_pdev_from_ep_node(marlin_dev->np);
+	if (!pdev) {
+		WCN_ERR("can't get pcie rc node\n");
+		return;
+	}
+	WCN_INFO("%s enter\n", __func__);
+	/* check pcie link status, reset when disconnected */
+	if (pci_dev_is_disconnected(priv->dev)) {
+		WCN_ERR("pcie_dev is disconnected,reset\n");
+		sprd_pcie_unconfigure_device(pdev);
+		sprd_pcie_configure_device(pdev);
+		return;
+	}
+	WCN_INFO("EP link status ok,do not reset\n");
 }
 
 /* called by chip_power_on */

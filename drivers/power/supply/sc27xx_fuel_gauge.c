@@ -3289,15 +3289,15 @@ static int sc27xx_fgu_calibration(struct sc27xx_fgu_data *data)
 
 static void sc27xx_fgu_typec_extcon_work(struct work_struct *data)
 {
-	struct sc27xx_fgu_data *fgu_data =
-		container_of(data, struct sc27xx_fgu_data, typec_extcon_work);
+	struct sc27xx_fgu_data *fgu_data = container_of(data, struct sc27xx_fgu_data,
+							typec_extcon_work);
 	int retry_cnt = 12;
 
 	if (fgu_data->use_typec_extcon && fgu_data->online) {
 		/* if use typec extcon notify charger,
 		 * wait for BC1.2 detect charger type.
 		 */
-		while (retry_cnt > 0 && fgu_data->online) {
+		while (fgu_data->online && retry_cnt > 0) {
 			if (fgu_data->usb_phy->chg_type != UNKNOWN_TYPE)
 				break;
 			retry_cnt--;
@@ -3332,8 +3332,7 @@ static void sc27xx_fgu_typec_extcon_work(struct work_struct *data)
 static int sc27xx_fgu_extcon_event(struct notifier_block *nb,
 				unsigned long event, void *param)
 {
-	struct sc27xx_fgu_data *data =
-		container_of(nb, struct sc27xx_fgu_data, extcon_nb);
+	struct sc27xx_fgu_data *data = container_of(nb, struct sc27xx_fgu_data, extcon_nb);
 	int state = 0;
 
 	if (!data) {
@@ -3342,8 +3341,10 @@ static int sc27xx_fgu_extcon_event(struct notifier_block *nb,
 	}
 
 	state = extcon_get_state(data->edev, SC27XX_FGU_EXTCON_SINK);
-	if (state < 0)
+	if (state < 0) {
+		dev_err(data->dev, "failed to get extcon sink state（%d）\n", state);
 		return NOTIFY_OK;
+	}
 
 	if (data->is_sink == state)
 		return NOTIFY_OK;
@@ -4834,8 +4835,10 @@ static int sc27xx_fgu_probe(struct platform_device *pdev)
 		if (data->use_typec_extcon) {
 			data->edev = extcon_get_edev_by_phandle(data->dev, 0);
 			if (IS_ERR(data->edev)) {
-				dev_err(dev, "failed to find vbus extcon device, ret = %d.\n", PTR_ERR(data->edev));
-				return -EPROBE_DEFER;
+				ret = PTR_ERR(data->edev);
+				dev_err(dev, "failed to find vbus extcon device, ret = %d.\n", ret);
+				ret = -EPROBE_DEFER;
+				goto err;
 			}
 			INIT_WORK(&data->typec_extcon_work, sc27xx_fgu_typec_extcon_work);
 			data->extcon_nb.notifier_call = sc27xx_fgu_extcon_event;
@@ -4844,7 +4847,7 @@ static int sc27xx_fgu_probe(struct platform_device *pdev)
 								&data->extcon_nb);
 			if (ret) {
 				dev_err(dev, "Can't register extcon, ret = %d\n", ret);
-				return -EPROBE_DEFER;
+				goto err;
 			}
 		} else {
 			data->usb_notify.notifier_call = sc27xx_fgu_usb_change;
@@ -4870,6 +4873,7 @@ static int sc27xx_fgu_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "register sysfs fail, ret = %d\n", ret);
 
 	mutex_unlock(&data->lock);
+	dev_info(dev, "use_typec_extcon = %d\n", data->use_typec_extcon);
 	return 0;
 
 err:

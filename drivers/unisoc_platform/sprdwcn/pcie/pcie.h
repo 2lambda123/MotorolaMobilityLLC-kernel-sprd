@@ -210,6 +210,7 @@ static inline enum wcn_bus_pm_state sprd_pcie_get_aspm_policy(void)
 int wcn_pcie_get_bus_status(void);
 void sprd_pcie_set_carddump_status(unsigned int flag);
 unsigned int sprd_pcie_get_carddump_status(void);
+void sprd_pcie_reset(void *wcn_dev);
 int sprd_pcie_scan_card(void *wcn_dev);
 void sprd_pcie_register_scan_notify(void *func);
 void sprd_pcie_remove_card(void *wcn_dev);

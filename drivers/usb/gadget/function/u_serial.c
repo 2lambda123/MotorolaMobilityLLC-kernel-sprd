@@ -272,6 +272,15 @@ __acquires(&port->port_lock)
 		spin_lock(&port->port_lock);
 		port->write_busy = false;
 
+		/* If port_usb is NULL, gserial disconnect is called
+		 * while the spinlock is dropped and all requests are
+		 * freed. Free the current requests here.
+		 */
+		if (!port->port_usb) {
+			gs_free_req(in, req);
+			break;
+		}
+
 		if (status) {
 			pr_debug("%s: %s %s err %d\n",
 					__func__, "queue", in->name, status);
@@ -280,10 +289,6 @@ __acquires(&port->port_lock)
 		}
 
 		port->write_started++;
-
-		/* abort immediately after disconnect */
-		if (!port->port_usb)
-			break;
 	}
 
 	if (do_tty_wake && port->port.tty)
@@ -327,6 +332,15 @@ __acquires(&port->port_lock)
 		status = usb_ep_queue(out, req, GFP_ATOMIC);
 		spin_lock(&port->port_lock);
 
+		/* If port_usb is NULL, gserial disconnect is called
+		 * while the spinlock is dropped and all requests are
+		 * freed. Free the current requests here.
+		 */
+		if (!port->port_usb) {
+			gs_free_req(out, req);
+			break;
+		}
+
 		if (status) {
 			pr_debug("%s: %s %s err %d\n",
 					__func__, "queue", out->name, status);
@@ -334,10 +348,6 @@ __acquires(&port->port_lock)
 			break;
 		}
 		port->read_started++;
-
-		/* abort immediately after disconnect */
-		if (!port->port_usb)
-			break;
 	}
 	return port->read_started;
 }
@@ -560,6 +570,9 @@ static int gs_start_io(struct gs_port *port)
 	/* queue read requests */
 	port->n_read = 0;
 	started = gs_start_rx(port);
+
+	if (!port->port_usb)
+		return -EIO;
 
 	if (started) {
 		gs_start_tx(port);

@@ -341,7 +341,10 @@ static int ufs_sprd_init(struct ufs_hba *hba)
 	hba->quirks |= UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION |
 		       UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS;
 
-	hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_CRYPTO | UFSHCD_CAP_WB_EN;
+	hba->caps |= UFSHCD_CAP_CLK_GATING |
+				UFSHCD_CAP_CRYPTO |
+				UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
+				UFSHCD_CAP_WB_EN;
 #ifdef CONFIG_SCSI_UFS_HPB
 	hba->quirks |= UFSHCD_QUIRK_BROKEN_HPB_READ_CMD;
 #endif
@@ -651,6 +654,10 @@ static int ufs_sprd_hce_enable_notify(struct ufs_hba *hba,
 			dev_err(hba->dev, "%s: ufs hardware init failed!\n", __func__);
 			return err;
 		}
+		hba->capabilities &= ~MASK_AUTO_HIBERN8_SUPPORT;
+		hba->ahit = 0;
+		hba->clk_gating.delay_ms = 10;
+
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO)
 		ufshcd_writel(hba, CONTROLLER_ENABLE, REG_CONTROLLER_ENABLE);
 		svc_handle = sprd_sip_svc_get_handle();
@@ -1135,6 +1142,47 @@ out:
 	return err;
 }
 
+static int ufs_pltfrm_sprd_suspend(struct device *dev)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+	u32 ufs_pwr_gate = -1;
+	u32 monitor = -1;
+	int ret;
+
+	ret = ufshcd_pltfrm_suspend(dev);
+	if (ret)
+		goto out;
+
+	if (!host->syssel_reg) {
+		dev_warn(hba->dev, "can't get ufs debug bus base.\n");
+		goto out;
+	}
+
+	writel(0x6, host->syssel_reg);
+	writel(0x9, host->syssel_reg + 0xc);
+	writel(0xd1, host->syssel_reg + 0x10);
+	ufs_pwr_gate = readl(host->syssel_reg + 0x208);
+	if (unlikely((ufs_pwr_gate & 0x10000000) != 0x0))
+		goto check_monitor;
+	else
+		goto out;
+
+check_monitor:
+	writel(0x0, host->syssel_reg);
+	writel(0x0, host->syssel_reg + 0xc);
+	writel(0x18, host->syssel_reg + 0x10);
+	monitor = readl(host->syssel_reg + 0x208);
+	if (monitor == 0) {
+		dev_err(hba->dev, "ufs_pwr_gate:0x%x,monitor:0x%x\n", ufs_pwr_gate, monitor);
+		ufshcd_pltfrm_resume(dev);
+		ret = -EAGAIN;
+	}
+
+out:
+	return ret;
+}
+
 /**
  * ufs_sprd_remove - set driver_data of the device to NULL
  * @pdev: pointer to platform device handle
@@ -1169,7 +1217,7 @@ static const struct of_device_id ufs_sprd_of_match[] = {
 };
 
 static const struct dev_pm_ops ufs_sprd_pm_ops = {
-	.suspend = ufshcd_pltfrm_suspend,
+	.suspend = ufs_pltfrm_sprd_suspend,
 	.resume = ufshcd_pltfrm_resume,
 	.runtime_suspend = ufshcd_pltfrm_runtime_suspend,
 	.runtime_resume = ufshcd_pltfrm_runtime_resume,

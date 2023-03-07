@@ -153,6 +153,7 @@ struct sdhci_sprd_host {
 	struct register_hotplug reg_rmldo_en;
 	u32 int_status;
 	u32 sdhs_tuning;
+	struct mmc_data *data;
 };
 
 struct sdhci_sprd_phy_cfg {
@@ -220,15 +221,45 @@ static inline void sdhci_sprd_writew(struct sdhci_host *host, u16 val, int reg)
 
 static inline void sdhci_sprd_writeb(struct sdhci_host *host, u8 val, int reg)
 {
-	/*
-	 * Since BIT(3) of SDHCI_SOFTWARE_RESET is reserved according to the
-	 * standard specification, sdhci_reset() write this register directly
-	 * without checking other reserved bits, that will clear BIT(3) which
-	 * is defined as hardware reset on Spreadtrum's platform and clearing
-	 * it by mistake will lead the card not work. So here we need to work
-	 * around it.
-	 */
+	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+	u32 int_status = sprd_host->int_status;
+	u64 i = 0;
+
 	if (unlikely(reg == SDHCI_SOFTWARE_RESET)) {
+		/*
+		 * if send cmd with data err happened, sw reset immediately cannot
+		 * stop controller.It must check following bit before sw reset,
+		 * in SPRD SDIO IP
+		 */
+		if (sprd_host->data && sprd_host->data->error && !host->cmd) {
+			while (!(int_status &
+				(SDHCI_INT_TIMEOUT |
+				 SDHCI_INT_DATA_TIMEOUT |
+				 SDHCI_INT_DATA_END_BIT |
+				 SDHCI_INT_DATA_END
+			))) {
+				int_status |= sdhci_sprd_readl(host, SDHCI_INT_STATUS);
+				if (i++ > 10000000)
+					break;
+				cpu_relax();
+			}
+
+			if (unlikely(val == SDHCI_RESET_DATA) &&
+				(int_status & SDHCI_INT_CMD_MASK)) {
+				sprd_host->data = NULL;
+				return;
+			}
+		} else
+			sprd_host->data = NULL;
+
+		/*
+		 * Since BIT(3) of SDHCI_SOFTWARE_RESET is reserved according to the
+		 * standard specification, sdhci_reset() write this register directly
+		 * without checking other reserved bits, that will clear BIT(3) which
+		 * is defined as hardware reset on Spreadtrum's platform and clearing
+		 * it by mistake will lead the card not work. So here we need to work
+		 * around it.
+		 */
 		if (readb_relaxed(host->ioaddr + reg) & SDHCI_HW_RESET_CARD)
 			val |= SDHCI_HW_RESET_CARD;
 	}
@@ -368,10 +399,9 @@ static void sdhci_sprd_set_clock(struct sdhci_host *host, unsigned int clock)
 		sdhci_sprd_sd_clk_off(host);
 		_sdhci_sprd_set_clock(host, clock);
 
-		if (clock <= 400000) {
-			sdhci_writel(host, 0, SDHCI_SPRD_REG_32_DLL_DLY);
+		if (clock <= 400000)
 			en = true;
-		}
+
 		sdhci_sprd_set_dll_invert(host, SDHCI_SPRD_BIT_CMD_DLY_INV |
 					  SDHCI_SPRD_BIT_POSRD_DLY_INV, en);
 		clk_changed = true;
@@ -410,7 +440,7 @@ static void sdhci_sprd_set_uhs_signaling(struct sdhci_host *host,
 	u16 ctrl_2;
 	bool en = false;
 
-	if ((timing == host->timing) && (strcmp(mmc_hostname(mmc), "mmc2") != 0))
+	if ((timing == host->timing) && (strcmp(mmc_hostname(mmc), "mmc0") == 0))
 		return;
 
 	ctrl_2 = sdhci_readw(host, SDHCI_HOST_CONTROL2);
@@ -589,7 +619,6 @@ static int sprd_calc_tuning_range(struct sdhci_sprd_host *host, int *value_t)
 	return range_count;
 }
 
-
 static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -645,11 +674,9 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 				dll_dly &= ~(SDHCI_SPRD_CMD_DLY_MASK);
 				dll_dly |= ((i << 8) & SDHCI_SPRD_CMD_DLY_MASK);
 			} else {
-				dll_dly &= ~(SDHCI_SPRD_POSRD_DLY_MASK | SDHCI_SPRD_NEGRD_DLY_MASK |
-							SDHCI_SPRD_CMD_DLY_MASK);
+				dll_dly &= ~(SDHCI_SPRD_POSRD_DLY_MASK | SDHCI_SPRD_NEGRD_DLY_MASK);
 				dll_dly |= (((i << 16) & SDHCI_SPRD_POSRD_DLY_MASK) |
-							((i << 24) & SDHCI_SPRD_NEGRD_DLY_MASK) |
-							((i << 8) & SDHCI_SPRD_CMD_DLY_MASK));
+					((i << 24) & SDHCI_SPRD_NEGRD_DLY_MASK));
 			}
 		} else {
 			dll_dly &= ~(SDHCI_SPRD_CMD_DLY_MASK |
@@ -776,10 +803,9 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 			p[mmc->ios.timing] |= ((final_phase << 8) & SDHCI_SPRD_CMD_DLY_MASK);
 		} else {
 			p[mmc->ios.timing] &= ~(SDHCI_SPRD_POSRD_DLY_MASK |
-						SDHCI_SPRD_NEGRD_DLY_MASK | SDHCI_SPRD_CMD_DLY_MASK);
+						SDHCI_SPRD_NEGRD_DLY_MASK);
 			p[mmc->ios.timing] |= (((final_phase << 16) & SDHCI_SPRD_POSRD_DLY_MASK) |
-						((final_phase << 24) & SDHCI_SPRD_NEGRD_DLY_MASK) |
-						((final_phase << 8) & SDHCI_SPRD_CMD_DLY_MASK));
+				((final_phase << 24) & SDHCI_SPRD_NEGRD_DLY_MASK));
 		}
 	} else {
 		p[mmc->ios.timing] &= ~(SDHCI_SPRD_CMD_DLY_MASK |
@@ -939,18 +965,27 @@ static void sdhci_sprd_set_power(struct sdhci_host *host, unsigned char mode,
 static void sdhci_sprd_dump_vendor_regs(struct sdhci_host *host)
 {
 	u32 command;
-	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+	u32 clk_ctrl;
+	u32 host_ctrl2;
+	u32 delay_value;
+	u32 int_sts;
 	char sdhci_hostname[64];
+	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
+
+	command = SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND));
+	if ((command == SEND_TUNING_BLOCK) || (command == SEND_TUNING_BLOCK_HS200) ||
+		sprd_host->sdhs_tuning)
+		return;
+
+	int_sts = sdhci_readl(host, SDHCI_INT_STATUS);
+	clk_ctrl = sdhci_readl(host, SDHCI_CLOCK_CONTROL);
+	host_ctrl2 = sdhci_readl(host, SDHCI_AUTO_CMD_STATUS);
+	delay_value = sdhci_readl(host, SDHCI_SPRD_REG_32_DLL_DLY);
+	SDHCI_SPRD_DUMP("CMD%d Error 0x%08x 0x%08x 0x%08x 0x%08x\n",
+		command, int_sts, clk_ctrl, host_ctrl2, delay_value);
 
 	if (!host->mmc->card)
 		return;
-
-	command = SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND));
-	if ((command == SEND_TUNING_BLOCK) || (command == SEND_TUNING_BLOCK_HS200)
-		|| sprd_host->sdhs_tuning)
-		return;
-
-	SDHCI_SPRD_DUMP("CMD%d int 0x%08x\n", command, sprd_host->int_status);
 
 	sprintf(sdhci_hostname, "%s%s", mmc_hostname(host->mmc),
 			": sprd-sdhci + 0x000: ");
@@ -973,6 +1008,7 @@ static u32 sdhci_sprd_int_status(struct sdhci_host *host, u32 intmask)
 	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
 
 	sprd_host->int_status = intmask;
+	sprd_host->data = host->data;
 
 	if (intmask & SDHCI_INT_ERROR_MASK)
 		sdhci_sprd_dump_vendor_regs(host);

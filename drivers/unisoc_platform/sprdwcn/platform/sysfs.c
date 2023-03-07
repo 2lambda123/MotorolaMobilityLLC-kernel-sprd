@@ -16,6 +16,7 @@
 #include "wcn_dbg.h"
 #include "wcn_glb.h"
 #include "wcn_debug_bus.h"
+#include "wcn_boot.h"
 
 static bool from_ddr;
 extern int is_wcn_shutdown;
@@ -75,6 +76,13 @@ static int wcn_send_atcmd(void *cmd, unsigned char cmd_len,
 	struct wcn_pcie_info *pcie_dev;
 	/* common buf for kmalloc */
 	unsigned char *com_buf = NULL;
+
+	if (g_match_config && !g_match_config->unisoc_wcn_integrated) {
+		if (flag_download_done != 1) {
+			WCN_WARN("%s:can not send atcmd before download flag is true\n", __func__);
+			return -EIO;
+		}
+	}
 
 	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
 		pcie_dev = get_wcn_device_info();

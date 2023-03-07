@@ -540,7 +540,7 @@
 
 	rebootescrow@0 {
 		compatible = "pmem-region";
-		reg = <0x0 0xbff70000 0x0 0x00010000>;
+		reg = <0x0 0xfff70000 0x0 0x00010000>;
 	};
 
 	autotest: autotest {
@@ -591,6 +591,7 @@
 	bus-width = <4>;
 	sd-uhs-sdr104;
 	sd-uhs-sdr50;
+	sprd,name = "sdio_sd";
 	sprd,sdio-adma;
 	no-sdio;
 	no-mmc;
@@ -603,6 +604,7 @@
 	sd-uhs-sdr104;
 	sd-uhs-sdr50;
 	bus-width = <4>;
+	sprd,name = "sdio_wifi";
 	sprd,sdio-adma;
 	no-sd;
 	no-mmc;
@@ -624,6 +626,7 @@
 	mmc-hs400-1_8v;
 	mmc-hs200-1_8v;
 	mmc-ddr-1_8v;
+	sprd,name = "sdio_emmc";
 	sprd,sdio-adma;
 	no-sdio;
 	no-sd;
@@ -849,8 +852,8 @@
 		<DISABLE MON_INSIDE MON_WRITE>,
 		<DISABLE MON_INSIDE MON_WRITE>,
 		<DISABLE MON_INSIDE MON_WRITE>,
-		<ENABLE MON_OUTSIDE MON_WRITE>,
-		<ENABLE MON_OUTSIDE MON_WRITE>,
+		<DISABLE MON_OUTSIDE MON_WRITE>,
+		<DISABLE MON_OUTSIDE MON_WRITE>,
 		<DISABLE MON_INSIDE MON_WRITE>,
 		<DISABLE MON_INSIDE MON_WRITE>,
 		<DISABLE MON_INSIDE MON_WRITE>,

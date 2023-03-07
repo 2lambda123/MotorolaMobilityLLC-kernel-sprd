@@ -23,6 +23,7 @@ struct sugov_tunables {
 	unsigned int		rate_limit_us;
 	int			freq_margin;
 	unsigned int		timer_slack_val_us;
+	int			ignore_limit_when_io;
 };
 
 struct sugov_policy {
@@ -74,7 +75,8 @@ static bool slack_timer_setup;
 
 /************************ Governor internals ***********************/
 
-static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
+static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time,
+				     bool ignore_limit)
 {
 	s64 delta_ns;
 
@@ -102,15 +104,21 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 		return true;
 	}
 
+	if (unlikely(ignore_limit))
+		return true;
+
 	delta_ns = time - sg_policy->last_freq_update_time;
 
 	return delta_ns >= sg_policy->freq_update_delay_ns;
 }
 
 static bool sugov_update_next_freq(struct sugov_policy *sg_policy, u64 time,
-				   unsigned int next_freq)
+				   unsigned int next_freq, bool ignore_limit)
 {
 	s64 delta_ns = time - sg_policy->last_freq_update_time;
+
+	if (unlikely(ignore_limit))
+		goto out;
 
 	if (next_freq > sg_policy->next_freq &&
 	    delta_ns < sg_policy->freq_update_delay_ns)
@@ -119,7 +127,7 @@ static bool sugov_update_next_freq(struct sugov_policy *sg_policy, u64 time,
 	if (next_freq < sg_policy->next_freq &&
 	    delta_ns < 2 * sg_policy->freq_update_delay_ns)
 		return false;
-
+out:
 	if (sg_policy->next_freq == next_freq)
 		return false;
 
@@ -135,7 +143,7 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 	struct cpufreq_policy *policy = sg_policy->policy;
 	int cpu;
 
-	if (!sugov_update_next_freq(sg_policy, time, next_freq))
+	if (!sugov_update_next_freq(sg_policy, time, next_freq, false))
 		return;
 
 	next_freq = cpufreq_driver_fast_switch(policy, next_freq);
@@ -169,9 +177,9 @@ static void sugov_slack_timer_setup(struct sugov_policy *sg_policy,
 }
 
 static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
-				  unsigned int next_freq)
+				  unsigned int next_freq, bool ignore_limit)
 {
-	if (!sugov_update_next_freq(sg_policy, time, next_freq))
+	if (!sugov_update_next_freq(sg_policy, time, next_freq, ignore_limit))
 		return;
 
 	if (!sg_policy->work_in_progress) {
@@ -513,13 +521,15 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	unsigned int next_f;
 	bool busy;
 	unsigned int cached_freq = sg_policy->cached_raw_freq;
+	bool iowait_boost = flags & SCHED_CPUFREQ_IOWAIT;
+	bool ignore_limit = iowait_boost && sg_policy->tunables->ignore_limit_when_io;
 
 	sugov_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
 
 	ignore_dl_rate_limit(sg_cpu, sg_policy);
 
-	if (!sugov_should_update_freq(sg_policy, time))
+	if (!sugov_should_update_freq(sg_policy, time, ignore_limit))
 		return;
 
 	/* Limits may have changed, don't skip frequency update */
@@ -549,7 +559,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 		sugov_fast_switch(sg_policy, time, next_f);
 	} else {
 		raw_spin_lock(&sg_policy->update_lock);
-		sugov_deferred_update(sg_policy, time, next_f);
+		sugov_deferred_update(sg_policy, time, next_f, ignore_limit);
 		raw_spin_unlock(&sg_policy->update_lock);
 	}
 }
@@ -589,6 +599,8 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 	struct sugov_cpu *sg_cpu = container_of(hook, struct sugov_cpu, update_util);
 	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	unsigned int next_f;
+	bool iowait_boost = flags & SCHED_CPUFREQ_IOWAIT;
+	bool ignore_limit = iowait_boost && sg_policy->tunables->ignore_limit_when_io;
 
 	raw_spin_lock(&sg_policy->update_lock);
 
@@ -597,13 +609,13 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 
 	ignore_dl_rate_limit(sg_cpu, sg_policy);
 
-	if (sugov_should_update_freq(sg_policy, time)) {
+	if (sugov_should_update_freq(sg_policy, time, ignore_limit)) {
 		next_f = sugov_next_freq_shared(sg_cpu, time);
 
 		if (sg_policy->policy->fast_switch_enabled)
 			sugov_fast_switch(sg_policy, time, next_f);
 		else
-			sugov_deferred_update(sg_policy, time, next_f);
+			sugov_deferred_update(sg_policy, time, next_f, ignore_limit);
 	}
 
 	raw_spin_unlock(&sg_policy->update_lock);
@@ -738,14 +750,40 @@ static ssize_t timer_slack_val_us_store(struct gov_attr_set *attr_set,
 	return count;
 }
 
+static ssize_t ignore_limit_when_io_show(struct gov_attr_set *attr_set, char *buf)
+{
+	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+
+	return sprintf(buf, "%d\n", tunables->ignore_limit_when_io);
+}
+
+static ssize_t ignore_limit_when_io_store(struct gov_attr_set *attr_set,
+					const char *buf, size_t count)
+{
+	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+	int ignore_limit_when_io;
+
+	if (kstrtoint(buf, 10, &ignore_limit_when_io))
+		return -EINVAL;
+
+	if (ignore_limit_when_io < 0 || ignore_limit_when_io > 1)
+		return -EINVAL;
+
+	tunables->ignore_limit_when_io = ignore_limit_when_io;
+
+	return count;
+}
+
 static struct governor_attr rate_limit_us = __ATTR_RW(rate_limit_us);
 static struct governor_attr freq_margin = __ATTR_RW(freq_margin);
 static struct governor_attr timer_slack_val_us = __ATTR_RW(timer_slack_val_us);
+static struct governor_attr ignore_limit_when_io = __ATTR_RW(ignore_limit_when_io);
 
 static struct attribute *sugov_attrs[] = {
 	&rate_limit_us.attr,
 	&freq_margin.attr,
 	&timer_slack_val_us.attr,
+	&ignore_limit_when_io.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(sugov);
@@ -984,6 +1022,8 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	tunables->timer_slack_val_us =
 		TICK_NSEC / NSEC_PER_USEC + tunables->rate_limit_us;
+
+	tunables->ignore_limit_when_io = 0;
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;

@@ -2212,6 +2212,8 @@ retry:
 
 	mmput(prev_mm);
 
+	printk("Memory group test block");
+
 	i = 0;
 	while (READ_ONCE(si->inuse_pages) &&
 	       !signal_pending(current) &&

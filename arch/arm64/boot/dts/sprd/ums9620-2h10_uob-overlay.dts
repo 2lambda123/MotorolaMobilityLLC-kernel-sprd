@@ -6,6 +6,7 @@
 #include <dt-bindings/clock/sprd,ums9620-clk.h>
 #include <dt-bindings/usb/pd.h>
 #include "lcd/lcd_g40396_truly_mipi_fhd.dtsi"
+#include "lcd/lcd_td4320_truly_mipi_fhd.dtsi"
 #include "lcd/lcd_nt36672e_truly_mipi_fhd.dtsi"
 #include "lcd/lcd_dummy_mipi.dtsi"
 #include "tp/ums9620-spi1-gpio13-14-tp.dtsi"
@@ -383,8 +384,10 @@
 		reg = <0x0 0xb0000000 0x0 0x009e4000>;
 	};
 
-	widevine_reserved: widevine@e4c00000 {
-		reg = <0x0 0xe4c00000 0x0 0x0b400000>;
+	widevine_reserved: widevine@dfc00000 {
+		compatible = "shared-dma-pool";
+		reg = <0x0 0xdfc00000 0x0 0x10400000>;
+		reusable;
 	};
 
 	/* Encrypt and decrypt widevine video */
@@ -494,13 +497,6 @@
 &ion {
 	#address-cells = <1>;
 	#size-cells = <0>;
-
-	heap@1 {
-		reg = <1>;
-		label = "carveout_mm";
-		type = <2>;
-		memory-region = <&widevine_reserved>;
-	};
 
 	heap@4 {
 		reg = <4>;

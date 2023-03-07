@@ -114,7 +114,7 @@ static const struct mfd_cell sprd_ump9620_devs[] = {
 		.name = "sc27xx-smpl",
 		.of_compatible = "sprd,sc27xx-smpl",
 	}, {
-		.name = "ump96xx-bc1p2",
+		.name = "sprd-bc1p2",
 		.of_compatible = "sprd,ump96xx-bc1p2",
 	},
 };

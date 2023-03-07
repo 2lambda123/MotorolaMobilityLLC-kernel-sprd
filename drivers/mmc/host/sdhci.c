@@ -117,8 +117,8 @@ void mmc_debug_print(struct mmc_debug_info *info, struct sdhci_host *host)
 			write_speed % 10, info->read_total_blocks, info->write_total_blocks);
 #if IS_ENABLED(CONFIG_MMC_SWCQ)
 		if (!strcmp(info->name, "mmc0") && info->mrq &&
-			((read_speed > 0 && read_speed < 100) ||
-			(write_speed > 0 && write_speed < 100)))
+			((read_speed > 0 && read_speed < 10) ||
+			(write_speed > 0 && write_speed < 10)))
 			host->mmc->cqe_ops->cqe_timeout(host->mmc, info->mrq, &flag);
 #endif
 

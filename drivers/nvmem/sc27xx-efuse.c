@@ -19,7 +19,6 @@
 #define UMP96XX_CLK_GATE		BIT(3)
 #define SC27XX_EFUSE_EN			BIT(6)
 #define UMP518_MODULE_EN		0x1808
-#define UMP518_EFUSE_RTC		0x1810
 
 /* Efuse controller registers definition */
 #define SC27XX_EFUSE_GLB_CTRL		0x0
@@ -36,11 +35,11 @@
 /* Bits definitions for UMP9620_EFUSE_RTC register */
 #define UMP96XX_EFUSE_RTC_EN		BIT(11)
 
-/* Bits definitions for UMP518_EFUSE_RTC register */
-#define UMP518_EFUSE_RTC_EN		BIT(11)
-
 /* Mask definition for SC27XX_EFUSE_BLOCK_INDEX register */
 #define SC27XX_EFUSE_BLOCK_MASK		GENMASK(4, 0)
+
+/* Mask definition for UMP518_EFUSE_BLOCK_INDEX register */
+#define UMP518_EFUSE_BLOCK_MASK		GENMASK(5, 0)
 
 /* Bits definitions for SC27XX_EFUSE_MODE_CTRL register */
 #define SC27XX_EFUSE_PG_START		BIT(0)
@@ -180,10 +179,6 @@ static int ump962x_efuse_read(void *context, u32 offset, void *val, size_t bytes
 		goto unlock_efuse;
 
 	if (of_device_is_compatible(efuse->dev->of_node,
-					"sprd,ump518-efuse")) {
-		ret = regmap_update_bits(efuse->regmap, UMP518_EFUSE_RTC,
-			UMP518_EFUSE_RTC_EN, UMP518_EFUSE_RTC_EN);
-	} else if (of_device_is_compatible(efuse->dev->of_node,
 					"sprd,ump9620-efuse")) {
 		ret = regmap_update_bits(efuse->regmap, UMP9620_EFUSE_RTC,
 			UMP96XX_EFUSE_RTC_EN, UMP96XX_EFUSE_RTC_EN);
@@ -256,9 +251,17 @@ static int sc27xx_efuse_read(void *context, u32 offset, void *val, size_t bytes)
 		goto disable_efuse;
 
 	/* Set the block address to be read. */
-	ret = regmap_write(efuse->regmap,
+	if (of_device_is_compatible(efuse->dev->of_node,
+					"sprd,ump518-efuse")) {
+		ret = regmap_write(efuse->regmap,
+			   efuse->base + SC27XX_EFUSE_BLOCK_INDEX,
+			   blk_index & UMP518_EFUSE_BLOCK_MASK);
+	} else {
+		ret = regmap_write(efuse->regmap,
 			   efuse->base + SC27XX_EFUSE_BLOCK_INDEX,
 			   blk_index & SC27XX_EFUSE_BLOCK_MASK);
+	}
+
 	if (ret)
 		goto disable_efuse;
 
@@ -366,9 +369,6 @@ static int sc27xx_efuse_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "failed to get pmic_efuse device id, econfig.id:%d\n", econfig.id);
 			return -EINVAL;
 		}
-		econfig.reg_read = ump962x_efuse_read;
-	} else if (of_device_is_compatible(efuse->dev->of_node,
-					"sprd,ump518-efuse")) {
 		econfig.reg_read = ump962x_efuse_read;
 	} else {
 		econfig.reg_read = sc27xx_efuse_read;

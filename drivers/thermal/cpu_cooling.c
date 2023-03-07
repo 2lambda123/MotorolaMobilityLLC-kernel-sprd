@@ -362,8 +362,12 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 
 	ret = freq_qos_update_request(&cpufreq_cdev->qos_req,
 			cpufreq_cdev->freq_table[state].frequency);
-	if (ret > 0)
-		cpufreq_cdev->cpufreq_state = state;
+	if (ret < 0) {
+		pr_err("freq_qos_update_request failed\n");
+		return -EINVAL;
+	}
+	cpufreq_cdev->cpufreq_state = state;
+
 #ifdef CONFIG_SPRD_THERMAL_POLICY
 	freq = cpufreq_cdev->freq_table[state].frequency;
 	pr_info("cpu%u temp: %d update max_freq to %u\n", cpu, cur_temp, freq);
