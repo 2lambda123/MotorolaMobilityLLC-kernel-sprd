@@ -294,6 +294,7 @@
 				phys = <&hsphy>;
 				extcon = <&pmic_typec>, <&pmic_pd>;
 				pd-extcon-enable;
+				use-typec-extcon;
 
 			};
 
@@ -513,6 +514,7 @@
 		monitored-battery = <&bat>;
 		extcon = <&extcon_gpio>;
 		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
+		use-typec-extcon;
 	};
 
 	sgm41543_chg: charger@0B {
@@ -522,6 +524,7 @@
                 monitored-battery = <&bat>;
 		extcon = <&extcon_gpio>;
                 irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
+		use-typec-extcon;
 /*
                 vddvbus:otg-vbus {
                         regulator-name = "vddvbus";
@@ -533,6 +536,7 @@
 		reg = <0x6b>;
 		monitored-battery = <&bat>;
 		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
+		use-typec-extcon;
 		vddvbus:otg-vbus {
 			regulator-name = "vddvbus";
 		};
@@ -820,6 +824,8 @@
 	sprd,capacity-boot-calibration;
 	sprd,capacity-charge-cycle;
 	sprd,basp;
+	use-pdhub-c2c;
+
 };
 
 &panel {
@@ -849,12 +855,13 @@
 
 &pmic_pd {
 	status = "okay";
+	use-pdhub-c2c;
 	usb_con: connector {
 		compatible = "usb-c-connector";
 		label = "USB-C";
 		power-role = "dual";
 		try-power-role = "sink";
-		source-pdos = <PDO_FIXED(5000, 400, PDO_FIXED_USB_COMM)>;
+		source-pdos = <PDO_FIXED(5000, 400, PDO_FIXED_USB_COMM |PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP)>;
 		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM)
 			     PDO_PPS_APDO(3300, 11000, 3000)>;
 		op-sink-microwatt = <10000000>;

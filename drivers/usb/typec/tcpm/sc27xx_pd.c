@@ -19,6 +19,7 @@
 #include <linux/usb/sprd_tcpm.h>
 #include <linux/usb/sprd_pd.h>
 #include <linux/usb/typec_dp.h>
+#include <linux/power_supply.h>
 
 /* PMIC global registers definition */
 #define SC27XX_MODULE_EN		0x1808
@@ -385,6 +386,7 @@ struct sc27xx_pd {
 	bool shutdown_flag;
 	bool ignore_msg;
 	bool set_rx;
+	bool pr_swap;
 	bool is_sink;
 	bool is_source;
 	bool use_pdhub_c2c;
@@ -394,6 +396,7 @@ struct sc27xx_pd {
 	bool can_communication;
 	struct timespec64 rx_err_start_time;
 	struct timespec64 hard_reset_start_time;
+	struct power_supply *chg_psy;
 };
 
 /*
@@ -610,6 +613,7 @@ static int sc27xx_pd_set_vbus(struct tcpc_dev *tcpc, bool on, bool charge)
 		sprd_pd_log(pd, "vbus is already %s\n", on ? "On" : "Off");
 		dev_info(pd->dev, "vbus is already %s\n", on ? "On" : "Off");
 	} else {
+#ifdef OTG_USE_REGULATOR
 		if (!pd->vbus) {
 			pd->vbus = devm_regulator_get_optional(pd->dev, "vbus");
 			if (IS_ERR(pd->vbus)) {
@@ -638,7 +642,30 @@ static int sc27xx_pd_set_vbus(struct tcpc_dev *tcpc, bool on, bool charge)
 				}
 			}
 		}
-
+#else
+          	if (pd->chg_psy == NULL) {
+				pd->chg_psy = power_supply_get_by_name("charger");
+				if (pd->chg_psy == NULL) {
+					dev_err(pd->dev, "get charger power supply failed\n");
+				}
+		}
+          	if (pd->chg_psy) {
+				union power_supply_propval val;
+                  		if (on) {
+					val.intval = 1;
+                                 	sprd_pd_log(pd, "set vbus on");
+                                }
+                  		else {
+                                  	val.intval = 0;
+                                 	sprd_pd_log(pd, "set vbus off"); 
+                                }
+				ret = power_supply_set_property(pd->chg_psy, POWER_SUPPLY_PROP_SCOPE, &val);
+				if (ret) {
+					dev_err(pd->dev, "failed to enable vbus\n");
+					goto set_vbus_done;
+				}
+		}
+#endif
 		pd->vbus_on = on;
 		sprd_pd_log(pd, "vbus := %s", on ? "On" : "Off");
 		dev_info(pd->dev, "vbus := %s", on ? "On" : "Off");
@@ -846,6 +873,8 @@ static int sc27xx_pd_send_hardreset(struct sc27xx_pd *pd)
 	if (ret < 0)
 		return ret;
 
+	pd->pr_swap = false;
+
 	state = extcon_get_state(pd->edev, EXTCON_CHG_USB_PD);
 	if (state == true)
 		extcon_set_state_sync(pd->edev, EXTCON_CHG_USB_PD, false);
@@ -925,6 +954,7 @@ static int sc27xx_pd_tx_msg(struct sc27xx_pd *pd, const struct sprd_pd_message *
 	u16 header;
 	u32 data_obj_num, data[SPRD_PD_MAX_PAYLOAD * 2] = {0}, head = 0;
 	int i, ret;
+	u32 type;
 
 	ret = sc27xx_pd_tx_flush(pd);
 	if (ret < 0)
@@ -936,8 +966,12 @@ static int sc27xx_pd_tx_msg(struct sc27xx_pd *pd, const struct sprd_pd_message *
 		return -EINVAL;
 	}
 
+	type = msg ? sprd_pd_header_type_le(msg->header) : 0;
+	if (type == SPRD_PD_CTRL_PR_SWAP)
+		pd->pr_swap = true;
+
 	header = msg ? le16_to_cpu(msg->header) : 0;
-	sprd_pd_log(pd, "tx msg: header = 0x%x", header);
+	sprd_pd_log(pd, "tx msg: header = 0x%x, pr_swap = %d", header, pd->pr_swap);
 	ret = regmap_write(pd->regmap, pd->base + SC27XX_PD_HEAD_CFG, header);
 	if (ret < 0) {
 		sprd_pd_log(pd, "write head cfg fail, ret = %d", ret);
@@ -1104,6 +1138,12 @@ static int sc27xx_pd_read_message(struct sc27xx_pd *pd, struct sprd_pd_message *
 
 	sprd_pd_log(pd, "rx fifo data num = %d, msg header = 0x%x, type = %d, spec = %d",
 		    rx_fifo_data_num, msg->header, type, spec);
+
+	if ((data_obj_num * 2) > rx_fifo_data_num) {
+		sprd_pd_log(pd, "data_obj_num bigger than rx_fifo_data_num");
+		return sc27xx_pd_rx_flush(pd);
+	}
+
 	if ((data_obj_num * 4 + 1) < rx_fifo_data_num && !vendor_define &&
 	    !source_capabilities && !data_request && !data_alert && !ext_status) {
 		sprd_pd_log(pd, "retry read msg");
@@ -2335,6 +2375,7 @@ static int sc27xx_pd_probe(struct platform_device *pdev)
 	}
 	sc27xx_init_tcpc_dev(pd);
 
+#ifdef OTG_USE_REGULATOR
 	pd->vbus = devm_regulator_get(pd->dev, "vbus");
 	if (IS_ERR(pd->vbus)) {
 		dev_err(&pdev->dev, "pd failed to get vbus\n");
@@ -2352,6 +2393,14 @@ static int sc27xx_pd_probe(struct platform_device *pdev)
 			return ret;
 		}
 	}
+#else
+	if (pd->chg_psy == NULL) {
+			pd->chg_psy = power_supply_get_by_name("charger");
+			if (pd->chg_psy == NULL) {
+				dev_err(pd->dev, "get charger power supply failed\n");
+			}
+	}
+#endif
 
 	if (of_property_read_bool(pdev->dev.of_node, "sprd,syscon-aon-apb")) {
 		pd->aon_apb = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
