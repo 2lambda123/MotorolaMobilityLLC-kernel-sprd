@@ -771,6 +771,12 @@ config CHARGER_SGM41543
         help
           Say Y to include support for SGM Sgm41543 Battery Charger.
 
+config CHARGER_SGM41542
+        tristate "SGM sgm41542 Charger"
+        depends on I2C || COMPILE_TEST
+        help
+          Say Y to include support for SGM Sgm41543 Battery Charger.
+
 config CHARGER_SC89890
          tristate "Spreadtrum SC89890 charger driver"
          depends on MFD_SC27XX_PMIC || COMPILE_TEST

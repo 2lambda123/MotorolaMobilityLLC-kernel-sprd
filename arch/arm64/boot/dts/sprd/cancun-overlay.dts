@@ -541,6 +541,17 @@
                 };
 */
         };
+
+	sgm41542_chg: charger@3B {
+		compatible = "sgm,sgm41542_chg";
+		reg = <0x3B>;
+		phys = <&hsphy>;
+			monitored-battery = <&bat>;
+		extcon = <&extcon_gpio>;
+			irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
+		use-typec-extcon;
+	};
+
 	bq2560x_chg: charger@6b {
 		compatible = "ti,bq2560x_chg";
 		reg = <0x6b>;

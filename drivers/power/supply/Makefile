@@ -108,6 +108,7 @@ obj-$(CONFIG_CHARGER_SC89890)   += sc89890-charger.o
 obj-$(CONFIG_CHARGER_UPM6920)   += upm6920-charger.o
 obj-$(CONFIG_CHARGER_SGM41511)	+= sgm41511-charger.o
 obj-$(CONFIG_CHARGER_SGM41543)	+= sgm41543-charger.o
+obj-$(CONFIG_CHARGER_SGM41542)	+= sgm41542-charger.o
 obj-$(CONFIG_CHARGER_UPM6710)	+= upm6710-charger.o
 obj-$(CONFIG_FAST_CHARGER_SC27XX) += sc27xx_fast_charger.o
 obj-$(CONFIG_WIRELESS_CHARGE_PUMPS_CONVERTER_HL1506)	+= hl1506_charger.o
