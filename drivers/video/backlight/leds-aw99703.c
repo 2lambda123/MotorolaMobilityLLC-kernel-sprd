@@ -1074,7 +1074,7 @@ static int aw99703_probe(struct i2c_client *client,
 			__func__);
 		goto err_sysfs;
 	}
-	aw99703_backlight_init(drvdata);
+	//aw99703_backlight_init(drvdata);
 	pr_info("%s exit\n", __func__);
 	return 0;
 
