@@ -105,6 +105,7 @@ obj-$(CONFIG_CHARGER_BQ2597X)	+= bq2597x-charger.o
 obj-$(CONFIG_CHARGER_SC8549)	+= sc8549-charger.o
 obj-$(CONFIG_CHARGER_SC8551)	+= sc8551-charger.o
 obj-$(CONFIG_CHARGER_SC89890)   += sc89890-charger.o
+obj-$(CONFIG_CHARGER_UPM6920)   += upm6920-charger.o
 obj-$(CONFIG_CHARGER_SGM41511)	+= sgm41511-charger.o
 obj-$(CONFIG_CHARGER_SGM41543)	+= sgm41543-charger.o
 obj-$(CONFIG_CHARGER_UPM6710)	+= upm6710-charger.o

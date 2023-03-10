@@ -499,6 +499,7 @@ static const char * const sc27xx_charger_supply_name[] = {
 	/* M201 code for sgm41543 by liuyansheng10 at 220828 begin */
 	"sgm41543_charger",
 	"sc89890_charger",
+	"upm6920_charger",
 	"charger",
 	/* M201 code for sgm41543 by liuyansheng10 at 220828 end */
 };

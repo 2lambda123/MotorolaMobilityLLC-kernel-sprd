@@ -892,7 +892,7 @@ static int sc8989x_charger_set_limit_current(struct sc8989x_charger_info *info,
     int ret;
 
     limit_cur = limit_cur / 1000;
-    dev_err(info->dev, "wdh set limit_current%d\n", limit_cur);
+    dev_err(info->dev, "set limit_current%d\n", limit_cur);
 
     if (limit_cur < REG00_IINDPM_MIN) {
         limit_cur = REG00_IINDPM_MIN;
@@ -950,13 +950,12 @@ static u32 sc8989x_charger_get_limit_current(struct sc8989x_charger_info *info,
     int ret;
 
     ret = sc8989x_read(info, SC8989X_REG_0, &reg_val);
-	dev_err(info->dev, "wangdonghai ret =  %d\n",ret);
     if (ret < 0)
         return ret;
 
     reg_val = (reg_val & REG00_IINDPM_MASK) >> REG00_IINDPM_SHIFT;
     *limit_cur = (reg_val * REG00_IINDPM_LSB + REG00_IINDPM_BASE) * 1000;
-	dev_err(info->dev, "wangdonghai sc8989x_charger_get_limit_current =  %d\n",*limit_cur);
+	dev_err(info->dev, " sc8989x_charger_get_limit_current =  %d\n",*limit_cur);
 
     return 0;
 }

@@ -1505,7 +1505,6 @@ static int sgm41513_charger_usb_set_property(struct power_supply *psy,
 			dev_err(info->dev, "set input current limit failed\n");
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
-		/* M170 code for sgm41513 by liuyansheng10 at 220829 begin */
 		if (val->intval == CM_POWER_PATH_ENABLE_CMD) {
 			sgm41513_exit_hiz_mode(info);
 			break;
@@ -1513,7 +1512,6 @@ static int sgm41513_charger_usb_set_property(struct power_supply *psy,
 			sgm41513_enter_hiz_mode(info);
 			break;
 		}
-		/* M170 code for sgm41513 by liuyansheng10 at 220829 end */
 		ret = sgm41513_charger_set_status(info, val->intval);
 		if (ret < 0)
 			dev_err(info->dev, "set charge status failed\n");

@@ -518,6 +518,15 @@
 		use-typec-extcon;
 	};
 
+	upm6920_chg: charger@6a {
+		compatible = "up,upm6920_chg";
+		reg = <0x6A>;
+		phys = <&hsphy>;
+		monitored-battery = <&bat>;
+		extcon = <&extcon_gpio>;
+		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
+	};
+
 	sgm41543_chg: charger@0B {
                 compatible = "sgm,sgm41543_chg";
                 reg = <0x0B>;
