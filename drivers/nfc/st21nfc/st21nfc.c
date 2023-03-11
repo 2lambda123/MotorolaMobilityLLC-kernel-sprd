@@ -248,7 +248,9 @@ static irqreturn_t st21nfc_dev_irq_handler(int irq, void *dev_id)
 	st21nfc_disable_irq(st21nfc_dev);
 
 	/* Wake up waiting readers */
+	 pr_debug("%s- m201 st21nfc_dev_irq_handler wake_up front\n", __func__);
 	wake_up(&st21nfc_dev->read_wq);
+	pr_debug("%s- m201 st21nfc_dev_irq_handler wake_up hou\n", __func__);
 
 	return IRQ_HANDLED;
 }
@@ -560,7 +562,7 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 		//pr_debug("%s: st21nfc_dev ptr %p\n", __func__, st21nfc_dev);
 		pr_err("%s : writing %zu bytes.\n", __func__, count);
 	}
-     pr_err("%s : writing %zu bytes.\n", __func__, count);
+     
 	if (count > MAX_BUFFER_SIZE)
 		count = MAX_BUFFER_SIZE;
 
@@ -571,9 +573,11 @@ static ssize_t st21nfc_dev_write(struct file *filp, const char __user *buf,
 	}
 
 	/* Write data */
+	pr_err("%s : writing i2c_master_send data start %zu bytes. \n",  __func__, count);
 	ret = i2c_master_send(st21nfc_dev->client, tmp, count);
+	pr_err("%s : writing i2c_master_send data end %zu bytes. ret =%d\n", __func__, count,ret);
 	if (ret != count) {
-		pr_err("%s : i2c_master_send returned %d\n", __func__, ret);
+		pr_err("%s : i2c_master_send   returned %d\n", __func__, ret);
 		ret = -EIO;
 	}
 	kfree(tmp);
@@ -808,14 +812,18 @@ static unsigned int st21nfc_poll(struct file *file, poll_table *wait)
 	int pinlev = 0;
 
 	/* wait for Wake_up_pin == high  */
+	 pr_debug("%s- m201 st21nfc_poll statu \n", __func__);
 	poll_wait(file, &st21nfc_dev->read_wq, wait);
+	 pr_debug("%s- m201 st21nfc_poll end  wake pin is already high\n", __func__);
 
 	pinlev = gpiod_get_value(st21nfc_dev->gpiod_irq);
+	 pr_debug("%s- m201 st21nfc_poll pinlev = %d\n", __func__,pinlev);
 	mutex_lock(&st21nfc_dev->irq_dir_mutex);
 	if (pinlev != 0) {
 		if (enable_debug_log)
 			pr_debug("%s return ready\n", __func__);
 
+       pr_debug("%s- m201 st21nfc_poll enable_debug_log 1 \n", __func__);
 		mask = POLLIN | POLLRDNORM; /* signal data avail */
 		st21nfc_disable_irq(st21nfc_dev);
 	} else {
@@ -823,6 +831,7 @@ static unsigned int st21nfc_poll(struct file *file, poll_table *wait)
 		if (enable_debug_log)
 			pr_debug("%s enable irq\n", __func__);
 
+     pr_debug("%s- m201 st21nfc_poll enable_debug_log 2 \n", __func__);
 		st21nfc_enable_irq(st21nfc_dev);
 	}
 
