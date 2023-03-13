@@ -26,11 +26,13 @@
 					sprd,video-lp-cmd-enable = <1>;
 					sprd,hporch-lp-disable = <1>;
 
-					sprd,esd-check-enable = <0>;
+					sprd,esd-check-enable = <1>;
 					sprd,esd-check-mode = <0>;
 					sprd,esd-check-period = <2000>;
-					sprd,esd-check-regs = <0xA>;
-					sprd,esd-return-code = <0x9c>;
+					sprd,esd-check-reg-count = <1>;
+					sprd,esd-check-register = [0A];
+					sprd,esd-check-value-len = <1>;
+					sprd,esd-check-value = [9C];
 					sprd,reset-on-sequence = <0 5>, <1 5>, <0 5>, <1 20>;
 					//sprd,reset-off-sequence = <0 5>;
 
@@ -75,7 +77,7 @@
 						15 00 00 02 FF 10
 						15 01 00 02 FB 01 
 						39 00 00 03 51 00 00
-						15 00 00 02 53 24
+						15 00 00 02 53 2C
 						15 00 00 02 35 00
 						05 78 00 01 11
 						05 14 00 01 29
