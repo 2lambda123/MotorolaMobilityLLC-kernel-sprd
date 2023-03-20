@@ -2379,6 +2379,7 @@ static int upm6920_charger_probe(struct i2c_client *client,
 
     info->client = client;
     info->dev = dev;
+	info->client->addr = 0x6a;
 
     ret = upm6920_charger_get_vendor_id_part_value(info);
     if (ret) {
