@@ -6041,6 +6041,7 @@ static ssize_t charger_stop_show(struct device *dev,
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
 		return -ENOMEM;
 	}
+
 	stop_charge = is_charging(sysfs->cm);
 
 	return sprintf(buf, "%d\n", !stop_charge);
@@ -6093,6 +6094,96 @@ static ssize_t charger_stop_store(struct device *dev,
 	power_supply_changed(cm->charger_psy);
 	return count;
 }
+
+/* add charger_stop_level contorl */
+static ssize_t charge_stop_level_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct charger_sysfs_ctl_item *sysfs = container_of(attr, struct charger_sysfs_ctl_item,
+							    attr_charge_stop_level);
+        struct charger_manager *cm;
+        struct charger_desc *desc;
+
+	if (!sysfs) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+	cm = sysfs->cm;
+	if (!cm || !cm->charger_psy) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+        desc = sysfs->cm->desc;
+	if (!desc) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+	return sprintf(buf, "%d\n",cm->desc->soc_stop_level);
+}
+
+static ssize_t charge_stop_level_store(struct device *dev,
+				  struct device_attribute *attr, const char *buf,
+				  size_t count)
+{
+	struct charger_sysfs_ctl_item *sysfs = container_of(attr, struct charger_sysfs_ctl_item,
+							    attr_charge_stop_level);
+	struct charger_manager *cm;
+        struct charger_desc *desc;
+	int uisoc_level,ret;
+
+	if (!sysfs) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+	cm = sysfs->cm;
+	if (!cm || !cm->charger_psy) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+        desc = sysfs->cm->desc;
+	if (!desc) {
+		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+
+	if (kstrtouint(buf, 10, &cm->desc->soc_stop_level) < 0)
+		return -EINVAL;
+
+	uisoc_level = DIV_ROUND_CLOSEST((cm->desc->cap * 100 / BAT_MAINTAIN), 10);
+	if (uisoc_level > 100)
+		uisoc_level = 100;
+	else if (uisoc_level < 0)
+		uisoc_level = 0;
+
+	if (cm->desc->soc_stop_level >= uisoc_level) {
+		sysfs->externally_control = 0;
+		ret = try_charger_enable(cm, true);
+		if (ret) {
+			dev_err(cm->dev, "failed to start charger.\n");
+			return ret;
+		}
+		mod_delayed_work(cm_wq, &cm_monitor_work, 0);
+	} else {
+		sysfs->externally_control = 1;
+		ret = try_charger_enable(cm, false);
+		if (ret) {
+			dev_err(cm->dev, "failed to stop charger.\n");
+			return ret;
+		}
+	}
+
+	power_supply_changed(cm->charger_psy);
+	dev_err(cm->dev, "%s,uisoc_level = %d  soc_stop_level =%d\n", __func__,uisoc_level,cm->desc->soc_stop_level);
+
+	return count;
+}
+/* end charge_stop_level contorl */
+
 
 static ssize_t charger_externally_control_show(struct device *dev,
 					       struct device_attribute *attr, char *buf)
@@ -6396,7 +6487,8 @@ static int charger_manager_prepare_sysfs(struct charger_manager *cm)
 		sysfs->attrs[6] = &sysfs->attr_enable_power_path.attr;
 		sysfs->attrs[7] = &sysfs->attr_keep_awake.attr;
 		sysfs->attrs[8] = &sysfs->attr_support_fast_charge.attr;
-		sysfs->attrs[9] = NULL;
+		sysfs->attrs[9] = &sysfs->attr_charge_stop_level.attr;
+		sysfs->attrs[10] = NULL;
 
 		sysfs->attr_grp.name = name;
 		sysfs->attr_grp.attrs = sysfs->attrs;
@@ -6407,6 +6499,13 @@ static int charger_manager_prepare_sysfs(struct charger_manager *cm)
 		sysfs->attr_stop_charge.attr.mode = 0644;
 		sysfs->attr_stop_charge.show = charger_stop_show;
 		sysfs->attr_stop_charge.store = charger_stop_store;
+
+		sysfs_attr_init(&sysfs->attr_charge_stop_level.attr);
+		sysfs->attr_charge_stop_level.attr.name = "charge_stop_level";
+		sysfs->attr_charge_stop_level.attr.mode = 0644;
+		sysfs->attr_charge_stop_level.show = charge_stop_level_show;
+		sysfs->attr_charge_stop_level.store = charge_stop_level_store;
+
 
 		sysfs_attr_init(&sysfs->attr_jeita_control.attr);
 		sysfs->attr_jeita_control.attr.name = "jeita_control";
