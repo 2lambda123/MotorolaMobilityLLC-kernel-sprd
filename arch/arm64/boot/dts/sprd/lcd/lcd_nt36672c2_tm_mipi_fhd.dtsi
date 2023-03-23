@@ -1,5 +1,5 @@
 /*
- * nt36672c  LCD config dtsi file for spreadtrum
+ * nt36672c2  LCD config dtsi file for spreadtrum
  *
  * Copyright (C) 2022, Spreadtrum Communications Inc.
  *
@@ -11,7 +11,7 @@
 		target-path = "/";
 		__overlay__ {
 			lcds {
-				lcd_nt36672c_tm_mipi_fhd: lcd_nt36672c_tm_mipi_fhd {
+				lcd_nt36672c2_tm_mipi_fhd: lcd_nt36672c2_tm_mipi_fhd {
 
 					sprd,dsi-work-mode = <1>;          /* video burst mode*/
 					sprd,dsi-lane-number = <4>;
@@ -98,7 +98,7 @@
 
 						15 00 00 02 FF 25 
 						15 01 00 02 FB 01 
-						15 00 00 02 18 22
+						15 00 00 02 18 20
 
 						15 00 00 02 FF F0 
 						15 01 00 02 FB 01 
@@ -151,9 +151,9 @@
 					};
 
 					display-timings {
-						native-mode = <&nt36672c_tm_timing0>;
+						native-mode = <&nt36672c2_tm_timing0>;
 
-						nt36672c_tm_timing0: timing0 {
+						nt36672c2_tm_timing0: timing0 {
 							clock-frequency = <192000000>;
 							hactive = <1080>;
 							vactive = <2400>;
