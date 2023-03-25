@@ -108,7 +108,7 @@
 #define SGM41542_OTG_VALID_MS			500
 #define SGM41542_FEED_WATCHDOG_VALID_MS		50
 #define SGM41542_OTG_RETRY_TIMES			10
-#define SGM41542_LIMIT_CURRENT_MAX		3200000
+#define SGM41542_LIMIT_CURRENT_MAX		3800000
 #define SGM41542_LIMIT_CURRENT_OFFSET		100000
 #define SGM41542_REG_IINDPM_LSB			100
 
@@ -450,10 +450,9 @@ sgm41542_charger_set_termina_cur(struct sgm41542_charger_info *info, u32 cur)
 {
 	u8 reg_val;
 	
-	cur = cur*1000;
-	for(reg_val = 1; reg_val < 16 && cur >= ITERM_CURRENT_STABLE[reg_val]; reg_val++)
-		;
-	reg_val--;
+	reg_val = (cur / 1000 - 60)/60;
+	if (reg_val > 0xF)
+		reg_val = 0xF;
 
 	return sgm41542_update_bits(info, SGM41542_REG_3,
 				   SGM41542_REG_TERMINAL_CUR_MASK,
@@ -802,30 +801,9 @@ static int sgm41542_charger_set_current(struct sgm41542_charger_info *info,
 {
 	u8 reg_val;
 	
-	if (uA <= 40000)
-		reg_val = uA / 5000;
-	else if (uA < 50000)
-		reg_val = 0x08;
-	else if (uA <= 110000)
-		reg_val = 0x08 + (uA -40000) / 10000;
-	else if (uA < 130000)
-		reg_val = 0x0F;
-	else if (uA <= 270000)
-		reg_val = 0x0F + (uA -110000) / 20000;
-	else if (uA < 300000)
-		reg_val = 0x17;
-	else if (uA <= 540000)
-		reg_val = 0x17 + (uA -270000) / 30000;
-	else if (uA < 600000)
-		reg_val = 0x20;
-	else if (uA <= 1500000)
-		reg_val = 0x20 + (uA -540000) / 60000;
-	else if (uA < 1620000)
-		reg_val = 0x30;
-	else if (uA <= 2940000)
-		reg_val = 0x30 + (uA -1500000) / 120000;
-	else 
-		reg_val = 0x3d;
+	reg_val = uA/1000 /60;
+	if (reg_val > 63)
+		reg_val = 63;
 
 	return sgm41542_update_bits(info, SGM41542_REG_2,
 				   SGM41542_REG_ICHG_MASK,
@@ -844,20 +822,7 @@ static int sgm41542_charger_get_current(struct sgm41542_charger_info *info,
 
 	reg_val &= SGM41542_REG_ICHG_MASK;
 	
-	if (reg_val <= 0x8)
-		*cur = reg_val * 5000;
-	else if (reg_val <= 0xF)
-		*cur = 40000 + (reg_val - 0x8) * 10000;
-	else if (reg_val <= 0x17)
-		*cur = 110000 + (reg_val - 0xF) * 20000;
-	else if (reg_val <= 0x20)
-		*cur = 270000 + (reg_val - 0x17) * 30000;
-	else if (reg_val <= 0x30)
-		*cur = 540000 + (reg_val - 0x20) * 60000;
-	else if (reg_val <= 0x3C)
-		*cur = 1500000 + (reg_val - 0x30) * 120000;
-	else
-		*cur = 3000000;
+	*cur = reg_val * 60 * 1000;
 
 	return 0;
 }
@@ -930,11 +895,11 @@ sgm41542_charger_get_limit_current(struct sgm41542_charger_info *info,
 		return ret;
 
 	reg_val &= SGM41542_REG_LIMIT_CURRENT_MASK;
-	dev_err(info->dev, "wangdoghai SGM41542_REG_LIMIT_CURRENT_MASK = %d\n",reg_val );
+	dev_err(info->dev, " SGM41542_REG_LIMIT_CURRENT_MASK = %d\n",reg_val );
 	*limit_cur = reg_val * SGM41542_REG_IINLIM_BASE * 1000;
-	dev_err(info->dev, "wangdoghai *limit_cur = %d\n",*limit_cur);
+	dev_err(info->dev, " limit_cur = %d\n",*limit_cur);
 	*limit_cur += SGM41542_LIMIT_CURRENT_OFFSET;
-	dev_err(info->dev, "wangdoghai *limit_cur = %d\n",*limit_cur);
+	dev_err(info->dev, " limit_cur = %d\n",*limit_cur);
 	if (*limit_cur >= SGM41542_LIMIT_CURRENT_MAX)
 		*limit_cur = SGM41542_LIMIT_CURRENT_MAX;
 
