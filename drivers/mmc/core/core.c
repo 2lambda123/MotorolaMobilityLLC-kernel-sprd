@@ -1801,8 +1801,7 @@ static int mmc_do_erase(struct mmc_card *card, unsigned int from,
 		 * never leaves the program state.
 		 */
 		if (time_after(jiffies, timeout)) {
-			pr_err("%s: Card stuck in programming state! %s\n",
-				mmc_hostname(card->host), __func__);
+			pr_err("%s: Card stuck in programming state! %s timeout %d max_busy_timeout %d\n",mmc_hostname(card->host), __func__, busy_timeout, card->host->max_busy_timeout);
 			err =  -EIO;
 			goto out;
 		}
