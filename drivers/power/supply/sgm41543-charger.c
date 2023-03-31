@@ -90,6 +90,9 @@
 #define SGM41543_REG_EN_BATFET_MASK                     GENMASK(5, 5)
 #define SGM41543_REG_EN_BATFET_SHIFT            5
 
+#define SGM41543_REG_EN_BATRST_MASK                     GENMASK(2, 2)
+#define SGM41543_REG_EN_BATRST_SHIFT            2
+
 #define SGM41543_REG_LIMIT_CURRENT_MASK		GENMASK(4, 0)
 
 /* HS03 code for SR-SL6215-01-178 Import multi-charger driver patch of SPCSS00872701 by gaochao at 20210720 start */
@@ -833,6 +836,7 @@ sgm41543_charger_set_limit_current(struct sgm41543_charger_info *info,
 {
 	u8 reg_val;
 	int ret;
+
 	if (limit_cur >= SGM41543_LIMIT_CURRENT_MAX)
 		limit_cur = SGM41543_LIMIT_CURRENT_MAX;
 	info->last_limit_cur = limit_cur;
@@ -2548,6 +2552,8 @@ static int sgm41543_charger_probe(struct i2c_client *client,
 
 	mutex_unlock(&info->lock);
 	sgm41543_charger_detect_status(info);
+	pr_info("[%s]line=%d: add batrst funtion \n", __FUNCTION__, __LINE__);
+	ret = sgm41543_update_bits(info, SGM41543_REG_7,SGM41543_REG_EN_BATRST_MASK, 0x1 << SGM41543_REG_EN_BATRST_SHIFT);
 	/* HS03 code for SR-SL6215-01-178 Import multi-charger driver patch of SPCSS00872701 by gaochao at 20210720 start */
 	pr_info("[%s]line=%d: probe success\n", __FUNCTION__, __LINE__);
 	/* HS03 code for SR-SL6215-01-178 Import multi-charger driver patch of SPCSS00872701 by gaochao at 20210720 end */
