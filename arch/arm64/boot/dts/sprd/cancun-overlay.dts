@@ -145,7 +145,7 @@
 				fullbatt-track-end-cur = <130000>;
 				first-calib-voltage = <3687000>;
 				first-calib-capacity = <50>;
-				ir-us-upper-limit-microvolt = <4530000>;
+				ir-us-upper-limit-microvolt = <4608000>;
 				ir-cv-offset-microvolt = <100000>;
 				ir-rc-micro-ohms = <26000>;
 

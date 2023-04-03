@@ -1809,11 +1809,13 @@ static void cm_update_charge_info(struct charger_manager *cm, int cmd)
 					 SPRD_VOTE_TYPE_IBAT,
 					 SPRD_VOTE_TYPE_IBAT_ID_CHARGER_TYPE,
 					 SPRD_VOTE_CMD_MIN, desc->charge_limit_cur, cm);
-	if (cmd & CM_CHARGE_INFO_INPUT_LIMIT)
+	if (cmd & CM_CHARGE_INFO_INPUT_LIMIT) {
+		mdelay(800);
 		cm->cm_charge_vote->vote(cm->cm_charge_vote, true,
 					 SPRD_VOTE_TYPE_IBUS,
 					 SPRD_VOTE_TYPE_IBUS_ID_CHARGER_TYPE,
 					 SPRD_VOTE_CMD_MIN, desc->input_limit_cur, cm);
+	}
 	if (cmd & CM_CHARGE_INFO_THERMAL_LIMIT && thm_info->thm_adjust_cur > 0) {
 		/* The ChargerIC with linear charging cannot set Ibus, only Ibat. */
 		if (cm->desc->thm_info.need_calib_charge_lmt)
