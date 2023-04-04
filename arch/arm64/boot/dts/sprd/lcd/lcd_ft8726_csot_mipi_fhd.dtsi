@@ -129,6 +129,10 @@
 						15 00 00 02 CF 3C
 						15 00 00 02 00 00
 						15 00 00 02 1C 02
+						15 00 00 02 00 B5
+						15 00 00 02 CA 04
+						15 00 00 02 00 B0
+						39 00 00 04 CA 04 04 0B
 						15 00 00 02 00 00
 						39 00 00 04 FF FF FF FF
 						39 00 00 03 51 00 00
@@ -146,11 +150,11 @@
 						05 14 00 01 29
 					];
 					oled-backlight{
-						default-brightness-level = <900>;
-						sprd,max-level = <4095>;
+						default-brightness-level = <819>;
+						sprd,max-level = <2047>;
 
 						brightness-levels = [
-							39 00 00 03 51 0C CC
+							39 00 00 03 51 66 06
 						];
 					};
 
