@@ -783,6 +783,36 @@ static ssize_t als_target_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(als_target);
 
+static ssize_t mag_target_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct shub_data *sensor = dev_get_drvdata(dev);
+	struct sensor_batch_cmd batch_cmd;
+
+	if (sensor->mcu_mode <= SHUB_CALIDOWNLOAD) {
+		dev_info(&sensor->sensor_pdev->dev,
+			 "mcu_mode == %d!\n",  sensor->mcu_mode);
+		return -EAGAIN;
+	}
+
+	if (sscanf(buf, "%d\n",&batch_cmd.report_rate) != 1)
+		return -EINVAL;
+
+	dev_info(&sensor->sensor_pdev->dev,"mag_target_store target = %d,\n",batch_cmd.report_rate);
+	batch_cmd.handle = SENSOR_TYPE_MAGNETIC_FIELD;
+	batch_cmd.batch_timeout = 0;
+	if (shub_send_command(sensor,SENSOR_TYPE_MAGNETIC_FIELD,
+			      SHUB_MAG_TARGET_TO_HUB_SUBTYPE,
+			      (char *)&batch_cmd.report_rate, 12) < 0) {
+		dev_err(&sensor->sensor_pdev->dev, "%s Fail\n", __func__);
+		return -EINVAL;
+	}
+	return count;
+}
+static DEVICE_ATTR_WO(mag_target);
+
+
 static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
@@ -1024,6 +1054,7 @@ static struct attribute *sensorhub_attrs[] = {
 	&dev_attr_calibrator_cmd.attr,
 	&dev_attr_calibrator_data.attr,
 	&dev_attr_als_target.attr,
+	&dev_attr_mag_target.attr,
 	&dev_attr_version.attr,
 	&dev_attr_raw_data_als.attr,
 	&dev_attr_raw_data_ps.attr,
