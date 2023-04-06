@@ -1017,7 +1017,7 @@
 		aw99703,hwen-gpio = <&ap_gpio 129 GPIO_ACTIVE_HIGH>;
 		aw99703,auto-freq-high = <0x80>;
 		aw99703,auto-freq-low = <0x10>;
-		aw99703,bl-fscal-led = <0x13>;
+		aw99703,bl-fscal-led = <0x1A>; /*0x1A=25.6mA 0x19=24.8mA 0x13=20mA*/
 		aw99703,bl-channel = <3>;
 		aw99703,turn-on-ramp = <0x04>;
 		aw99703,turn-off-ramp = <0x04>;
@@ -1136,8 +1136,8 @@
 
 &panel {
 	//sprd,backlight = <&pwm_backlight>;
-	sprd,surface-width = <1080>;
-	sprd,surface-height = <2400>;
+	//sprd,surface-width = <1080>;
+	//sprd,surface-height = <2400>;
 	avdd-gpio = <&ap_gpio 113 GPIO_ACTIVE_HIGH>;
 	avee-gpio = <&ap_gpio 133 GPIO_ACTIVE_HIGH>;
 	reset-gpio = <&ap_gpio 50 GPIO_ACTIVE_HIGH>;
