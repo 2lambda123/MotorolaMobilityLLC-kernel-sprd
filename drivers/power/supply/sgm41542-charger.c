@@ -453,7 +453,7 @@ sgm41542_charger_set_termina_cur(struct sgm41542_charger_info *info, u32 cur)
 {
 	u8 reg_val;
 	
-	reg_val = (cur / 1000 - 60)/60;
+	reg_val = (cur - 60)/60;
 	if (reg_val > 0xF)
 		reg_val = 0xF;
 
