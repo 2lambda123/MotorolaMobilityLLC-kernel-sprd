@@ -914,6 +914,7 @@
         vddcama-supply = <&vddcama0>;
         vddcamd-supply = <&vddcamd0>;
         reset-gpios = <&ap_gpio 41 0>;
+        avdd-gpios = <&ap_gpio 137 0>;
         sprd,phyid = <3>;
         csi = <&csi1>;
         power-domains = <&mm_domain>;
