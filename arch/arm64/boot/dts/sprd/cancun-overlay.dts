@@ -132,7 +132,7 @@
 			bat: battery {
 				compatible = "simple-battery";
 				charge-full-design-microamp-hours = <4896000>;
-				charge-term-current-microamp = <242000>;
+				charge-term-current-microamp = <560000>;
 				constant-charge-voltage-max-microvolt = <4530000>;
 				fullbatt-voltage-offset-microvolt = <22000>;
 				factory-internal-resistance-micro-ohms = <118000>;
@@ -145,9 +145,9 @@
 				fullbatt-track-end-cur = <130000>;
 				first-calib-voltage = <3687000>;
 				first-calib-capacity = <50>;
-				ir-us-upper-limit-microvolt = <4608000>;
+				ir-us-upper-limit-microvolt = <4624000>;
 				ir-cv-offset-microvolt = <100000>;
-				ir-rc-micro-ohms = <26000>;
+				ir-rc-micro-ohms = <125000>;
 
 				ocv-capacity-celsius = <25>;
 				ocv-capacity-table-0 = <4425000 100>, <4363000 95>, <4307000 90>,
