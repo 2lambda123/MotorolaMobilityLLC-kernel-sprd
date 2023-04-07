@@ -1076,6 +1076,7 @@ static int aw99703_probe(struct i2c_client *client,
 	}
 	//aw99703_backlight_init(drvdata);
 	aw99703_bl_full_scale_setting(drvdata);
+	aw99703_ramp_setting(drvdata);
 	pr_info("%s exit\n", __func__);
 	return 0;
 

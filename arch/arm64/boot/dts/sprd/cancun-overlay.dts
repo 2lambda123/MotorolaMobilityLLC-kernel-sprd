@@ -1020,8 +1020,8 @@
 		aw99703,auto-freq-low = <0x10>;
 		aw99703,bl-fscal-led = <0x1A>; /*0x1A=25.6mA 0x19=24.8mA 0x13=20mA*/
 		aw99703,bl-channel = <3>;
-		aw99703,turn-on-ramp = <0x04>;
-		aw99703,turn-off-ramp = <0x04>;
+		aw99703,turn-on-ramp = <0x05>;
+		aw99703,turn-off-ramp = <0x05>;
 		aw99703,pwm-trans-dim = <0>;
 		aw99703,i2c-trans-dim = <0>;
 		aw99703,pwm-mode = <0>;
