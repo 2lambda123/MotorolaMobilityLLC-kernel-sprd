@@ -147,7 +147,7 @@
 				first-calib-capacity = <50>;
 				ir-us-upper-limit-microvolt = <4624000>;
 				ir-cv-offset-microvolt = <100000>;
-				ir-rc-micro-ohms = <125000>;
+				ir-rc-micro-ohms = <0>;
 
 				ocv-capacity-celsius = <25>;
 				ocv-capacity-table-0 = <4425000 100>, <4363000 95>, <4307000 90>,
