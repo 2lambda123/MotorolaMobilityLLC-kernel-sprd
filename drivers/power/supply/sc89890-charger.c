@@ -763,6 +763,18 @@ static int sc8989x_charger_get_charge_voltage(struct sc8989x_charger_info *info,
 static int sc8989x_charger_start_charge(struct sc8989x_charger_info *info)
 {
     int ret = 0;
+    u8 value;
+
+    ret = sc8989x_read(info, SC8989X_REG_3, &value);
+    if (ret) {
+        dev_err(info->dev, "get sc8989x charger otg valid status failed\n");
+        return ret;
+    }
+
+    if (value & REG03_OTG_MASK) {
+	dev_err(info->dev, "otg online return\n");
+        return ret;
+    }
 
     ret = sc8989x_exit_hiz_mode(info);
     if (ret) {
