@@ -571,7 +571,7 @@ struct sprd_tcpm_port {
 	unsigned int operating_snk_default_mw;
 	bool update_sink_caps;
 	bool update_ext_src_caps;
-
+	bool no_discover_modes;
 	/* Requested current / voltage to the port partner */
 	u32 req_current_limit;
 	u32 req_supply_voltage;

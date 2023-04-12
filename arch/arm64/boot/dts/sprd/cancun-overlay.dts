@@ -1166,6 +1166,7 @@
 	usb_con: connector {
 		compatible = "usb-c-connector";
 		label = "USB-C";
+		no-discover-modes;
 		power-role = "dual";
 		try-power-role = "sink";
 		source-pdos = <PDO_FIXED(5000, 400, PDO_FIXED_USB_COMM |PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP)>;

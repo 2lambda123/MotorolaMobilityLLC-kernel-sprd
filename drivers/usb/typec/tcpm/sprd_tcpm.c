@@ -1481,7 +1481,7 @@ static int sprd_tcpm_pd_svdm(struct sprd_tcpm_port *port,
 			if (sprd_svdm_consume_svids(port, payload, cnt)) {
 				response[0] = SPRD_VDO(SPRD_USB_SID_PD, 1, SPRD_CMD_DISCOVER_SVID);
 				rlen = 1;
-			} else if (modep->nsvids && supports_modal(port)) {
+			} else if (modep->nsvids && supports_modal(port) && !port->no_discover_modes) {
 				response[0] = SPRD_VDO(modep->svids[0], 1, SPRD_CMD_DISCOVER_MODES);
 				rlen = 1;
 			}
@@ -5237,6 +5237,7 @@ sink:
 	port->operating_snk_mw = port->operating_snk_default_mw;
 
 	port->self_powered = fwnode_property_read_bool(fwnode, "self-powered");
+	port->no_discover_modes = fwnode_property_read_bool(fwnode, "no-discover-modes");
 
 	return 0;
 }
