@@ -507,7 +507,7 @@ static int upm6920_charger_set_termina_cur(struct upm6920_charger_info *info,
     
     reg_val = (curr - REG05_ITERM_BASE) / REG05_ITERM_LSB;
 
-    return upm6920_update_bits(info, UPM6920_REG_7,
+    return upm6920_update_bits(info, UPM6920_REG_5,
                 REG05_ITERM_MASK, reg_val << REG05_ITERM_SHIFT);
 }
 

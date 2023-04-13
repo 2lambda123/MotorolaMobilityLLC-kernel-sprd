@@ -509,7 +509,7 @@ static int sc8989x_charger_set_termina_cur(struct sc8989x_charger_info *info,
     
     reg_val = (curr - REG05_ITERM_BASE) / REG05_ITERM_LSB;
 
-    return sc8989x_update_bits(info, SC8989X_REG_7,
+    return sc8989x_update_bits(info, SC8989X_REG_5,
                 REG05_ITERM_MASK, reg_val << REG05_ITERM_SHIFT);
 }
 
