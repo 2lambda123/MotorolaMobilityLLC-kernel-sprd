@@ -30,7 +30,7 @@
 					sprd,esd-check-register = [0A];
 					sprd,esd-check-value-len = <1>;
 					sprd,esd-check-value = [9C];
-					sprd,reset-on-sequence = <0 5>, <1 5>, <0 5>, <1 15>;
+					sprd,reset-on-sequence = <1 5>, <0 5>, <1 15>;
 					//sprd,reset-off-sequence = <0 5>;
 
 					sprd,use-dcs-write;
@@ -143,7 +143,7 @@
 					];
 					sprd,sleep-in-command = [
 						05 14 00 01 28
-						05 32 00 01 10
+						05 78 00 01 10
 					];
 					sprd,sleep-out-command = [
 						05 78 00 01 11
