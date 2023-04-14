@@ -461,6 +461,26 @@ static int upm6920_charger_set_vindpm(struct upm6920_charger_info *info,
                 REG0D_VINDPM_MASK, reg_val);
 }
 
+static int upm6920_charger_increase_ocp_current(struct upm6920_charger_info *info) 
+{
+	int ret = 0;
+
+	ret = upm6920_write(info, 0xa9, 0x6e);
+	if (ret)
+        dev_err(info->dev, "upm6920 write reg_a9 6e failed, ret:%d\n", ret);
+
+	ret = upm6920_write(info, 0xd3, 0x9e);
+	if (ret)
+        dev_err(info->dev, "upm6920 write reg_d3 failed, ret:%d\n", ret);
+
+	ret = upm6920_write(info, 0xa9, 0x00);
+	if (ret)
+        dev_err(info->dev, "upm6920 write reg_a9 00 failed, ret:%d\n", ret);
+
+    dev_err(info->dev, "upm6920 increase ocp current\n");
+	return ret;
+}
+
 static int upm6920_charger_set_ovp(struct upm6920_charger_info *info, 
             u32 vol)
 {
@@ -655,6 +675,11 @@ static int upm6920_charger_hw_init(struct upm6920_charger_info *info)
                 return ret;
             }
         }
+
+	ret = upm6920_charger_increase_ocp_current(info);
+        if (ret) {
+            dev_err(info->dev, "set upm6920 ocp failed\n");
+            return ret;
 
         ret = upm6920_charger_set_vindpm(info, 4700);
         if (ret) {
