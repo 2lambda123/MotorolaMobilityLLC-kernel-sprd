@@ -5,6 +5,7 @@
 #include <linux/netlink.h>
 #include <linux/cdev.h>
 #include <linux/input.h>
+#include <linux/gpio/consumer.h>
 // #include "mt_spi.h"
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -206,7 +207,9 @@ struct gf_device {
 	u32 irq_num;
 	u8  need_update;
 	u32 irq;
-
+    struct gpio_desc *rst_gpio_desc;
+    struct gpio_desc *avdd_gpio_desc;
+    struct gpio_desc *irq_gpio_desc;
 #ifdef CONFIG_OF
 	struct pinctrl *pinctrl_gpios;
 	struct pinctrl_state *pins_irq;

@@ -97,7 +97,6 @@ static ssize_t gf_debug_show(struct device *dev,
 
 static ssize_t gf_debug_store(struct device *dev,
 			struct device_attribute *attr, const char *buf, size_t count);
-
 static DEVICE_ATTR(debug, S_IRUGO | S_IWUSR, gf_debug_show, gf_debug_store);
 
 static struct attribute *gf_debug_attrs[] = {
@@ -136,49 +135,23 @@ long int kernel_time(unsigned int step)
 int gf_parse_dts(struct gf_device *gf_dev)
 {
 	int rc = 0;
-	struct device *dev = gf_dev->device;
-	struct device_node *np = NULL;
-	np = of_find_compatible_node(NULL, NULL, "sprd,goodix-fp");
-	gf_debug(DEBUG_LOG, "%s, from gpio\n", __func__);
+	struct device *dev = &(gf_dev->pldev->dev);
+	gf_debug(DEBUG_LOG, "%s, from gpio count = %d\n", __func__,gpiod_count(dev,"gfrst"));
 
-	gf_dev->reset_gpio = of_get_named_gpio(np, "goodix_rst", 0);
-	if (gf_dev->reset_gpio < 0) {
-		pr_err("falied to get reset gpio!\n");
-		return gf_dev->reset_gpio;
-	}
-	rc = devm_gpio_request(dev, gf_dev->reset_gpio, "goodix_reset");
+	gf_dev->rst_gpio_desc = devm_gpiod_get(dev, "gfrst", GPIOD_OUT_LOW);
+	rc = gpiod_direction_output(gf_dev->rst_gpio_desc,0);
 	if (rc) {
-		pr_err("failed to request reset gpio, rc = %d\n", rc);
+		pr_err("failed to set reset gpio, rc = %d\n", rc);
 		goto err_reset;
 	}
-	gpio_direction_output(gf_dev->irq_gpio, 1);
 
-/*	gf_dev->irq_gpio = of_get_named_gpio(np, "gf,gpio_irq", 0);
-	if (gf_dev->irq_gpio < 0) {
-		pr_err("falied to get irq gpio!\n");
-		return gf_dev->irq_gpio;
-	}
-
-	rc = devm_gpio_request(dev, gf_dev->irq_gpio, "goodix_irq");
+	gf_dev->avdd_gpio_desc = devm_gpiod_get(dev, "gfvdd", GPIOD_OUT_LOW);
+	rc = gpiod_direction_output(gf_dev->avdd_gpio_desc,0);
 	if (rc) {
-		pr_err("failed to request irq gpio, rc = %d\n", rc);
-		goto err_irq;
+		pr_err("failed to set avdd gpio, rc = %d\n", rc);
+		goto err_reset;
 	}
-	gpio_direction_input(gf_dev->irq_gpio);*/
-	gf_dev->avdd_gpio = of_get_named_gpio(np, "goodix_vdd", 0);
-	if (gf_dev->avdd_gpio < 0) {
-		pr_err("falied to get avdd gpio!\n");
-		return gf_dev->avdd_gpio;
-	}
-
-	rc = devm_gpio_request(dev, gf_dev->avdd_gpio, "goodix_avdd");
-	if (rc) {
-		pr_err("failed to request irq gpio, rc = %d\n", rc);
-		goto err_avdd;
-	}
-        gpio_direction_output(gf_dev->avdd_gpio, 1);
-err_avdd:
-	devm_gpio_free(dev, gf_dev->reset_gpio);
+	return rc;
 
 err_reset:
 	return rc;
@@ -188,74 +161,37 @@ void gf_cleanup(struct gf_device *gf_dev)
 {
 	pr_info("[info] %s\n", __func__);
 
-	if (gpio_is_valid(gf_dev->irq_gpio)) {
-		gpio_free(gf_dev->irq_gpio);
-		pr_info("remove irq_gpio success\n");
+	if (NULL != gf_dev->avdd_gpio_desc) {
+		gpiod_put(gf_dev->avdd_gpio_desc);
+		pr_info("remove avdd_gpio success\n");
 	}
-	if (gpio_is_valid(gf_dev->reset_gpio)) {
-		gpio_free(gf_dev->reset_gpio);
+	if (NULL != gf_dev->rst_gpio_desc) {
+		gpiod_put(gf_dev->rst_gpio_desc);
 		pr_info("remove reset_gpio success\n");
 	}
-	if (gpio_is_valid(gf_dev->avdd_gpio)) {
-		gpio_free(gf_dev->avdd_gpio);
-		pr_info("remove avdd_gpio success\n");
+	if (NULL != gf_dev->irq_gpio_desc) {
+		gpiod_put(gf_dev->irq_gpio_desc);
+		pr_info("remove irq_gpio success\n");
 	}
 }
 int gf_hw_reset(struct gf_device *gf_dev, unsigned int delay_ms)
 {
-	if (gf_dev == NULL) {
+	int rc = 0;
+	if (gf_dev->rst_gpio_desc == NULL) {
 		pr_info("Input buff is NULL.\n");
 		return -1;
 	}
-	gpio_direction_output(gf_dev->reset_gpio, 1);
-	gpio_set_value(gf_dev->reset_gpio, 0);
+	rc = gpiod_direction_output(gf_dev->rst_gpio_desc,0);
+	if (rc) {
+		pr_err("failed to set reset gpio, rc = %d\n", rc);
+		return rc;
+	}
+	gpiod_set_value(gf_dev->rst_gpio_desc, 0);
 	mdelay(3);
-	gpio_set_value(gf_dev->reset_gpio, 1);
+	gpiod_set_value(gf_dev->rst_gpio_desc, 1);
 	mdelay(delay_ms);
 	return 0;
 }
-//shasha
-/* -------------------------------------------------------------------- */
-/* fingerprint chip hardware configuration								  */
-/* -------------------------------------------------------------------- */
-/*static int gf_get_gpio_dts_info(struct gf_device *gf_dev)
-{
-#ifdef CONFIG_OF
-	int ret = 0;
-	struct device_node *np = gf_dev->device->of_node;
-
-	gf_debug(DEBUG_LOG, "%s, from dts\n", __func__);
-
-	//reset, irq gpio info 
-	gf_dev->irq_gpio = of_get_named_gpio(np, "irq-gpios", 0);
-	ret = gpio_is_valid(gf_dev->irq_gpio);
-	if (ret < 0){
-		gf_debug(ERR_LOG, "%s,Unable to get irq-gpio!\n", __func__);
-		return ret;
-	} else {
-		gpio_direction_output(gf_dev->irq_gpio,1);
-	}
-
-	gf_dev->reset_gpio = of_get_named_gpio(np, "reset-gpios",0);
-	ret = gpio_is_valid(gf_dev->reset_gpio);
-	if (ret < 0){
-		gf_debug(ERR_LOG, "%s,Unable to get reset-gpio!\n", __func__);
-		return ret;
-	} else {
-		gpio_direction_output(gf_dev->reset_gpio,1);
-	}
-
-	gf_dev->avdd_gpio = of_get_named_gpio(np, "avdd-gpios",0);
-	ret = gpio_is_valid(gf_dev->avdd_gpio);
-	if (ret < 0){
-		gf_debug(ERR_LOG, "%s,Unable to get avdd-gpio!\n", __func__);
-		return ret;
-	}
-
-	gf_debug(DEBUG_LOG, "%s, get gpio info success!\n", __func__);
-#endif
-	return 0;
-}*/
 
 static int gf_get_sensor_dts_info(void)
 {
@@ -285,41 +221,40 @@ static void gf_hw_power_enable(struct gf_device *gf_dev, u8 onoff)
 		enable = 0;
 		
 #ifdef GF_POWER_GPIO
-		gpio_direction_output(gf_dev->avdd_gpio, 1);
+		gpiod_direction_output(gf_dev->avdd_gpio_desc, 1);
 		pr_info("set pwr_gpio on");
 #elif GF_POWER_EXT_LDO
 		rc = wl2868c_set_ldo_enable(LDO4, 3000);
 		pr_info("---- power_on external ldo ---- rc = %d\n",rc);
 #else
-        rc = -1;
-        pr_info("---- power on mode not set !!! ----\n");
+		rc = -1;
+		pr_info("---- power on mode not set !!! ----\n");
 #endif
-        if (rc) {
-            pr_err("---- power on failed rc = %d ----\n", rc);
-        } else {
-            pr_info("---- power on ok  ----\n");
-        }
+		if (rc) {
+			pr_err("---- power on failed rc = %d ----\n", rc);
+		} else {
+			pr_info("---- power on ok  ----\n");
+		}
 		gf_hw_reset(gf_dev, 15);
 	} else if (!onoff && !enable) {
 		enable = 1;
 		
 #ifdef GF_POWER_GPIO
-		gpio_direction_output(gf_dev->avdd_gpio, 0);
-		gpio_set_value(gf_dev->avdd_gpio, 0);
-		gpio_set_value(gf_dev->reset_gpio, 0);
+		gpiod_direction_output(gf_dev->avdd_gpio_desc, 0);
+		gpiod_set_value(gf_dev->rst_gpio_desc, 0);
 		pr_info("set pwr_gpio off");
 #elif GF_POWER_EXT_LDO
 		rc = wl2868c_set_ldo_disable(LDO4);
 		pr_info("---- power_off external ldo ---- rc = %d\n",rc);
 #else
-        rc = -1;
-        pr_info("---- power on mode not set !!! ----\n");
+		rc = -1;
+		pr_info("---- power on mode not set !!! ----\n");
 #endif
-        if (rc) {
-            pr_err("---- power off failed rc = %d ----\n", rc);
-        } else {
-            pr_info("---- power off ok  ----\n");
-        }
+		if (rc) {
+			pr_err("---- power off failed rc = %d ----\n", rc);
+		} else {
+			pr_info("---- power off ok  ----\n");
+		}
 	}
 }
 
@@ -330,28 +265,22 @@ static void gf_bypass_flash_gpio_cfg(void)
 
 static void gf_irq_gpio_cfg(struct gf_device *gf_dev)
 {
-#ifdef CONFIG_OF
 	int ret = 0;
-	struct device_node *np = NULL;
-	np = of_find_compatible_node(NULL, NULL, "sprd,goodix-fp");
-
-	gf_dev->irq_gpio = of_get_named_gpio(np, "gf,gpio_irq", 0);
-	if (gpio_is_valid(gf_dev->irq_gpio)){
-		ret = gpio_request(gf_dev->irq_gpio, "goodix_fp_irq");
-		if (ret < 0) {
-			gf_debug(ERR_LOG, "%s,Failed to request INT GPIO:%d, ERRNO:%d!\n", 
-			__func__,gf_dev->irq_gpio,ret);
-			return;
-		}
-		gpio_direction_input(gf_dev->irq_gpio);
-		gf_dev->irq_num = gpio_to_irq(gf_dev->irq_gpio);
-		gf_debug(INFO_LOG, "%s, gf_irq = %d\n", __func__, gf_dev->irq_num);
-		gf_dev->irq = gf_dev->irq_num;
-		gf_debug(INFO_LOG, "[%s] : irq config success\n", __func__);
-	} else
-		gf_debug(ERR_LOG, "%s,Unable to get irq-gpio=%d!\n", __func__,gf_dev->irq_gpio);
-
-#endif
+	struct device *dev = &(gf_dev->pldev->dev);
+	gf_dev->irq_gpio_desc = devm_gpiod_get(dev, "gfirq", GPIOD_IN);
+	ret = gpiod_direction_input(gf_dev->irq_gpio_desc);
+	if (ret) {
+		pr_err("failed to set irq gpio, ret = %d\n", ret);
+		return;
+	}
+	gf_dev->irq_num = gpiod_to_irq(gf_dev->irq_gpio_desc);
+	if (gf_dev->irq_num < 0) {
+		pr_err("failed to set irq num, ret = %d\n", gf_dev->irq_num);
+		return;
+	}
+	gf_debug(INFO_LOG, "%s, gf_irq = %d\n", __func__, gf_dev->irq_num);
+	gf_dev->irq = gf_dev->irq_num;
+	gf_debug(INFO_LOG, "[%s] : irq config success\n", __func__);
 }
 
 static void gf_reset_gpio_cfg(struct gf_device *gf_dev)
@@ -579,7 +508,7 @@ static irqreturn_t gf_irq(int irq, void *handle)
 	struct gf_device *gf_dev = (struct gf_device *)handle;
 	FUNC_ENTRY();
 
-    //__pm_wakeup_event(&gf_dev->fp_wakesrc, WAKELOCK_HOLD_TIME);
+	//__pm_wakeup_event(&gf_dev->fp_wakesrc, WAKELOCK_HOLD_TIME);
 	gf_netlink_send(gf_dev, GF_NETLINK_IRQ);
 	gf_dev->sig_count++;
 
@@ -863,7 +792,7 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		input_unregister_device(gf_dev->input);
 		gf_dev->input = NULL;
 		cdev_del(&gf_dev->cdev);
-		sysfs_remove_group(&gf_dev->device->kobj, &gf_debug_attr_group);
+		//sysfs_remove_group(&gf_dev->device->kobj, &gf_debug_attr_group);
 		device_destroy(gf_dev->class, gf_dev->devno);
 		list_del(&gf_dev->device_entry);
 		unregister_chrdev_region(gf_dev->devno, 1);
@@ -972,17 +901,7 @@ static ssize_t gf_debug_store(struct device *dev,
 		gf_debug(INFO_LOG, "%s: parameter is -12, GPIO test===============\n", __func__);
 		gf_reset_gpio_cfg(gf_dev);
 
-/*#ifdef 0
-		if (flag == 0) {
-			pinctrl_select_state(gf_dev->pinctrl_gpios, gf_dev->pins_miso_pulllow);
-			gf_debug(INFO_LOG, "%s: set miso PIN to low\n", __func__);
-			flag = 1;
-		} else {
-			pinctrl_select_state(gf_dev->pinctrl_gpios, gf_dev->pins_miso_pullhigh);
-			gf_debug(INFO_LOG, "%s: set miso PIN to high\n", __func__);
-			flag = 0;
-		}
-#endif*/
+
 
 	} else if (!strncmp(buf, "-13", 3)) {
 		gf_debug(INFO_LOG, "%s: parameter is -13, Vendor ID test --> 0x%x\n", __func__, g_vendor_id);
