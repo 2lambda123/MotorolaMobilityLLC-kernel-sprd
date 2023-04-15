@@ -1810,7 +1810,6 @@ static void cm_update_charge_info(struct charger_manager *cm, int cmd)
 					 SPRD_VOTE_TYPE_IBAT_ID_CHARGER_TYPE,
 					 SPRD_VOTE_CMD_MIN, desc->charge_limit_cur, cm);
 	if (cmd & CM_CHARGE_INFO_INPUT_LIMIT) {
-		mdelay(800);
 		cm->cm_charge_vote->vote(cm->cm_charge_vote, true,
 					 SPRD_VOTE_TYPE_IBUS,
 					 SPRD_VOTE_TYPE_IBUS_ID_CHARGER_TYPE,
@@ -7025,6 +7024,26 @@ static void cm_batt_works(struct work_struct *work)
 	ret = get_input_current_limit(cm, &chg_limit_cur);
 	if (ret)
 		dev_warn(cm->dev, "get chg_limit_cur error.\n");
+
+	if ((cm->desc->input_limit_cur != 500000) && (cm->desc->thm_info.thm_adjust_cur != 500000)  && (chg_limit_cur == 500000) && is_ext_pwr_online(cm)) {
+		cm->desc->input_limit_cur = cm->desc->input_limit_cur + 1;
+		cm->desc->thm_info.thm_adjust_cur = cm->desc->thm_info.thm_adjust_cur + 1;
+		dev_err(cm->dev, "reset input current cm_input = %d , chg_real_input = %d, thm_cur = %d.\n",cm->desc->input_limit_cur,chg_limit_cur,cm->desc->thm_info.thm_adjust_cur);
+		if ((cm->desc->input_limit_cur > cm->desc->thm_info.thm_adjust_cur) && cm->desc->thm_info.thm_adjust_cur > 0  && !cm->desc->thm_info.need_calib_charge_lmt) {
+			dev_err(cm->dev, "reset thermal cur .\n");
+			cm->cm_charge_vote->vote(cm->cm_charge_vote, true,
+				SPRD_VOTE_TYPE_IBUS,
+				SPRD_VOTE_TYPE_IBUS_ID_CHARGE_CONTROL_LIMIT,
+				SPRD_VOTE_CMD_MIN,
+				cm->desc->thm_info.thm_adjust_cur, cm);
+		} else {
+			dev_err(cm->dev, "reset input cur .\n");
+			cm->cm_charge_vote->vote(cm->cm_charge_vote, true,
+				SPRD_VOTE_TYPE_IBUS,
+				SPRD_VOTE_TYPE_IBUS_ID_CHARGER_TYPE,
+				SPRD_VOTE_CMD_MIN, cm->desc->input_limit_cur, cm);
+		}
+	}
 
 	if (cm->desc->cp.cp_running)
 		ret = get_cp_ibus_uA(cm, &input_cur);
