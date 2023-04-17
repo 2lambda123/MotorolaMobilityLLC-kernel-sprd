@@ -135,7 +135,9 @@
 						39 00 00 04 CA 04 04 0B
 						15 00 00 02 00 00
 						39 00 00 04 FF FF FF FF
+						39 00 00 03 68 02 01
 						39 00 00 03 51 00 00
+						15 00 00 02 55 02
 						15 00 00 02 53 2C
 						15 00 00 02 35 00
 						05 78 00 01 11
@@ -148,6 +150,12 @@
 					sprd,sleep-out-command = [
 						05 78 00 01 11
 						05 14 00 01 29
+					];
+					sprd,cabc-on-command = [
+						39 00 00 02 55 02
+					];
+					sprd,cabc-off-command = [
+						39 00 00 02 55 00
 					];
 					oled-backlight{
 						//default-brightness-level = <819>;

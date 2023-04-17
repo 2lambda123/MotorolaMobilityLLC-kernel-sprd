@@ -531,7 +531,7 @@ static int aw99703_backlight_init(struct aw99703_data *drvdata)
 	aw99703_i2c_read(drvdata->client, 0x00, &value);
 	if(value == 0x18)
 	{
-		aw99703_i2c_write(drvdata->client,0x02,0x99); //BL open;0x99:max I 20.2mA;0xc9:25mA
+		aw99703_i2c_write(drvdata->client,0x02,0xC9); //BL open;0x99:max I 20.2mA;0xc9:25mA
 		aw99703_i2c_write(drvdata->client,0x04,0x07); //0x04 ->low 3 bit, 04+05 7 bit address
 		aw99703_i2c_write(drvdata->client,0x05,0xFF); //0x05 ->hight 8 bit
 		aw99703_i2c_write(drvdata->client,0x06,0x1F); //0x1F 3 lu;0x01 1 lu
