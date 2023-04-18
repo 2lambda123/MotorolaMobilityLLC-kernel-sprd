@@ -57,7 +57,9 @@ static void shub_get_data(struct cmd_data *packet)
 		g_sensor->readcmd_callback(g_sensor, packet->buff,
 					packet->length);
 		break;
-
+	case SHUB_MAG_ENABLE_STATE_TO_AP:
+		mag_set_status(packet->buff[0]);
+		break;
 	case SHUB_SET_TIMESYNC_SUBTYPE:
 		g_sensor->cm4_read_callback(g_sensor,
 			packet->subtype,

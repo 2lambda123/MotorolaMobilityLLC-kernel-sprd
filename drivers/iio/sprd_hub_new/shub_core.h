@@ -277,4 +277,5 @@ struct sensor_event_data_t {
 };
 #pragma pack()
 extern struct shub_data *g_sensor;
+void mag_set_status(uint8_t status);
 #endif

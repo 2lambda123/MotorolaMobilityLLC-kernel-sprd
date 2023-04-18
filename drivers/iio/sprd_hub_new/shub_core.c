@@ -33,6 +33,16 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/reboot.h>
+#include <linux/notifier.h>
+#include <linux/usb.h>
+#include <linux/power_supply.h>
+#include <linux/regulator/consumer.h>
+#include <linux/version.h>
+#include <linux/notifier.h>
+#include <linux/usb/phy.h>
+#include <linux/timer.h>
+
+
 
 #include "shub_common.h"
 #include "shub_core.h"
@@ -62,6 +72,15 @@ static int flush_getcnt;
 struct shub_data *g_sensor;
 static int shub_send_event_to_iio(struct shub_data *sensor, u8 *data, u16 len);
 static void shub_synctimestamp(struct shub_data *sensor);
+
+
+static void mag_ps_notify_callback_work(struct work_struct *work);
+struct notifier_block mag_ps_notif;
+static int mag_usb_state = 0;
+static int mag_current = 0;
+static uint8_t mag_enable_status = 0;
+
+DECLARE_DELAYED_WORK(mag_ps_notify_work,mag_ps_notify_callback_work);
 
 /**
  *send data
@@ -1343,6 +1362,147 @@ static void shub_remove_buffer(struct iio_dev *indio_dev)
 	iio_kfifo_free(indio_dev->buffer);
 }
 
+void mag_set_status(uint8_t status){
+	mag_enable_status = status;
+	schedule_delayed_work(&mag_ps_notify_work,msecs_to_jiffies(100));
+	pr_err("mag_charge mag_enable_status = %d\n",mag_enable_status);
+}
+
+static int mag_get_current()
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop;
+	psy = power_supply_get_by_name("battery");
+	if (!psy) {
+		pr_err("mag_charge Couldn't get usbpsy\n");
+		return -EINVAL;
+	}
+	if (!strcmp(psy->desc->name, "battery")) {
+
+						
+		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+		if (ret < 0) {
+			pr_err("mag_charge Couldn't get POWER_SUPPLY_PROP_CURRENT_NOW rc=%d\n", ret);
+			return ret;
+		}else{
+			mag_current = prop.intval;
+			pr_err("mag_charge mag_current=%d\n", mag_current);
+		}				
+	}
+	return 0;
+}
+static void mag_ps_notify_callback_work(struct work_struct *work)
+{
+	struct shub_data *sensor = g_sensor;
+	struct sensor_batch_cmd batch_cmd;
+
+	if (sensor->mcu_mode <= SHUB_CALIDOWNLOAD) {
+		dev_info(&sensor->sensor_pdev->dev,
+			 "mcu_mode == %d!\n",  sensor->mcu_mode);
+		return;
+	}
+	mag_get_current();
+	dev_info(&sensor->sensor_pdev->dev,"mag_charge mag_ps_notify_callback_work  = %d,\n",mag_usb_state);
+	batch_cmd.handle = (int)mag_usb_state;
+	batch_cmd.batch_timeout = 0;
+	batch_cmd.report_rate = mag_current;
+	if (shub_send_command(sensor,batch_cmd.handle,
+			      SHUB_MAG_POWER_STATE_TO_HUB_SUBTYPE,
+			      (char *)&batch_cmd.report_rate, 12) < 0) {
+		dev_err(&sensor->sensor_pdev->dev, "mag_charge %s Fail\n", __func__);
+		if(mag_enable_status)
+			schedule_delayed_work(&mag_ps_notify_work,msecs_to_jiffies(100));
+		return ;
+	}
+	if(mag_enable_status)
+		schedule_delayed_work(&mag_ps_notify_work,msecs_to_jiffies(100));
+	return;
+}
+
+static int mag_ps_get_state(struct platform_device *pdev, struct power_supply *psy, int *present)
+{
+	union power_supply_propval pval = { 0 };
+	int retval;
+
+	retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE,
+			&pval);
+	if (retval) {
+		dev_info(&pdev->dev, "mag_charge %s psy get property failed", psy->desc->name);
+		return retval;
+	}
+	*present = (pval.intval) ? 1 : 0;
+	dev_info(&pdev->dev, "mag_charge %s is %s", psy->desc->name,
+			(*present) ? "present" : "not present");
+			
+	retval = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+	if (retval < 0) {
+		pr_err("mag_charge Couldn't get POWER_SUPPLY_PROP_CURRENT_NOW rc=%d\n", retval);
+		return retval;
+	}else{
+		mag_current = pval.intval;
+		pr_err("mag_charge mag_current=%d\n", mag_current);
+	}		
+	schedule_delayed_work(&mag_ps_notify_work,msecs_to_jiffies(100));
+	return 0;
+}
+
+
+static int mag_notify_callback(struct notifier_block *self, unsigned long val,
+		      void *dev)
+{
+	int ret = 0;
+	struct power_supply *psy = NULL;
+	union power_supply_propval prop;
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy) {
+		pr_err("mag_charge Couldn't get usbpsy\n");
+		return -EINVAL;
+	}
+	if (!strcmp(psy->desc->name, "battery")) {
+		if (psy && val == POWER_SUPPLY_PROP_STATUS) {
+			ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &prop);
+			if (ret < 0) {
+				pr_err("mag_charge Couldn't get POWER_SUPPLY_PROP_ONLINE rc=%d\n", ret);
+				return ret;
+			} else {
+				if (mag_usb_state == 2)
+                    mag_usb_state = prop.intval;
+                    if (mag_usb_state != prop.intval) {
+                        pr_err("mag_charge usb prop.intval =%d\n", prop.intval);
+                        mag_usb_state = prop.intval;
+						schedule_delayed_work(&mag_ps_notify_work,msecs_to_jiffies(100));
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+static int mag_ps_notify_init(struct platform_device *pdev)
+{
+	struct power_supply *psy = NULL;
+	int ret = 0;
+
+	dev_info(&pdev->dev, "mag_charge mag_ps_notify_init enter");
+	mag_ps_notif.notifier_call = mag_notify_callback;
+	ret = power_supply_reg_notifier(&mag_ps_notif);
+	if (ret < 0)
+		pr_err("mag_charge power_supply_reg_notifier failed\n");
+	psy = power_supply_get_by_name("battery");
+	if (psy) {
+		ret = mag_ps_get_state(pdev, psy, &mag_usb_state);
+		if (ret) {
+			dev_info(&pdev->dev, "mag_charge psy get property failed rc=%d",
+				ret);	
+		}
+	}else{
+		dev_info(&pdev->dev, "mag_charge psy = null");
+	}
+	return 0;
+}
+
 static int shub_probe(struct platform_device *pdev)
 {
 	struct shub_data *mcu;
@@ -1440,7 +1600,7 @@ static int shub_probe(struct platform_device *pdev)
 	register_pm_notifier(&mcu->early_suspend);
 	mcu->shub_reboot_notifier.notifier_call = shub_reboot_notifier_fn;
 	register_reboot_notifier(&mcu->shub_reboot_notifier);
-
+	mag_ps_notify_init(pdev);
 	return 0;
 
 err_free_mem:
