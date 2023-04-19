@@ -17,11 +17,14 @@
 					sprd,dsi-lane-number = <4>;
 					sprd,dsi-color-format = "rgb888";
 					sprd,power-gpio-delay = <20>;      /* ms */
-					sprd,phy-bit-clock = <1382000>;	   /* kbps */
+					sprd,phy-bit-clock = <1152000>;	   /* kbps */
 					sprd,phy-escape-clock = <20000>;   /* kHz */
 
 					sprd,width-mm = <70>;
 					sprd,height-mm = <155>;
+					sprd,dpi-clk-div = <6>;
+					sprd,video-lp-cmd-enable = <1>;
+					sprd,hporch-lp-disable = <1>;
 
 					sprd,esd-check-enable = <1>;
 					sprd,esd-check-mode = <0>;
@@ -173,7 +176,7 @@
 							hactive = <1080>;
 							vactive = <2400>;
 							hback-porch = <16>;
-							hfront-porch = <200>;
+							hfront-porch = <190>;
 							vback-porch = <32>;
 							vfront-porch = <20>;
 							hsync-len = <10>;
