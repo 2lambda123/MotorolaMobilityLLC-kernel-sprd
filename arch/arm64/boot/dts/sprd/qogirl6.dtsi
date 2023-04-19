@@ -57,6 +57,7 @@
 					     "sprd,sc9836-uart";
 				reg = <0 0x200a0000 0 0x100>;
 				interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
+				source-base = <0x20010024>;
 				clock-names = "enable", "uart", "source";
 				clocks = <&apapb_gate CLK_UART0_EB>,
 					<&ap_clk CLK_AP_UART0>, <&ext_26m>;
@@ -68,6 +69,7 @@
 					     "sprd,sc9836-uart";
 				reg = <0 0x200b0000 0 0x100>;
 				interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
+				source-base = <0x20010028>;
 				clock-names = "enable", "uart", "source";
 				clocks = <&apapb_gate CLK_UART1_EB>,
 					<&ap_clk CLK_AP_UART1>, <&ext_26m>;
@@ -79,6 +81,7 @@
 						"sprd,sc9836-uart";
 				reg = <0 0x200c0000 0 0x100>;
 				interrupts = <GIC_SPI 4 IRQ_TYPE_LEVEL_HIGH>;
+				source-base = <0x2001002c>;
 				clock-names = "enable", "uart", "source";
 				clocks = <&apapb_gate CLK_UART2_EB>,
 					<&ap_clk CLK_AP_UART2>, <&ext_26m>;
