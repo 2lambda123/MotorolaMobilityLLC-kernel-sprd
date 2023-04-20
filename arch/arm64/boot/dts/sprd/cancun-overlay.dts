@@ -138,10 +138,10 @@
 				factory-internal-resistance-micro-ohms = <118000>;
 				voltage-min-design-microvolt = <3457000>;
 				fast-charge-threshold-microvolt = <4100000>;
-				fullbatt-voltage = <4500000>;
+				fullbatt-voltage = <4425000>;
 				fullbatt-current = <570000>;
 				first-fullbatt-current = <150000>;
-				fullbatt-track-end-vol = <4495000>;
+				fullbatt-track-end-vol = <4420000>;
 				fullbatt-track-end-cur = <580000>;
 				first-calib-voltage = <3630000>;
 				first-calib-capacity = <40>;
@@ -165,6 +165,113 @@
 							  <131160 1550>, <113000 1600>, <97790 1650>;
 				capacity-temp-table = <45 96>, <25 100>, <10 100>, <0 93>, <(-10) 88>;
 				resistance-temp-table = <45 88>, <25 100>, <10 143>, <0 976>, <(-10) 1049>;
+/*
+				battery-internal-resistance-celsius = <(-20)>, <(-10)>, <0>, <10>,
+					<25>, <35>, <45>, <55>;
+				battery-internal-resistance-table-0 = <1224>, <1224>, <1140>,
+					<1084>, <1034>, <1001>, <994>, <992>, <992>, <992>,
+					<996>, <1002>, <1010>, <1024>, <1045>, <1072>, <1180>,
+					<1393>, <1756>, <2461>, <4272>;
+				battery-internal-resistance-table-1 = <893>, <893>, <818>, <767>,
+					<743>, <705>, <685>, <684>, <678>, <675>, <672>, <673>,
+					<679>, <691>, <709>, <734>, <765>, <799>, <839>, <899>,
+					<1092>;
+				battery-internal-resistance-table-2 = <407>, <407>, <402>, <423>,
+					<429>, <428>, <409>, <416>, <408>, <395>, <390>, <390>,
+					<393>, <398>, <405>, <416>, <431>, <452>, <492>, <585>,
+					<730>;
+				battery-internal-resistance-table-3 = <381>, <381>, <378>, <371>,
+					<366>, <374>, <358>, <364>, <349>, <332>, <327>, <329>,
+					<334>, <340>, <350>, <366>, <386>, <417>, <475>, <585>,
+					<771>;
+				battery-internal-resistance-table-4 = <182>, <182>, <179>, <179>,
+					<179>, <181>, <182>, <195>, <194>, <173>, <164>, <164>,
+					<167>, <171>, <175>, <174>, <172>, <179>, <187>, <244>,
+					<311>;
+				battery-internal-resistance-table-5 = <168>, <168>, <175>, <172>,
+					<171>, <171>, <173>, <184>, <176>, <153>, <147>, <147>,
+					<150>, <153>, <156>, <152>, <149>, <154>, <158>, <206>,
+					<255>;
+				battery-internal-resistance-table-6 = <123>, <123>, <122>, <122>,
+					<123>, <126>, <130>, <138>, <143>, <120>, <115>, <116>,
+					<119>, <124>, <129>, <120>, <117>, <119>, <117>, <139>,
+					<156>;
+				battery-internal-resistance-table-7 = <106>, <106>, <106>, <106>,
+					<108>, <110>, <113>, <119>, <128>, <107>, <104>, <105>,
+					<108>, <112>, <117>, <107>, <106>, <107>, <105>, <127>,
+					<140>;
+				battery-internal-resistance-ocv-table = <4339000>, <4276000>,
+					<4221000>, <4169000>, <4118000>, <4072000>, <4022000>,
+					<3983000>, <3942000>, <3892000>, <3857000>, <3833000>,
+					<3813000>, <3797000>, <3783000>, <3766000>, <3746000>,
+					<3723000>, <3693000>, <3680000>, <3439000>;*/
+
+				charge-sdp-current-microamp = <500000 500000>;
+				charge-dcp-current-microamp = <3000000 3000000>;
+				charge-cdp-current-microamp = <1500000 1500000>;
+				charge-unknown-current-microamp = <1050000 1050000>;
+				charge-fchg-current-microamp = <3480000 2000000>;
+				charge-flash-current-microamp = <5000000 2700000>;
+				charge-wl-bpp-current-microamp = <1000000 1000000>;
+				charge-wl-epp-current-microamp = <2000000 1000000>;
+
+				cap-calib-energy-density-ocv-table = <3350000 3800000>, <4130000 4500000>;
+				cap-track-energy-density-ocv-table = <3400000 3687000>;
+
+				dcp-jeita-temp-table = <800 830 0 4200000>,<1000 1003 1000000 4200000>, <1100 1103 3000000 4250000>,
+					<1150 1153 3000000 4500000>,<1450 1453 3000000 4530000>, <1600 1570 3000000 4200000>;
+				sdp-jeita-temp-table = <800 803 0 4200000>,<1000 1003 500000 4200000>, <1100 1103 500000 4250000>,
+					<1150 1153 500000 4500000>,<1450 1453 500000 4530000>, <1600 1570 500000 4200000>;
+				cdp-jeita-temp-table = <800 830 0 4200000>,<1000 1030 1000000 4200000>, <1100 1103 1500000 4250000>,
+					<1150 1153 1500000 4500000>,<1450 1453 1500000 4530000>, <1600 1570 1500000 4200000>;
+				unknown-jeita-temp-table =<800 830 0 4200000>, <1000 1003 1000000 4200000>, <1100 1103 2000000 4250000>,
+					<1150 1153 3000000 4500000>,<1450 1453 2000000 4530000>, <1600 1570 2000000 4200000>;
+				fchg-jeita-temp-table =<800 830 0 4200000>,  <1000 1003 1000000 4200000>, <1100 1103 3000000 4250000>,
+					<1150 1153 3480000 4500000>,<1450 1453 3480000 4530000>, <1600 1570 3480000 4200000>;
+				flash-jeita-temp-table = <1000 1030 0 4200000>, <1150 1180 1000000 4500000>,
+					<1450 1420 5000000 4530000>, <1600 1570 1000000 4340000>;
+				wl-bpp-jeita-temp-table = <1000 1030 0 4340000>, <1150 1180 500000 4500000>,
+					<1450 1420 1000000 4530000>, <1600 1570 5000000 4100000>;
+				wl-epp-jeita-temp-table = <1000 1030 0 4340000>, <1150 1180 500000 4500000>,
+					<1450 1420 2000000 4530000>, <1600 1570 500000 4530000>;
+			};
+
+			bat2: battery2 {
+				compatible = "simple-battery";
+				charge-full-design-microamp-hours = <5001000>;
+				charge-term-current-microamp = <560000>;
+				constant-charge-voltage-max-microvolt = <4530000>;
+				fullbatt-voltage-offset-microvolt = <22000>;
+				factory-internal-resistance-micro-ohms = <134000>;
+				voltage-min-design-microvolt = <3457000>;
+				fast-charge-threshold-microvolt = <4100000>;
+				fullbatt-voltage = <4426000>;
+				fullbatt-current = <570000>;
+				first-fullbatt-current = <150000>;
+				fullbatt-track-end-vol = <4421000>;
+				fullbatt-track-end-cur = <580000>;
+				first-calib-voltage = <3630000>;
+				first-calib-capacity = <40>;
+				ir-us-upper-limit-microvolt = <4624000>;
+				ir-cv-offset-microvolt = <100000>;
+				ir-rc-micro-ohms = <0>;
+
+				ocv-capacity-celsius = <25>;
+				ocv-capacity-table-0 = <4426000 100>, <4373000 95>, <4320000 90>,
+							<4261000 85>, <4199000 80>, <4140000 75>,
+							<4084000 70>, <4032000 65>, <3984000 60>,
+							<3923000 55>, <3881000 50>, <3852000 45>,
+							<3828000 40>, <3810000 35>, <3793000 30>,
+							<3773000 25>, <3752000 20>, <3727000 15>,
+							<3696000 10>, <3684000 5>, <3400000 0>;
+				voltage-temp-table = <1110270 800>, <999440 850>, <890430 900>,
+							  <785590 950>, <687630 1000>, <598220 1050>,
+							  <517680 1100>, <446100 1150>, <383390 1200>,
+							  <328950 1250>, <281840 1300>, <241480 1350>,
+							  <207030 1400>, <177580 1450>, <152490 1500>,
+							  <131160 1550>, <113000 1600>, <97790 1650>;
+				capacity-temp-table = <45 93>, <25 100>, <10 99>, <0 86>, <(-10) 74>;
+				resistance-temp-table = <45 78>, <25 100>, <10 209>, <0 943>, <(-10) 1025>;
 /*
 				battery-internal-resistance-celsius = <(-20)>, <(-10)>, <0>, <10>,
 					<25>, <35>, <45>, <55>;
@@ -298,7 +405,7 @@
 
 				cm-cap-remap-table = <1 2 3>, <2 3 2>, <98 99 2>, <99 100 3>;
 
-				monitored-battery = <&bat>;
+				monitored-battery = <&bat &bat2>;
 				cm-keep-awake;
 
 				phys = <&hsphy>;
@@ -797,7 +904,7 @@
 		compatible = "sc,sc8989x_chg";
 		reg = <0x6A>;
 		phys = <&hsphy>;
-		monitored-battery = <&bat>;
+		monitored-battery = <&bat &bat2>;
 		extcon = <&extcon_gpio>;
 		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
 		use-typec-extcon;
@@ -807,7 +914,7 @@
 		compatible = "up,upm6920_chg";
 		reg = <0x5A>;
 		phys = <&hsphy>;
-		monitored-battery = <&bat>;
+		monitored-battery = <&bat &bat2>;
 		extcon = <&extcon_gpio>;
 		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
 	};
@@ -816,7 +923,7 @@
                 compatible = "sgm,sgm41543_chg";
                 reg = <0x0B>;
 		phys = <&hsphy>;
-                monitored-battery = <&bat>;
+                monitored-battery = <&bat &bat2>;
 		extcon = <&extcon_gpio>;
                 irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
 		use-typec-extcon;
@@ -831,7 +938,7 @@
 		compatible = "sgm,sgm41542_chg";
 		reg = <0x3B>;
 		phys = <&hsphy>;
-			monitored-battery = <&bat>;
+			monitored-battery = <&bat &bat2>;
 		extcon = <&extcon_gpio>;
 			irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
 		use-typec-extcon;
@@ -840,7 +947,7 @@
 	bq2560x_chg: charger@6b {
 		compatible = "ti,bq2560x_chg";
 		reg = <0x6b>;
-		monitored-battery = <&bat>;
+		monitored-battery = <&bat &bat2>;
 		irq-gpio = <&ap_gpio 115 GPIO_ACTIVE_LOW>;
 		use-typec-extcon;
 		vddvbus:otg-vbus {
@@ -1119,7 +1226,7 @@
 };
 
 &pmic_fgu {
-	monitored-battery = <&bat>;
+	monitored-battery = <&bat &bat2>;
 	sprd,calib-resistance-micro-ohms = <4850>;
 	sprd,comp-resistance-mohm = <13>;
 
