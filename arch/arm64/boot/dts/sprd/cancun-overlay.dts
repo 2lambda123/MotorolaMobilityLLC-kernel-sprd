@@ -1079,6 +1079,10 @@
 
 &sound_vbc_v4_sprd_codec {
 	status = "okay";
+	sprd,spk-ext-pa-info = <3 0 1 0>;
+    sprd,spk-ext-pa-gpio = <&ap_gpio 165 0>;
+	sprd,spk-ext-sw-gpio = <&ap_gpio 166 0>;
+
 	/*
 	 * node 54 and node 55 (index 36 and 37) are reserved for
 	 * "ucp1301-spk2" and "ucp1301-rcv"
