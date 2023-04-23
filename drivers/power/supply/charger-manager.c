@@ -4891,7 +4891,7 @@ static void cm_get_uisoc(struct charger_manager *cm, int *uisoc)
 		return;
 	}
 
-	fake_uisoc = cm->desc->cap * 100 / BAT_MAINTAIN;
+	fake_uisoc = cm->desc->cap; //* 100 / BAT_MAINTAIN;
 	*uisoc = DIV_ROUND_CLOSEST(fake_uisoc, 10);
 	if (*uisoc > 100)
 		*uisoc = 100;
