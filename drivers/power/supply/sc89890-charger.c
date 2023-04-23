@@ -112,6 +112,8 @@
 #define REG09_BATFET_DISABLE            1
 
 #define SC8989X_REG_A                   0x0A
+#define SC8989X_REG_BOOST_MASK          GENMASK(2, 0)
+#define SC8989X_REG_BOOST_SHIFT         0
 
 #define SC8989X_REG_B                   0x0B
 
@@ -2572,6 +2574,8 @@ static int sc8989x_charger_probe(struct i2c_client *client,
 
     mutex_unlock(&info->lock);
     sc8989x_charger_detect_status(info);
+    dev_err(info->dev, "set boost cur 1.2A\n");
+    ret = sc8989x_update_bits(info, SC8989X_REG_A, SC8989X_REG_BOOST_MASK, 0x2 << SC8989X_REG_BOOST_SHIFT); //set otg cur 1.2A
     dev_err(info->dev, "southchip set sc8989x probe init suc\n");
     return 0;
 

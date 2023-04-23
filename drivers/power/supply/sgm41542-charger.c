@@ -70,6 +70,9 @@
 #define SGM41542_REG_OTG_MASK			GENMASK(5, 5)
 #define SGM41542_REG_BOOST_FAULT_MASK		GENMASK(6, 6)
 
+#define SGM41542_REG_OTG_BOOST_MASK             GENMASK(7, 7)
+#define SGM41542_REG_OTG_BOOST_SHIFT             7
+
 #define SGM41542_REG_WATCHDOG_MASK		GENMASK(6, 6)
 
 #define SGM41542_REG_WATCHDOG_TIMER_MASK		GENMASK(5, 4)
@@ -2553,6 +2556,8 @@ static int sgm41542_charger_probe(struct i2c_client *client,
 	sgm41542_charger_detect_status(info);
 	pr_info("[%s]line=%d: add batrst funtion \n", __FUNCTION__, __LINE__);
 	ret = sgm41542_update_bits(info, SGM41542_REG_7,SGM41542_REG_EN_BATRST_MASK, 0x1 << SGM41542_REG_EN_BATRST_SHIFT);
+	pr_info("[%s]line=%d: otg cur modify \n", __FUNCTION__, __LINE__);
+	ret = sgm41542_update_bits(info, SGM41542_REG_2, SGM41542_REG_OTG_BOOST_MASK, 0x0 << SGM41542_REG_OTG_BOOST_SHIFT);
 	/* HS03 code for SR-SL6215-01-178 Import multi-charger driver patch of SPCSS00872701 by gaochao at 20210720 start */
 	pr_info("[%s]line=%d: probe success\n", __FUNCTION__, __LINE__);
 	/* HS03 code for SR-SL6215-01-178 Import multi-charger driver patch of SPCSS00872701 by gaochao at 20210720 end */

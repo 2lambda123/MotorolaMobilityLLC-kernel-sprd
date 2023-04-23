@@ -109,6 +109,8 @@
 #define REG09_BATFET_DISABLE            1
 
 #define UPM6920_REG_A                   0x0A
+#define UPM6920_REG_BOOST_MASK          GENMASK(2, 0)
+#define UPM6920_REG_BOOST_SHIFT         0
 
 #define UPM6920_REG_B                   0x0B
 
@@ -2583,6 +2585,8 @@ static int upm6920_charger_probe(struct i2c_client *client,
 
     mutex_unlock(&info->lock);
     upm6920_charger_detect_status(info);
+    dev_err(info->dev, "set boost cur 1.2A\n");
+    ret = upm6920_update_bits(info, UPM6920_REG_A, UPM6920_REG_BOOST_MASK, 0x2 << UPM6920_REG_BOOST_SHIFT); //set otg cur 1.2
     dev_err(info->dev, "unisemipower set upm6920 probe init suc\n");
     return 0;
 
