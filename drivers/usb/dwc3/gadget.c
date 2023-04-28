@@ -2311,6 +2311,21 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 	unsigned long		flags;
 	int			ret = 0;
 	int			irq;
+	/*
+	 * Since we met some strange behaviors of dwc3 controller when changing
+	 * USB functions fequently, such as we can not receive the command
+	 * complete event of the end transfer command, which will cause some
+	 * problems for controller.
+	 *
+	 * If we still did not receive the command complete event of the end
+	 * transfer command now, we can think the controller had something
+	 * wrong.
+	 *
+	 * Thus we can reset the controller to be as one normal state when
+	 * start or stop gadget every time, no matter the controller is normal
+	 * or not.
+	 */
+	dwc3_core_generic_reset(dwc);
 
 	irq = dwc->irq_gadget;
 	ret = request_threaded_irq(irq, dwc3_interrupt, dwc3_thread_interrupt,

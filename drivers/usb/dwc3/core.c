@@ -1176,6 +1176,16 @@ err0:
 	return ret;
 }
 
+void dwc3_core_generic_reset(struct dwc3 *dwc)
+{
+	if (pm_runtime_suspended(dwc->dev))
+		return;
+
+	dwc3_core_exit(dwc);
+	udelay(100);
+	dwc3_core_init(dwc);
+}
+
 static int dwc3_core_get_phy(struct dwc3 *dwc)
 {
 	struct device		*dev = dwc->dev;
