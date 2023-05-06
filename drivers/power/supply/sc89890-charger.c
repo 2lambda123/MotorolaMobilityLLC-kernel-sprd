@@ -905,6 +905,7 @@ static int sc8989x_charger_set_limit_current(struct sc8989x_charger_info *info,
     u8 reg_val;
     int ret;
 
+    info->last_limit_cur = limit_cur;
     limit_cur = limit_cur / 1000;
     dev_err(info->dev, "set limit_current%d\n", limit_cur);
 
