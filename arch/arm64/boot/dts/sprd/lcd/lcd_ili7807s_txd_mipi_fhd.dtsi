@@ -80,11 +80,11 @@
 							hactive = <1080>;
 							vactive = <2400>;
 							hback-porch = <100>;
-							hfront-porch = <100>;
-							vback-porch = <32>;
-							vfront-porch = <32>;
+							hfront-porch = <96>;
+							vback-porch = <40>;
+							vfront-porch = <40>;
 							hsync-len = <12>;
-							vsync-len = <10>;
+							vsync-len = <2>;
 
 						};
 					};
