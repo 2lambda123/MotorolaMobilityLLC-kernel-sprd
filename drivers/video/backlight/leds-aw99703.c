@@ -532,13 +532,13 @@ static int aw99703_backlight_init(struct aw99703_data *drvdata)
 	if(value == 0x18)
 	{
 		aw99703_i2c_write(drvdata->client,0x02,0xC9); //BL open;0x99:max I 20.2mA;0xc9:25mA
+		aw99703_i2c_write(drvdata->client,0x03,0x68);
 		aw99703_i2c_write(drvdata->client,0x04,0x07); //0x04 ->low 3 bit, 04+05 7 bit address
 		aw99703_i2c_write(drvdata->client,0x05,0xFF); //0x05 ->hight 8 bit
 		aw99703_i2c_write(drvdata->client,0x06,0x1F); //0x1F 3 lu;0x01 1 lu
 		aw99703_i2c_write(drvdata->client,0x07,0x00); //delay BL open
 		aw99703_i2c_write(drvdata->client,0x08,0x00); //PWM BL smoothness
 		pr_err("%s ktd3136 backlight init end\n", __func__);
-
 	}
 
 	return 0;
@@ -1002,7 +1002,7 @@ static int aw99703_probe(struct i2c_client *client,
 	struct backlight_properties props;
 #endif
 	int err = 0;
-
+	u8 value = 0;
 	pr_info("%s enter! driver version %s\n", __func__,
 		AW99703_DRIVER_VERSION);
 
@@ -1065,7 +1065,6 @@ static int aw99703_probe(struct i2c_client *client,
 					drvdata, &aw99703_bl_ops, &props);
 #endif
 
-
 	g_aw99703_data = drvdata;
 
 	err = sysfs_create_group(&client->dev.kobj, &aw99703_attribute_group);
@@ -1076,8 +1075,21 @@ static int aw99703_probe(struct i2c_client *client,
 	}
 	//aw99703_backlight_init(drvdata);
 	aw99703_bl_full_scale_setting(drvdata);
-	aw99703_ramp_setting(drvdata);
+	//aw99703_ramp_setting(drvdata);
 	pr_info("%s exit\n", __func__);
+
+	aw99703_i2c_read(drvdata->client, 0x00, &value);
+	if(value == 0x18)
+	{
+		aw99703_i2c_write(drvdata->client,0x02,0xC9); //BL open;0x99:max I 20.2mA;0xc9:25mA
+		aw99703_i2c_write(drvdata->client,0x03,0x68);
+		aw99703_i2c_write(drvdata->client,0x04,0x07); //0x04 ->low 3 bit, 04+05 7 bit address
+		aw99703_i2c_write(drvdata->client,0x05,0xFF); //0x05 ->hight 8 bit
+		aw99703_i2c_write(drvdata->client,0x06,0x1F); //0x1F 3 lu;0x01 1 lu
+		aw99703_i2c_write(drvdata->client,0x07,0x00); //delay BL open
+		aw99703_i2c_write(drvdata->client,0x08,0x00); //PWM BL smoothness
+		pr_err("%s ktd3136 backlight init end\n", __func__);
+	}
 	return 0;
 
 err_sysfs:
