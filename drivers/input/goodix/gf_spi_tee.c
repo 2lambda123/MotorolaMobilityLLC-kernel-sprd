@@ -91,7 +91,7 @@ MODULE_DEVICE_TABLE(of, gf_of_match);
 static int pid = 0;
 
 static u8 g_vendor_id = 0;
-
+static u8 gpio_ready = 0;
 static ssize_t gf_debug_show(struct device *dev,
 			struct device_attribute *attr, char *buf);
 
@@ -136,8 +136,12 @@ int gf_parse_dts(struct gf_device *gf_dev)
 {
 	int rc = 0;
 	struct device *dev = &(gf_dev->pldev->dev);
-	gf_debug(DEBUG_LOG, "%s, from gpio count = %d\n", __func__,gpiod_count(dev,"gfrst"));
-
+	gf_debug(DEBUG_LOG, "%s, from gpio count = %d,gpio ready = %d\n", __func__,gpiod_count(dev,"gfrst"),gpio_ready);
+	if(gpio_ready)
+	{
+		gf_debug(DEBUG_LOG, "%s, gpio ready\n", __func__);
+		return 0;
+	}
 	gf_dev->rst_gpio_desc = devm_gpiod_get(dev, "gfrst", GPIOD_OUT_LOW);
 	rc = gpiod_direction_output(gf_dev->rst_gpio_desc,0);
 	if (rc) {
@@ -160,7 +164,7 @@ err_reset:
 void gf_cleanup(struct gf_device *gf_dev)
 {
 	pr_info("[info] %s\n", __func__);
-
+	gpio_ready = 0;
 	if (NULL != gf_dev->avdd_gpio_desc) {
 		gpiod_put(gf_dev->avdd_gpio_desc);
 		pr_info("remove avdd_gpio success\n");
@@ -267,19 +271,24 @@ static void gf_irq_gpio_cfg(struct gf_device *gf_dev)
 {
 	int ret = 0;
 	struct device *dev = &(gf_dev->pldev->dev);
-	gf_dev->irq_gpio_desc = devm_gpiod_get(dev, "gfirq", GPIOD_IN);
+	gf_debug(DEBUG_LOG, "%s, gpio ready=%d\n", __func__,gpio_ready);
+	if(gpio_ready == 0)
+	{
+		gf_dev->irq_gpio_desc = devm_gpiod_get(dev, "gfirq", GPIOD_IN);
+	}
 	ret = gpiod_direction_input(gf_dev->irq_gpio_desc);
 	if (ret) {
 		pr_err("failed to set irq gpio, ret = %d\n", ret);
-		return;
+		//return;
 	}
 	gf_dev->irq_num = gpiod_to_irq(gf_dev->irq_gpio_desc);
 	if (gf_dev->irq_num < 0) {
 		pr_err("failed to set irq num, ret = %d\n", gf_dev->irq_num);
-		return;
+		//return;
 	}
 	gf_debug(INFO_LOG, "%s, gf_irq = %d\n", __func__, gf_dev->irq_num);
 	gf_dev->irq = gf_dev->irq_num;
+	gpio_ready = 1;
 	gf_debug(INFO_LOG, "[%s] : irq config success\n", __func__);
 }
 
@@ -562,10 +571,16 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			retval = -EFAULT;
 			break;
 		}
-
 		if (gf_dev->system_status) {
 			gf_debug(INFO_LOG, "%s: system re-started======\n", __func__);
-			break;
+			gf_disable_irq(gf_dev);
+			disable_irq_wake(gf_dev->irq);
+			if (gf_dev->irq) {
+				free_irq(gf_dev->irq, gf_dev);
+				gf_dev->irq_count = 0;
+				gf_dev->irq = 0;
+			}
+			//break;
 		}
 		gf_irq_gpio_cfg(gf_dev);
 		retval = request_threaded_irq(gf_dev->irq, NULL, gf_irq,
@@ -574,6 +589,7 @@ static long gf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			gf_debug(INFO_LOG, "%s irq thread request success!\n", __func__);
 		else
 			gf_debug(ERR_LOG, "%s irq thread request failed, retval=%d\n", __func__, retval);
+
 
 		gf_dev->irq_count = 1;
 		enable_irq_wake(gf_dev->irq);
