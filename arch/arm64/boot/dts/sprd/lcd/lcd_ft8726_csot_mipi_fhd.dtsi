@@ -137,7 +137,7 @@
 					];
 					sprd,sleep-in-command = [
 						05 14 00 01 28
-						05 78 00 01 10
+						05 96 00 01 10
 					];
 					sprd,sleep-out-command = [
 						05 78 00 01 11
