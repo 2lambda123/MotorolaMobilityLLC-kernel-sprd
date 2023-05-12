@@ -19,8 +19,6 @@ enum rq_qos_id {
 	RQ_QOS_COST,
 };
 
-#define RQ_QOS_IOPRIO    3
-
 struct rq_wait {
 	wait_queue_head_t wait;
 	atomic_t inflight;
@@ -83,15 +81,13 @@ static inline struct rq_qos *blkcg_rq_qos(struct request_queue *q)
 
 static inline const char *rq_qos_id_to_name(enum rq_qos_id id)
 {
-	switch (int(id)) {
+	switch (id) {
 	case RQ_QOS_WBT:
 		return "wbt";
 	case RQ_QOS_LATENCY:
 		return "latency";
 	case RQ_QOS_COST:
 		return "cost";
-	case RQ_QOS_IOPRIO:
-		return "ioprio";
 	}
 	return "unknown";
 }
