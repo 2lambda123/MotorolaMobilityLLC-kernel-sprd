@@ -699,11 +699,29 @@ static void wcn_sipc_sblk_recv(struct sipc_chn_info *sipc_chn)
 	int ret;
 	struct sblock blk;
 
+	u64 cur_pt = 0;
+	u32 last_index = 0;
+	u64 loop_cnt = 0;
+
 	WCN_DEBUG("[%s] idx %d recv sblock msg",
 		  sipc_chn_tostr(sipc_chn->chn, 0), sipc_chn->index);
 
 	while (!sblock_receive(sipc_chn->dst, sipc_chn->chn, &blk, 0)) {
-		length = blk.length - SIPC_SBLOCK_HEAD_RESERV;
+	    if (sipc_chn->chn == SIPC_CHN_WIFI_DATA0) {
+		last_index = g_sipc_info.chn8_dbg_info.pt_idx;
+		g_sipc_info.chn8_dbg_info.pt_idx++;
+		g_sipc_info.chn8_dbg_info.pt_idx = g_sipc_info.chn8_dbg_info.pt_idx \
+		    % DBG_PT_NUM;
+		g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx] = \
+		    div_u64(ktime_get_boot_fast_ns(), 1000);
+		cur_pt = g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx];
+		if (loop_cnt)
+		    g_sipc_info.chn8_dbg_info.dbg_pt[last_index] = cur_pt - \
+			g_sipc_info.chn8_dbg_info.dbg_pt[last_index];
+		loop_cnt++;
+	    }
+		sipc_recvseq_debug_store(sipc_chn->chn, SBLK_SEQ_INDEX1);
+	        length = blk.length - SIPC_SBLOCK_HEAD_RESERV;
 		WCN_DEBUG("sblk length %d", length);
 		wcn_sipc_record_mbuf_recv_from_bus(sipc_chn->index, 1);
 		if (sipc_chn->index == SIPC_WIFI_DATA0_RX)
@@ -711,10 +729,12 @@ static void wcn_sipc_sblk_recv(struct sipc_chn_info *sipc_chn)
 				 blk.addr, length);
 		wcn_sipc_recv(sipc_chn,
 			      (u8 *)blk.addr + SIPC_SBLOCK_HEAD_RESERV, length);
+		sipc_recvseq_debug_store(sipc_chn->chn, SBLK_SEQ_INDEX2);
 		ret = sblock_release(sipc_chn->dst, sipc_chn->chn, &blk);
 		if (ret)
 			WCN_ERR("release sblock[%d] err:%d\n",
 				sipc_chn->chn, ret);
+		sipc_recvseq_debug_store(sipc_chn->chn, SBLK_SEQ_INDEX3);
 	}
 }
 
@@ -927,6 +947,11 @@ static int wcn_sipc_chn_init(struct mchn_ops_t *ops)
 
 		/* rx chn record tx chn */
 		sipc_chn->relate_index = sipc_chn->index;
+		if (sipc_chn->chn == 8) {
+			g_sipc_info.chn8_dbg_info.pt_idx = 0;
+			memset(&g_sipc_info.chn8_dbg_info.dbg_pt, 0, sizeof(u64) * DBG_PT_NUM);
+			WCN_INFO("sipc chn[%d] clear debug point!\n", idx);
+		}
 		/* sblock */
 		if (SIPC_CHN_STATUS(sipc_chn->chn) == SIPC_CHANNEL_UNCREATED) {
 			ret = sblock_create(sipc_chn->dst, sipc_chn->chn, sipc_chn->sblk.txblocknum,	\
@@ -1211,6 +1236,56 @@ static int wcn_sipc_pm_qos(unsigned int mode, bool set)
 	return wcn_pm_qos_config_common(mode, set);
 }
 
+#define PT_NUM_PER_LINE 10
+static void sipc_debug_point_show(void)
+{
+	int i = 0;
+	char *buftest;
+	int pos = 0;
+	const size_t bufsz = 12 * DBG_PT_NUM;
+	int i_recd = 0;
+	u64 * dbg_pt = g_sipc_info.chn8_dbg_info.dbg_pt;
+
+	buftest = kmalloc(bufsz, GFP_KERNEL);
+	WCN_INFO("SIPC CHN8 RECV SEQ SHOW:-----------------\n");
+	sipc_recvseq_debug_show();
+	WCN_INFO("SIPC CHN8 DBG INFO SHOW:-----------------\n");
+	WCN_INFO("SIPC CHN8 DBG INFO SHOW: index is %d :\n", g_sipc_info.chn8_dbg_info.pt_idx);
+	while (i < DBG_PT_NUM) {
+		pos += scnprintf(buftest + pos, bufsz - pos, "%012lu  ", *dbg_pt++);
+		i++;
+		if (!(i % PT_NUM_PER_LINE)) {
+			pos = 0;
+			WCN_INFO("dbg pt[%04d -- %04d](us): %s\n", i-PT_NUM_PER_LINE+1, i, buftest);
+			memset(buftest, 0, bufsz);
+			i_recd = i;
+		}
+	}
+	if (pos)
+		WCN_INFO("dbg pt[%04d -- %04d]: %s\n", i_recd+1, DBG_PT_NUM, buftest);
+	kfree(buftest);
+}
+
+int sipc_recvseq_debug_store(u8 channel, int index)
+{
+   if (index > SBLK_SEQ_NUM)
+       return -1;
+   if (channel == SIPC_CHN_WIFI_DATA0) {
+       g_sipc_info.chn8_recvseq_info[index].cur_time = div_u64(ktime_get_boot_fast_ns(), 1000);
+       g_sipc_info.chn8_recvseq_info[index].seq_func = __builtin_return_address(0);
+   }
+   return 0;
+}
+
+void sipc_recvseq_debug_show(void)
+{
+   int i;
+
+   for (i = 0; i < SBLK_SEQ_NUM; i++)
+       WCN_INFO("RECV SEQ %d: %ps : %012lu \n", i, g_sipc_info.chn8_recvseq_info[i].seq_func, \
+	   g_sipc_info.chn8_recvseq_info[i].cur_time);
+}
+
 static struct sprdwcn_bus_ops sipc_bus_ops = {
 	.preinit = wcn_sipc_preinit,
 	.chn_init = wcn_sipc_chn_init,
@@ -1223,6 +1298,7 @@ static struct sprdwcn_bus_ops sipc_bus_ops = {
 	.set_carddump_status = wcn_sipc_set_status,
 	.get_rx_total_cnt = wcn_sipc_get_rxcnt,
 	.pm_qos = wcn_sipc_pm_qos,
+	.debug_point_show = sipc_debug_point_show,
 };
 
 void module_bus_sipc_init(void)

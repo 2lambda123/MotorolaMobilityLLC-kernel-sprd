@@ -56,12 +56,33 @@ enum wcn_sipc_chn_index {
 	SIPC_CHN_NUM
 };
 
+/* debug point for channel 8 debug */
+#define DBG_PT_NUM 1024
+enum wcn_sblk_recvseq_index {
+   SBLK_SEQ_INDEX1 = 0,
+   SBLK_SEQ_INDEX2,
+   SBLK_SEQ_INDEX3,
+   SBLK_SEQ_NUM
+};
+
+struct sblk_debug_info_t {
+   u64 dbg_pt[DBG_PT_NUM];
+   u32 pt_idx;
+};
+
+struct sblk_recvseq_info_t {
+   void *seq_func;
+   u64 cur_time;
+};
+
 struct wcn_sipc_info_t {
 	struct device_node *np;
 	u32 sipc_wcn_version;
 	u32 sipc_chn_status;
 	u32 sipc_channel_state[SIPC_CHN_NUM];
 	struct mutex status_lock;
+        struct sblk_debug_info_t chn8_dbg_info;
+        struct sblk_recvseq_info_t chn8_recvseq_info[SBLK_SEQ_NUM];
 };
 
 struct sbuf_info {
@@ -131,6 +152,9 @@ struct sipc_chn_info {
 int wcn_sipc_channel_dir(int index);
 struct sipc_chn_info *wcn_sipc_channel_get(int index);
 void wcn_sipc_chn_set_status_all_false(void);
+
+void sipc_recvseq_debug_show(void);
+int sipc_recvseq_debug_store(u8 channel, int index);
 
 #ifdef WCN_SIPC_DBG
 #define WCN_HERE WCN_INFO("[%s] %d\n", __func__, __LINE__)
