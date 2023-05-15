@@ -153,7 +153,6 @@ struct sdhci_sprd_host {
 	struct register_hotplug reg_rmldo_en;
 	u32 int_status;
 	u32 sdhs_tuning;
-	struct mmc_data *data;
 };
 
 struct sdhci_sprd_phy_cfg {
@@ -221,37 +220,7 @@ static inline void sdhci_sprd_writew(struct sdhci_host *host, u16 val, int reg)
 
 static inline void sdhci_sprd_writeb(struct sdhci_host *host, u8 val, int reg)
 {
-	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
-	u32 int_status = sprd_host->int_status;
-	u64 i = 0;
-
 	if (unlikely(reg == SDHCI_SOFTWARE_RESET)) {
-		/*
-		 * if send cmd with data err happened, sw reset immediately cannot
-		 * stop controller.It must check following bit before sw reset,
-		 * in SPRD SDIO IP
-		 */
-		if (sprd_host->data && sprd_host->data->error && !host->cmd) {
-			while (!(int_status &
-				(SDHCI_INT_TIMEOUT |
-				 SDHCI_INT_DATA_TIMEOUT |
-				 SDHCI_INT_DATA_END_BIT |
-				 SDHCI_INT_DATA_END
-			))) {
-				int_status |= sdhci_sprd_readl(host, SDHCI_INT_STATUS);
-				if (i++ > 10000000)
-					break;
-				cpu_relax();
-			}
-
-			if (unlikely(val == SDHCI_RESET_DATA) &&
-				(int_status & SDHCI_INT_CMD_MASK)) {
-				sprd_host->data = NULL;
-				return;
-			}
-		} else
-			sprd_host->data = NULL;
-
 		/*
 		 * Since BIT(3) of SDHCI_SOFTWARE_RESET is reserved according to the
 		 * standard specification, sdhci_reset() write this register directly
@@ -636,6 +605,7 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	int mid_step;
 	int final_phase;
 	u32 dll_cfg, mid_dll_cnt, dll_cnt, dll_dly;
+	bool cfg_use_adma = false;
 
 	sdhci_reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
 
@@ -664,6 +634,14 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	}
 
 	dll_dly = p[mmc->ios.timing];
+
+	/* config dma mode in tuning. */
+	if (!cfg_use_adma && (host->flags & SDHCI_USE_ADMA) && strcmp(mmc_hostname(mmc), "mmc0")) {
+		cfg_use_adma = true;
+		host->flags &= ~SDHCI_USE_ADMA;
+		host->flags |= SDHCI_USE_SDMA;
+	}
+
 	do {
 		if (host->flags & SDHCI_HS400_TUNING) {
 			dll_dly &= ~SDHCI_SPRD_CMD_DLY_MASK;
@@ -822,6 +800,12 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 
 out:
 	host->flags &= ~SDHCI_HS400_TUNING;
+
+	if (cfg_use_adma) {
+		host->flags &= ~SDHCI_USE_SDMA;
+		host->flags |= SDHCI_USE_ADMA;
+	}
+
 	kfree(ranges);
 	kfree(value_t);
 
@@ -1008,7 +992,6 @@ static u32 sdhci_sprd_int_status(struct sdhci_host *host, u32 intmask)
 	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
 
 	sprd_host->int_status = intmask;
-	sprd_host->data = host->data;
 
 	if (intmask & SDHCI_INT_ERROR_MASK)
 		sdhci_sprd_dump_vendor_regs(host);
