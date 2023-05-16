@@ -95,7 +95,8 @@
 
 			gpio-keys {
 				compatible = "gpio-keys";
-
+				pinctrl-names = "gpio_125";
+				pinctrl-7 = <&gpio_125>;
 				key-volumedown {
 					label = "Volume Down Key";
 					linux,code = <KEY_VOLUMEDOWN>;
@@ -1313,6 +1314,7 @@
 	pinctrl-4 = <&gpio_26>;
 	pinctrl-5 = <&gpio_124>;
 	pinctrl-6 = <&gpio_175>;
+	pinctrl-7 = <&gpio_125>;
 
 	gpio_8: rfctl16 {
 		pins = "QOGIRL6_RFCTL16";
@@ -1355,6 +1357,11 @@
 
 	gpio_175: bt_rfctl2 {
 		pins = "QOGIRL6_BT_RFCTL2";
+		function = "func4";
+	};
+
+	gpio_125: keyin1 {
+		pins = "QOGIRL6_BT_KEYIN1";
 		function = "func4";
 	};
 };
