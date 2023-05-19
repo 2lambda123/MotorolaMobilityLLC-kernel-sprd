@@ -19,7 +19,7 @@
 
 					sprd,phy-bit-clock = <1152000>;	   /* kbps */
 					sprd,phy-escape-clock = <20000>;   /* kHz */
-					sprd,power-gpio-delay = <20>;      /* ms */
+					/* sprd,power-gpio-delay = <20>;      ms */
 					sprd,width-mm = <70>;
 					sprd,height-mm = <155>;
 					sprd,dpi-clk-div = <6>;
@@ -129,7 +129,7 @@
 						15 00 00 02 53 2C
 						15 00 00 02 35 00
 						05 50 00 01 11
-						05 0A 00 01 29
+						05 05 00 01 29
 					];
 					sprd,sleep-in-command = [
 						39 0A 00 01 28
@@ -137,7 +137,7 @@
 					];
 					sprd,sleep-out-command = [
 						39 50 00 01 11
-						39 0A 00 01 29
+						39 05 00 01 29
 					];
 					sprd,cabc-on-command = [
 						39 00 00 02 FF 10

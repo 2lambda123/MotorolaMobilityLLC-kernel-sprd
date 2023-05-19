@@ -16,7 +16,7 @@
 					sprd,dsi-work-mode = <1>;          /* video burst mode*/
 					sprd,dsi-lane-number = <4>;
 					sprd,dsi-color-format = "rgb888";
-					sprd,power-gpio-delay = <20>;      /* ms */
+					/* sprd,power-gpio-delay = <20>;      ms */
 					sprd,phy-bit-clock = <1152000>;	   /* kbps */
 					sprd,phy-escape-clock = <20000>;   /* kHz */
 
@@ -134,16 +134,16 @@
 						15 00 00 02 55 02
 						15 00 00 02 53 2C
 						15 00 00 02 35 00
-						05 78 00 01 11
-						05 14 00 01 29
+						05 5A 00 01 11
+						05 05 00 01 29
 					];
 					sprd,sleep-in-command = [
 						05 14 00 01 28
 						05 96 00 01 10
 					];
 					sprd,sleep-out-command = [
-						05 78 00 01 11
-						05 14 00 01 29
+						05 5A 00 01 11
+						05 05 00 01 29
 					];
 					sprd,cabc-on-command = [
 						39 00 00 02 55 02
