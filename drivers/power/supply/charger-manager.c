@@ -1549,11 +1549,14 @@ static bool cm_update_current_jeita_status(struct charger_manager *cm)
 	struct cm_jeita_info *jeita_info = &cm->desc->jeita_info;
 	int cur_jeita_status, ret;
 	bool is_normal = true;
+	int vbat_now,ibat_now;
 
 	/**
 	 * Note that it need to vote for ibat before the caller of this function
 	 * if does not define jeita table
 	 */
+	get_vbat_now_uV(cm, &vbat_now);
+	get_constant_charge_current(cm,&ibat_now);
 	if (!desc->jeita_tab_size)
 		return true;
 
@@ -1608,6 +1611,10 @@ static bool cm_update_current_jeita_status(struct charger_manager *cm)
 			jeita_info->jeita_temperature = desc->temperature;
 			jeita_info->temp_down_trigger = 0;
 		}
+	} else if (jeita_info->jeita_status == 2 && vbat_now > 4250000 && ibat_now > 1060000) {
+		is_normal = cm_manager_adjust_current(cm, cur_jeita_status);
+		jeita_info->temp_up_trigger = 0;
+		jeita_info->temp_down_trigger = 0;
 	} else {
 		jeita_info->temp_up_trigger = 0;
 		jeita_info->temp_down_trigger = 0;
@@ -4144,6 +4151,7 @@ static bool cm_manager_adjust_current(struct charger_manager *cm, int jeita_stat
 {
 	struct charger_desc *desc = cm->desc;
 	int term_volt, target_cur;
+	int vbat_now;
 
 	if (jeita_status > desc->jeita_tab_size)
 		jeita_status = desc->jeita_tab_size;
@@ -4165,8 +4173,13 @@ static bool cm_manager_adjust_current(struct charger_manager *cm, int jeita_stat
 	term_volt = desc->jeita_tab[jeita_status].term_volt;
 	target_cur = desc->jeita_tab[jeita_status].current_ua;
 
+	get_vbat_now_uV(cm, &vbat_now);
+	if(jeita_status == 2 && vbat_now > 4250000)
+		target_cur = 1000000;
 	cm->desc->ir_comp.us = term_volt;
 	cm->desc->ir_comp.us_lower_limit = term_volt;
+
+	dev_info(cm->dev, "jeita_status = %d, vbat_now = %d\n",jeita_status,vbat_now);
 
 	if (cm->desc->cp.cp_running && !cm_check_primary_charger_enabled(cm)) {
 		dev_info(cm->dev, "cp target terminate voltage = %d, target current = %d\n",
