@@ -874,10 +874,11 @@ static ssize_t gf_debug_store(struct device *dev,
 	//u8 flag = 0;
 
 	if (!strncmp(buf, "-8", 2)) {
-		gf_debug(INFO_LOG, "%s: parameter is -8, enable spi clock test===============\n", __func__);
-
+		gf_debug(INFO_LOG, "%s: parameter is -8, lcd on notify===============\n", __func__);
+		gf_netlink_send(gf_dev, GF_NETLINK_SCREEN_ON);
 	} else if (!strncmp(buf, "-9", 2)) {
-		gf_debug(INFO_LOG, "%s: parameter is -9, disable spi clock test===============\n", __func__);
+		gf_debug(INFO_LOG, "%s: parameter is -9, lcd off notify===============\n", __func__);
+		gf_netlink_send(gf_dev, GF_NETLINK_SCREEN_OFF);
 
 	} else if (!strncmp(buf, "-10", 3)) {
 		gf_debug(INFO_LOG, "%s: parameter is -10, gf init start===============\n", __func__);
