@@ -954,6 +954,79 @@ static int gnss_download_firmware(void)
 	return 0;
 }
 
+static int reg_set_bit(unsigned long reg, unsigned long bit)
+{
+	unsigned int reg_data;
+	int ret;
+
+	ret = sprdwcn_bus_reg_read(reg, &reg_data, 4);
+	if (ret < 0) {
+		WCN_ERR("%s: read reg 0x%x failed with %d\n", __func__, reg, ret);
+		return ret;
+	}
+
+	WCN_INFO("ADDR 0x%x = 0x%x, %s\n", reg, reg_data, __func__);
+
+	if ((reg_data & bit) == 0) {
+		reg_data |= bit;
+		ret = sprdwcn_bus_reg_write(reg, &reg_data, 4);
+		if (ret < 0) {
+			WCN_ERR("%s: write reg:0x%x bit:0x%x failed with %d\n", __func__, reg, bit, ret);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+#define WCN_XPE_EFUSE_DDR 0x40859030
+
+/* get IPD Vendor ID
+addr 0x40859030 30~29bit 00-T 01-X
+Before read, need write 4 reg
+addr 0x4083c32c bit22 enable clock
+addr 0x4083c024 bit11 enable clock
+addr 0x4083c050 bit18 enable clock
+addr 0x40858040 bit0  enable clock */
+unsigned int marlin_get_wcn_xpe_efuse_data(void)
+{
+		static unsigned int ipd_vendor_id;
+	static unsigned int flag = 0;
+	int ret;
+
+	if (flag)
+		return ipd_vendor_id;
+
+	ret = reg_set_bit(REG_AON_APB_CGM_EN, BIT_AON_APB_EFUSE_SELE_FRC_EB);
+	if (ret < 0)
+		return ret;
+
+	ret = reg_set_bit(REG_AON_APB_EB, BIT_AON_APB_EFUSE_EB);
+	if (ret < 0)
+		return ret;
+
+	ret = reg_set_bit(REG_AON_APB_CLK_CTRL4, BIT_AON_APB_CGM_EFUSE_EN);
+	if (ret < 0)
+		return ret;
+
+	ret = reg_set_bit(REG_AON_AHB_EFUSE_SEC_EN, BIT_AON_AHB_EFUSE_SEC_EN);
+	if (ret < 0)
+		return ret;
+
+	ret = sprdwcn_bus_reg_read(WCN_XPE_EFUSE_DDR, &ipd_vendor_id, 4);
+	WCN_INFO("block6 ADDR:0x%x = 0x%x, %s\n", WCN_XPE_EFUSE_DDR, ipd_vendor_id, __func__);
+	ipd_vendor_id = ipd_vendor_id << 1;
+	ipd_vendor_id = ipd_vendor_id >> 30;
+	WCN_INFO("ipd_vendor_id = 0x%x, %s\n", ipd_vendor_id, __func__);
+
+	flag = 1;
+	return ipd_vendor_id;
+}
+
+EXPORT_SYMBOL_GPL(marlin_get_wcn_xpe_efuse_data);
+
+#define WCN_WFBT_LOAD_FIRMWARE_OFFSET 0x180000
+
 /* BT WIFI FM download */
 static int btwifi_download_firmware(void)
 {
@@ -1023,6 +1096,18 @@ static int btwifi_download_firmware(void)
 	} else {
 		tx_img_size = firmware->size;
 		tx_img_ptr = (char *)firmware->data;
+	}
+
+	pr_info(" %s tx_img_size = %d\n", __func__, tx_img_size);
+	pr_info(" %s tx_img_ptr = %x\n", __func__, tx_img_ptr);
+	pr_info(" %s firmware->size = %ld\n", __func__, firmware->size);
+	if (tx_img_size > M3L_FIRMWARE_MAX_SIZE) {
+		if ((marlin_get_wcn_xpe_efuse_data() == WCN_XPE_EFUSE_DATA)) {
+				tx_img_size = 947120;
+				tx_img_ptr += WCN_WFBT_LOAD_FIRMWARE_OFFSET;
+				WCN_INFO("btwf bin --------\r\n");
+		}
+	WCN_INFO("%s load 3M bin \n", __func__);
 	}
 
 	count = (tx_img_size + PACKET_SIZE - 1) / PACKET_SIZE;

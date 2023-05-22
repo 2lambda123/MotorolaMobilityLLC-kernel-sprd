@@ -707,21 +707,18 @@ static void wcn_sipc_sblk_recv(struct sipc_chn_info *sipc_chn)
 		  sipc_chn_tostr(sipc_chn->chn, 0), sipc_chn->index);
 
 	while (!sblock_receive(sipc_chn->dst, sipc_chn->chn, &blk, 0)) {
-	    if (sipc_chn->chn == SIPC_CHN_WIFI_DATA0) {
 		last_index = g_sipc_info.chn8_dbg_info.pt_idx;
 		g_sipc_info.chn8_dbg_info.pt_idx++;
-		g_sipc_info.chn8_dbg_info.pt_idx = g_sipc_info.chn8_dbg_info.pt_idx \
-		    % DBG_PT_NUM;
+		g_sipc_info.chn8_dbg_info.pt_idx = g_sipc_info.chn8_dbg_info.pt_idx % DBG_PT_NUM;
 		g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx] = \
-		    div_u64(ktime_get_boot_fast_ns(), 1000);
+			div_u64(ktime_get_boot_fast_ns(), 1000);
 		cur_pt = g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx];
 		if (loop_cnt)
-		    g_sipc_info.chn8_dbg_info.dbg_pt[last_index] = cur_pt - \
-			g_sipc_info.chn8_dbg_info.dbg_pt[last_index];
+			g_sipc_info.chn8_dbg_info.dbg_pt[last_index] = cur_pt - \
+				g_sipc_info.chn8_dbg_info.dbg_pt[last_index];
 		loop_cnt++;
-	    }
-		sipc_recvseq_debug_store(sipc_chn->chn, SBLK_SEQ_INDEX1);
-	        length = blk.length - SIPC_SBLOCK_HEAD_RESERV;
+
+		length = blk.length - SIPC_SBLOCK_HEAD_RESERV;
 		WCN_DEBUG("sblk length %d", length);
 		wcn_sipc_record_mbuf_recv_from_bus(sipc_chn->index, 1);
 		if (sipc_chn->index == SIPC_WIFI_DATA0_RX)
@@ -1247,9 +1244,6 @@ static void sipc_debug_point_show(void)
 	u64 * dbg_pt = g_sipc_info.chn8_dbg_info.dbg_pt;
 
 	buftest = kmalloc(bufsz, GFP_KERNEL);
-	WCN_INFO("SIPC CHN8 RECV SEQ SHOW:-----------------\n");
-	sipc_recvseq_debug_show();
-	WCN_INFO("SIPC CHN8 DBG INFO SHOW:-----------------\n");
 	WCN_INFO("SIPC CHN8 DBG INFO SHOW: index is %d :\n", g_sipc_info.chn8_dbg_info.pt_idx);
 	while (i < DBG_PT_NUM) {
 		pos += scnprintf(buftest + pos, bufsz - pos, "%012lu  ", *dbg_pt++);
@@ -1279,11 +1273,11 @@ int sipc_recvseq_debug_store(u8 channel, int index)
 
 void sipc_recvseq_debug_show(void)
 {
-   int i;
-
-   for (i = 0; i < SBLK_SEQ_NUM; i++)
-       WCN_INFO("RECV SEQ %d: %ps : %012lu \n", i, g_sipc_info.chn8_recvseq_info[i].seq_func, \
-	   g_sipc_info.chn8_recvseq_info[i].cur_time);
+    int i;
+ 
+    for (i = 0; i < SBLK_SEQ_NUM; i++)
+        WCN_INFO("RECV SEQ %d: %ps : %012lu \n", i, g_sipc_info.chn8_recvseq_info[i].seq_func, \
+          g_sipc_info.chn8_recvseq_info[i].cur_time);
 }
 
 static struct sprdwcn_bus_ops sipc_bus_ops = {

@@ -854,19 +854,20 @@ void sprd_pcie_remove_card(void *wcn_dev)
 
 	edma_del_tx_timer();
 
+	/* rx: kill tasklet */
+	if (edma_hw_pause() < 0)
+		WCN_ERR("edma_hw_pause fail\n");
+	usleep_range(100,200);
 	/* rx: disable txrx irq */
 	if (disable_pcie_irq() < 0) {
 		WCN_ERR(" irq have free\n");
 		return;
 	}
 
-	/* rx: kill tasklet */
 	edma_tasklet_deinit();
 
 	wcn_bus_change_state(priv, WCN_BUS_DOWN);
 
-	if (edma_hw_pause() < 0)
-		WCN_ERR("edma_hw_pause fail\n");
 	init_completion(&priv->remove_done);
 	/* for proc_fs_exit, loopcheck/at/assert */
 	mdbg_fs_channel_destroy();
@@ -1076,6 +1077,14 @@ static int sprd_pcie_probe(struct pci_dev *pdev,
 	/* calling rescan callback to inform download */
 	//if (scan_card_notify != NULL)
 	//	scan_card_notify();
+	if (priv->msi_en == 1) {
+		pci_read_config_dword(pdev->bus->self, 0x0828, &val32);
+		if (priv->irq_num == 32 && val32 != 0xffffffff) {
+			WCN_WARN("irq int_en status 828=0x%x\n", val32);
+			pci_write_config_dword(pdev->bus->self, 0x0828, MSI_IRQ_INT_EN_ALL);
+		}
+		WCN_INFO("irq int_en status 828=0x%x\n", val32);
+	}
 	marlin_scan_finish();
 	WCN_INFO("%s ok\n", __func__);
 	return 0;

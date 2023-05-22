@@ -5,6 +5,8 @@
 
 /* ap cp sync flag */
 #define UMW2631_MARLIN_CP_INIT_READY_MAGIC	(0xf0f0f0ff)
+#define UMW2631_MARLIN_CP2_INITIALIZE_CAIL_WAITING (0xf0f0f0f1)
+#define UMW2631_MARLIN_CP2_INITIALIZE_CAIL_DATA_DONE (0xf0f0f0f2)
 
 
 /* AP regs start and end */

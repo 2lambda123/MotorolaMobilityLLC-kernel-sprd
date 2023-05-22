@@ -914,7 +914,7 @@ static ssize_t mdbg_proc_write(struct file *filp,
 			WCN_INFO("fail_count is value %d\n", mdbg_proc->fail_count);
 			mdbg_proc->fail_count = 0;
 			sprdwcn_bus_set_carddump_status(false);
-			wcn_device_poweroff();
+			wcn_reset_cp2();
 			WCN_INFO("marlin gnss  reset finish!\n");
 			return count;
 		}
@@ -957,8 +957,7 @@ static ssize_t mdbg_proc_write(struct file *filp,
 			marlin_set_download_status(0);
 			sprdwcn_bus_set_carddump_status(false);
 			marlin_chip_en(false, true);
-			if (marlin_reset_func != NULL)
-				marlin_reset_func(marlin_callback_para);
+			wcn_reset_cp2();
 			return count;
 		}
 		if (strncmp(mdbg_proc->write_buf, "at+getchipversion", 17) == 0) {

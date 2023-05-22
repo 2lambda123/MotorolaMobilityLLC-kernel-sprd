@@ -401,7 +401,7 @@ struct edma_info {
 #define DMA_PCIE_MSIX_REG_ADDR_LO(base)	(base + 0x38)
 #define DMA_PCIE_MSIX_VALUE(base)		(base + 0x3c)
 /***********************************************************/
-#define CHN_DMA_INT(base, n)	(EDMA_CHN_REG_BASE + base + n * 0x40)
+#define CHN_DMA_INT(base, n)	(base + n * 0x40)
 
 #define RF_CHN_TX_POP_INT_EN_BIT		BIT(0)
 #define RF_CHN_TX_COMPLETE_INT_EN_BIT		BIT(1)
@@ -428,15 +428,15 @@ struct edma_info {
 #define RF_CHN_CFG_ERR_INT_CLR_BIT		BIT(28)
 
 /***********************************************************/
-#define CHN_DMA_TX_REQ(base, n)	(EDMA_CHN_REG_BASE + base + 0x4 + n * 0x40)
+#define CHN_DMA_TX_REQ(base, n)	(base + 0x4 + n * 0x40)
 
 #define RF_CHN_TX_REQ_BIT		BIT(0)
 /***********************************************************/
-#define CHN_DMA_RX_REQ(base, n)	(EDMA_CHN_REG_BASE + base + 0x8 + n * 0x40)
+#define CHN_DMA_RX_REQ(base, n)	(base + 0x8 + n * 0x40)
 
 #define RF_CHN_RX_REQ_BIT		BIT(0)
 /***********************************************************/
-#define CHN_DMA_CFG(base, n)	(EDMA_CHN_REG_BASE + base + 0xc + n * 0x40)
+#define CHN_DMA_CFG(base, n)	(base + 0xc + n * 0x40)
 
 #define RF_CHN_EB_BIT			BIT(0)
 #define RF_CHN_LIST_MODE_BIT		(BIT(4) | BIT(5))
@@ -458,7 +458,7 @@ struct edma_info {
  */
 #define RF_CHN_MSI_INT_MAP_BIT		(BIT(27) | BIT(28) | BIT(29) | BIT(30))
 /***********************************************************/
-#define CHN_TRANS_LEN(base, n)	(EDMA_CHN_REG_BASE + base + 0x10 + n * 0x40)
+#define CHN_TRANS_LEN(base, n)	(base + 0x10 + n * 0x40)
 
 #define RF_CHN_TRSC_LEN_BIT		0xFFFF
 #define RF_CHN_DONE_BIT			BIT(24)
@@ -467,17 +467,17 @@ struct edma_info {
 #define RF_CHN_RX_INTR_BIT		BIT(27)
 #define RF_CHN_EOF_BIT			BIT(28)
 /***********************************************************/
-#define CHN_PTR_HIGH(base, n)	(EDMA_CHN_REG_BASE + base + 0x14 + n * 0x40)
+#define CHN_PTR_HIGH(base, n)	(base + 0x14 + n * 0x40)
 
 #define RF_CHN_RX_NEXT_DSCR_PTR_HIGH_BIT	0xFF000000
 #define RF_CHN_TX_NEXT_DSCR_PTR_HIGH_BIT	0x00FF0000
 #define RF_CHN_DST_DATA_ADDR_HIGH_BIT		0x0000FF00
 #define RF_CHN_SRC_DATA_ADDR_HIGH_BIT		0x000000FF
 /***********************************************************/
-#define CHN_TX_NEXT_DSCR_PTR_LOW(base, n)	(EDMA_CHN_REG_BASE + base + 0x18 + n * 0x40)
-#define CHN_RX_NEXT_DSCR_PTR_LOW(base, n)	(EDMA_CHN_REG_BASE + base + 0x1c + n * 0x40)
-#define CHN_DATA_SRC_ADDR_LOW(base, n)	(EDMA_CHN_REG_BASE + base + 0x20 + n * 0x40)
-#define CHN_DATA_DEST_ADDR_LOW(base, n)	(EDMA_CHN_REG_BASE + base + 0x24 + n * 0x40)
+#define CHN_TX_NEXT_DSCR_PTR_LOW(base, n)	(base + 0x18 + n * 0x40)
+#define CHN_RX_NEXT_DSCR_PTR_LOW(base, n)	(base + 0x1c + n * 0x40)
+#define CHN_DATA_SRC_ADDR_LOW(base, n)	        (base + 0x20 + n * 0x40)
+#define CHN_DATA_DEST_ADDR_LOW(base, n)	        (base + 0x24 + n * 0x40)
 
 int edma_init(struct wcn_pcie_info *pcie_info);
 int edma_deinit(void);

@@ -13,6 +13,7 @@
 #include "wcn_misc.h"
 #include "wcn_procfs.h"
 #include "pcie.h"
+#include "wcn_types.h"
 
 #define LOOPCHECK_TIMER_INTERVAL      5
 #define WCN_LOOPCHECK_INIT	1
@@ -141,6 +142,10 @@ static int loopcheck_send(char *buf, unsigned int len)
 		} else {
 			ret = sprdwcn_bus_push_list(p_mdbg_proc_ops->channel,
 						    head, tail, num);
+			if (ret == -E_INVALIDPARA)
+				if (g_match_config && g_match_config->unisoc_wcn_sipc)
+					sprdwcn_bus_list_free(p_mdbg_proc_ops->channel,
+								head, tail, num);
 		}
 
 		if (ret != 0)

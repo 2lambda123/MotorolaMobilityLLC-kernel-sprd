@@ -17,6 +17,7 @@
 #include "wcn_glb.h"
 #include "wcn_debug_bus.h"
 #include "wcn_boot.h"
+#include "wcn_types.h"
 
 static bool from_ddr;
 extern int is_wcn_shutdown;
@@ -139,8 +140,11 @@ static int wcn_send_atcmd(void *cmd, unsigned char cmd_len,
 
 	reinit_completion(&sysfs_info.cmd_completion);
 	ret = sprdwcn_bus_push_list(0, head, tail, num);
-	if (ret)
+	if (ret) {
 		WCN_INFO("sprdwcn_bus_push_list error=%d\n", ret);
+		if ((ret == -E_INVALIDPARA) && g_match_config && g_match_config->unisoc_wcn_sipc)
+			sprdwcn_bus_list_free(0, head, tail, num);
+	}
 	timeleft = wait_for_completion_timeout(&sysfs_info.cmd_completion,
 					       3 * HZ);
 	if (g_match_config && g_match_config->unisoc_wcn_sdio) {
