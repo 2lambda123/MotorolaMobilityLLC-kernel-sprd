@@ -17,10 +17,7 @@ enum rq_qos_id {
 	RQ_QOS_WBT,
 	RQ_QOS_LATENCY,
 	RQ_QOS_COST,
-	RQ_QOS_IOPRIO = 3,
 };
-
-//#define RQ_QOS_IOPRIO    3
 
 struct rq_wait {
 	wait_queue_head_t wait;
@@ -91,8 +88,6 @@ static inline const char *rq_qos_id_to_name(enum rq_qos_id id)
 		return "latency";
 	case RQ_QOS_COST:
 		return "cost";
-	case RQ_QOS_IOPRIO:
-		return "ioprio";
 	}
 	return "unknown";
 }
