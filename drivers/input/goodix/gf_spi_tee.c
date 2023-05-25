@@ -292,6 +292,7 @@ static void gf_irq_gpio_cfg(struct gf_device *gf_dev)
 	gf_debug(INFO_LOG, "[%s] : irq config success\n", __func__);
 }
 
+/*
 static void gf_reset_gpio_cfg(struct gf_device *gf_dev)
 {
 #ifdef CONFIG_OF
@@ -299,6 +300,7 @@ static void gf_reset_gpio_cfg(struct gf_device *gf_dev)
 #endif
 
 }
+*/
 
 
 static void gf_enable_irq(struct gf_device *gf_dev)
@@ -870,7 +872,6 @@ static ssize_t gf_debug_store(struct device *dev,
 			struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct gf_device *gf_dev =  dev_get_drvdata(dev);
-	int retval = 0;
 	//u8 flag = 0;
 
 	if (!strncmp(buf, "-8", 2)) {
@@ -880,49 +881,7 @@ static ssize_t gf_debug_store(struct device *dev,
 		gf_debug(INFO_LOG, "%s: parameter is -9, lcd off notify===============\n", __func__);
 		gf_netlink_send(gf_dev, GF_NETLINK_SCREEN_OFF);
 
-	} else if (!strncmp(buf, "-10", 3)) {
-		gf_debug(INFO_LOG, "%s: parameter is -10, gf init start===============\n", __func__);
-
-		gf_irq_gpio_cfg(gf_dev);
-		retval = request_threaded_irq(gf_dev->irq, NULL, gf_irq,
-				IRQF_TRIGGER_RISING | IRQF_ONESHOT, dev_name(&(gf_dev->spi->dev)), gf_dev);
-		if (!retval)
-			gf_debug(INFO_LOG, "%s irq thread request success!\n", __func__);
-		else
-			gf_debug(ERR_LOG, "%s irq thread request failed, retval=%d\n", __func__, retval);
-
-		gf_dev->irq_count = 1;
-		gf_disable_irq(gf_dev);
-
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-		gf_debug(INFO_LOG, "[%s] : register_early_suspend\n", __func__);
-		gf_dev->early_suspend.level = (EARLY_SUSPEND_LEVEL_DISABLE_FB - 1);
-		gf_dev->early_suspend.suspend = gf_early_suspend,
-		gf_dev->early_suspend.resume = gf_late_resume,
-		register_early_suspend(&gf_dev->early_suspend);
-#else
-		/* register screen on/off callback */
-		gf_dev->notifier.notifier_call = gf_fb_notifier_callback;
-		fb_register_client(&gf_dev->notifier);
-#endif
-
-		gf_dev->sig_count = 0;
-
-		gf_debug(INFO_LOG, "%s: gf init finished======\n", __func__);
-
-	} else if (!strncmp(buf, "-11", 3)) {
-		gf_debug(INFO_LOG, "%s: parameter is -11, enable irq===============\n", __func__);
-		gf_enable_irq(gf_dev);
-
-	} else if (!strncmp(buf, "-12", 3)) {
-		gf_debug(INFO_LOG, "%s: parameter is -12, GPIO test===============\n", __func__);
-		gf_reset_gpio_cfg(gf_dev);
-
-
-
-	} else if (!strncmp(buf, "-13", 3)) {
-		gf_debug(INFO_LOG, "%s: parameter is -13, Vendor ID test --> 0x%x\n", __func__, g_vendor_id);
-	} else {
+	}else {
 		gf_debug(ERR_LOG, "%s: wrong parameter!===============\n", __func__);
 	}
 
