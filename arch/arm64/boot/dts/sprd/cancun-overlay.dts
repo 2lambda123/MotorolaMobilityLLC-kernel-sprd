@@ -1,5 +1,9 @@
 /dts-v1/;
 /plugin/;
+#include "lcd/lcd_nt36672c_tm_mipi_fhd.dtsi"
+#include "lcd/lcd_ft8726_csot_mipi_fhd.dtsi"
+#include "lcd/lcd_ili7807s_txd_mipi_fhd.dtsi"
+#include "lcd/lcd_nt36672c2_tm_mipi_fhd.dtsi"
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -9,10 +13,6 @@
 #include <dt-bindings/usb/pd.h>
 #include "lcd/lcd_g40396_truly_mipi_fhd.dtsi"
 #include "lcd/lcd_nt36672e_truly_mipi_fhd_nodsc.dtsi"
-#include "lcd/lcd_nt36672c_tm_mipi_fhd.dtsi"
-#include "lcd/lcd_nt36672c2_tm_mipi_fhd.dtsi"
-#include "lcd/lcd_ft8726_csot_mipi_fhd.dtsi"
-#include "lcd/lcd_ili7807s_txd_mipi_fhd.dtsi"
 #include "lcd/lcd_dummy_mipi.dtsi"
 #include "tp/ums9230-spi3-gpio144-145-tp.dtsi"
 #include "ums9230-wcn.dtsi"
