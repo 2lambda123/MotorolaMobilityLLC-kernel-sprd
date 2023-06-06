@@ -1360,6 +1360,46 @@ static void ufs_sprd_dbg_register_dump(struct ufs_hba *hba)
 	read_ufs_debug_bus(hba);
 }
 
+static void ufs_sprd_linkup_start_tstamp(struct ufs_hba *hba,
+					 struct uic_command *ucmd)
+{
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+
+	if (ucmd->command == UIC_CMD_DME_LINK_STARTUP)
+		host->linkup_start_tstamp = ktime_get();
+}
+
+static void ufs_sprd_dco_calibration(struct ufs_hba *hba,
+				     struct uic_command *ucmd)
+{
+	struct ufs_sprd_host *host = ufshcd_get_variant(hba);
+	int value = 0;
+	int apb_dco_cal_result = 0;
+
+	if (ucmd->command == UIC_CMD_DME_LINK_STARTUP) {
+		while(1) {
+			if(ktime_to_us(ktime_sub(ktime_get(),
+			   host->linkup_start_tstamp)) > WAIT_1MS_TIMEOUT) {
+				value = readl((host->ufs_analog_reg) +
+					       MPHY_DIG_CFG62_LANE0);
+				apb_dco_cal_result = (value >> 24);
+				break;
+			}
+		}
+
+		if (apb_dco_cal_result < APB_DCO_CAL_RESULT_RANGE) {
+			ufs_sprd_rmwl(host->ufs_analog_reg,
+				      MPHY_APB_REG_DCO_CTRLBIT,
+				      MPHY_APB_REG_DCO_VALUE,
+				      MPHY_DIG_CFG15_LANE0);
+			ufs_sprd_rmwl(host->ufs_analog_reg,
+				      MPHY_APB_OVR_REG_DCO_CTRLBIT,
+				      MPHY_APB_OVR_REG_DCO_VALUE,
+				      MPHY_DIG_CFG1_LANE0);
+		}
+	}
+}
+
 /*
  * struct ufs_hba_sprd_vops - UFS sprd specific variant operations
  *
@@ -1412,6 +1452,9 @@ static int ufs_sprd_probe(struct platform_device *pdev)
 
 	register_trace_android_vh_ufs_prepare_command(ufs_sprd_vh_prepare_command, NULL);
 
+	ufs_hba_sprd_vops.android_kabi_reserved1 =
+					(u64)ufs_sprd_linkup_start_tstamp;
+	ufs_hba_sprd_vops.android_kabi_reserved2 = (u64)ufs_sprd_dco_calibration;
 	/* Perform generic probe */
 	err = ufshcd_pltfrm_init(pdev, &ufs_hba_sprd_vops);
 	if (err) {

@@ -2449,6 +2449,8 @@ ufshcd_dispatch_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 	/* Write UIC Cmd */
 	ufshcd_writel(hba, uic_cmd->command & COMMAND_OPCODE_MASK,
 		      REG_UIC_COMMAND);
+
+	ufshcd_vops_linkup_start_tstamp(hba, uic_cmd);
 }
 
 /**
@@ -2464,6 +2466,8 @@ ufshcd_wait_for_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 {
 	int ret;
 	unsigned long flags;
+
+	ufshcd_vops_dco_calibration(hba, uic_cmd);
 
 	if (wait_for_completion_timeout(&uic_cmd->done,
 					msecs_to_jiffies(UIC_CMD_TIMEOUT)))
@@ -7327,6 +7331,10 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	do {
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		hba->ufshcd_state = UFSHCD_STATE_RESET;
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+
 		/* Reset the attached device */
 		ufshcd_vops_device_reset(hba);
 		/* SPRD DEBUG */
@@ -7334,6 +7342,11 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 			ufshcd_common_trace(hba, UFS_TRACE_RESET_AND_RESTORE, NULL);
 
 		err = ufshcd_host_reset_and_restore(hba);
+
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		if (err)
+			hba->ufshcd_state = UFSHCD_STATE_ERROR;
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
 	} while (err && --retries);
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
