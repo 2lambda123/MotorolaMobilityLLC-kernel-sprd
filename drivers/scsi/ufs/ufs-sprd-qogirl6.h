@@ -78,7 +78,7 @@ extern int sprd_get_soc_id(sprd_soc_id_type_t soc_id_type, u32 *id, int id_len);
 
 /* UFS HC register */
 #define HCLKDIV_REG 0xFC
-#define CLKDIV 0x100
+#define CLKDIV 0x101
 
 #define	MPHY_DIG_CFG7_LANE0 0xC01c
 #define	MPHY_DIG_CFG7_LANE1 0xC81c
