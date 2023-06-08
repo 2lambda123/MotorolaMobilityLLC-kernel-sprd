@@ -190,8 +190,6 @@
 				interrupts = <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reset-names = "spi-rst";
-				resets = <&apapb_gate RESET_AP_APB_SPI0_SOFT_RST>;
 				status = "disabled";
 			};
 
@@ -201,8 +199,6 @@
 				interrupts = <GIC_SPI 6 IRQ_TYPE_LEVEL_HIGH>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reset-names = "spi-rst";
-				resets = <&apapb_gate RESET_AP_APB_SPI1_SOFT_RST>;
 				status = "disabled";
 			};
 
@@ -212,8 +208,6 @@
 				interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reset-names = "spi-rst";
-				resets = <&apapb_gate RESET_AP_APB_SPI2_SOFT_RST>;
 				status = "disabled";
 			};
 
@@ -223,8 +217,6 @@
 				interrupts = <GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				reset-names = "spi-rst";
-				resets = <&apapb_gate RESET_AP_APB_SPI3_SOFT_RST>;
 				status = "disabled";
 			};
 
