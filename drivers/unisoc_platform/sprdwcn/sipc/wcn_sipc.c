@@ -97,9 +97,9 @@ static struct sipc_chn_info g_sipc_chn[SIPC_CHN_NUM] = {
 	INIT_SIPC_CHN_SBLOCK(SIPC_WIFI_CMD_RX, WCNBUS_RX, SIPC_CHN_WIFI_CMD,
 			     4, 2048, 8, 2048, 0, 0, 0),
 	INIT_SIPC_CHN_SBLOCK(SIPC_WIFI_DATA0_TX, WCNBUS_TX, SIPC_CHN_WIFI_DATA0,
-			     64, 1664, 256, 1664, 0, 0, 0),
+			     64, 1664, 288, 1664, 0, 0, 0),
 	INIT_SIPC_CHN_SBLOCK(SIPC_WIFI_DATA0_RX, WCNBUS_RX, SIPC_CHN_WIFI_DATA0,
-			     64, 1664, 256, 1664, 0, 0, 0),
+			     64, 1664, 288, 1664, 0, 0, 0),
 	INIT_SIPC_CHN_SBLOCK(SIPC_WIFI_DATA1_TX, WCNBUS_TX, SIPC_CHN_WIFI_DATA1,
 			     64, 1664, 8, 1664, 0, 0, 0),
 	INIT_SIPC_CHN_SBLOCK(SIPC_WIFI_DATA1_RX, WCNBUS_RX, SIPC_CHN_WIFI_DATA1,
@@ -729,17 +729,21 @@ static void wcn_sipc_sblk_recv(struct sipc_chn_info *sipc_chn)
 		  sipc_chn_tostr(sipc_chn->chn, 0), sipc_chn->index);
 
 	while (!sblock_receive(sipc_chn->dst, sipc_chn->chn, &blk, 0)) {
-		last_index = g_sipc_info.chn8_dbg_info.pt_idx;
-		g_sipc_info.chn8_dbg_info.pt_idx++;
-		g_sipc_info.chn8_dbg_info.pt_idx = g_sipc_info.chn8_dbg_info.pt_idx % DBG_PT_NUM;
-		g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx] = \
-			div_u64(ktime_get_boot_fast_ns(), 1000);
-		cur_pt = g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx];
-		if (loop_cnt)
-			g_sipc_info.chn8_dbg_info.dbg_pt[last_index] = cur_pt - \
-				g_sipc_info.chn8_dbg_info.dbg_pt[last_index];
-		loop_cnt++;
-
+		if (sipc_chn->chn == SIPC_CHN_WIFI_DATA0) {
+			last_index = g_sipc_info.chn8_dbg_info.pt_idx;
+			g_sipc_info.chn8_dbg_info.pt_idx++;
+			g_sipc_info.chn8_dbg_info.pt_idx = g_sipc_info.chn8_dbg_info.pt_idx \
+				% DBG_PT_NUM;
+			g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx] = \
+				div_u64(ktime_get_boot_fast_ns(), 1000);
+			cur_pt = g_sipc_info.chn8_dbg_info.dbg_pt[g_sipc_info.chn8_dbg_info.pt_idx];
+			if (loop_cnt)
+				g_sipc_info.chn8_dbg_info.dbg_pt[last_index] = cur_pt - \
+					g_sipc_info.chn8_dbg_info.dbg_pt[last_index];
+			loop_cnt++;
+		}
+		sipc_recvseq_debug_store(sipc_chn->chn, SBLK_SEQ_INDEX1);
+		
 		length = blk.length - SIPC_SBLOCK_HEAD_RESERV;
 		WCN_DEBUG("sblk length %d", length);
 		wcn_sipc_record_mbuf_recv_from_bus(sipc_chn->index, 1);
@@ -1256,6 +1260,9 @@ static void sipc_debug_point_show(void)
 	u64 * dbg_pt = g_sipc_info.chn8_dbg_info.dbg_pt;
 
 	buftest = kmalloc(bufsz, GFP_KERNEL);
+	WCN_INFO("SIPC CHN8 RECV SEQ SHOW:-----------------\n");
+	sipc_recvseq_debug_show();
+	WCN_INFO("SIPC CHN8 DBG INFO SHOW:-----------------\n");
 	WCN_INFO("SIPC CHN8 DBG INFO SHOW: index is %d :\n", g_sipc_info.chn8_dbg_info.pt_idx);
 	while (i < DBG_PT_NUM) {
 		pos += scnprintf(buftest + pos, bufsz - pos, "%012lu  ", *dbg_pt++);
