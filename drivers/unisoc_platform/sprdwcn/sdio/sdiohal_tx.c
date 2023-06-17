@@ -78,7 +78,7 @@ int sdiohal_tx_thread(void *data)
 				(long)(p_data->tm_end_sch - p_data->tm_begin_sch));
 
 		sdiohal_lock_tx_ws();
-		sdiohal_resume_check();
+		sdiohal_resume_wait();
 
 		/* wakeup cp */
 		sdiohal_cp_tx_wakeup(PACKER_TX);

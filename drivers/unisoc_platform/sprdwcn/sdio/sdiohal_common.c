@@ -347,13 +347,6 @@ static void sdiohal_wakelock_deinit(void)
 	wakeup_source_destroy(p_data->scan_ws);
 }
 
-static void sdiohal_waitqueue_init(void)
-{
-	struct sdiohal_data_t *p_data = sdiohal_get_data();
-
-	init_waitqueue_head(&p_data->resume_waitq);
-}
-
 /* for callback */
 void sdiohal_callback_lock(struct mutex *callback_mutex)
 {
@@ -462,35 +455,30 @@ void sdiohal_cp_rx_wakeup(enum slp_subsys subsys)
 	slp_mgr_wakeup(subsys);
 }
 
-bool sdiohal_is_resumed(bool important)
-{
-	struct sdiohal_data_t *p_data = sdiohal_get_data();
-
-	if (!important && unlikely(atomic_read(&p_data->flag_suspending))) {
-		/* Except the data that must be sent during suspend */
-		return false;
-	}
-
-	return !!atomic_read(&p_data->flag_resume);
-}
-
 void sdiohal_resume_check(void)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	long ret = -1;
-	bool show = false;
+	unsigned int cnt = 0;
 
-	if (!atomic_read(&p_data->flag_resume)) {
-		show = true;
-		pr_err("Operate SDIO bus after suspend");
-		dump_stack();
+	while (!atomic_read(&p_data->flag_resume)) {
+		if (cnt == 0) {
+			pr_err("wait sdio resume %s\n", __func__);
+			dump_stack();
+		}
+		usleep_range(4000, 6000);
+		cnt++;
 	}
-	ret = wait_event_killable_timeout(p_data->resume_waitq, atomic_read(&p_data->flag_resume),
-			msecs_to_jiffies(SDIOHAL_RESUME_TIMEOUT));
-	WARN(!ret, "timeout(%lu s) for system resume", SDIOHAL_RESUME_TIMEOUT / MSEC_PER_SEC);
+}
 
-	if (show)
-		pr_info("resume time:%ums\n", SDIOHAL_RESUME_TIMEOUT - jiffies_to_msecs(ret));
+void sdiohal_resume_wait(void)
+{
+	struct sdiohal_data_t *p_data = sdiohal_get_data();
+
+	while (!atomic_read(&p_data->flag_resume)) {
+		printk_ratelimited(KERN_ERR
+				   "WCN SDIO 5ms wait for sdio resume\n");
+		usleep_range(4000, 6000);
+	}
 }
 
 void sdiohal_op_enter(void)
@@ -1469,7 +1457,6 @@ int sdiohal_misc_init(void)
 		pr_err("alloc list err\n");
 
 	sdiohal_tx_sendbuf_init();
-	sdiohal_waitqueue_init();
 	ret = sdiohal_eof_buf_init();
 
 	return ret;

@@ -455,11 +455,6 @@ void sdiohal_dump_aon_reg(void)
 	unsigned char reg_buf[16];
 	unsigned char i, j, val = 0;
 
-	int k;
-	unsigned char aon_tb[256];
-	unsigned char btwf_db[256];
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
 	pr_info("sdio dump_aon_reg entry\n");
 	for (i = 0; i <= CP_128BIT_SIZE; i++) {
 		sdiohal_aon_readb(CP_PMU_STATUS + i, &reg_buf[i]);
@@ -488,25 +483,6 @@ void sdiohal_dump_aon_reg(void)
 		}
 	}
 
-	if (g_match_config && g_match_config->unisoc_wcn_m3lite) {
-		sdiohal_aon_writeb(0x1aa, 0x80);
-		aon_tb[0] = 0;
-		for (k = 1; k < 256; k++) {
-			sdiohal_aon_writeb(0x1a9, k);
-			sdiohal_aon_readb(0x143, &aon_tb[k]);
-		}
-		print_hex_dump(KERN_INFO, "WCN SDIO AON_TB",
-			DUMP_PREFIX_OFFSET, 16, 16, aon_tb, 256, 0);
-
-		sdiohal_aon_writeb(0x1aa, 0x81);
-		btwf_db[0] = 0;
-		for (k = 0; k < 256; k++) {
-			sdiohal_aon_writeb(0x1a9, k);
-			sdiohal_aon_readb(0x143, &btwf_db[k]);
-		}
-		print_hex_dump(KERN_INFO, "WCN BTWF SUBSYS",
-			DUMP_PREFIX_OFFSET, 16, 16, btwf_db, 256, 0);
-	}
 	/*
 	 * check hready_status, if bt hung the bus, reset it.
 	 * BIT(2):bt2 hready out
@@ -1004,17 +980,12 @@ static int sdiohal_suspend(struct device *dev)
 	}
 
 	if (g_match_config && g_match_config->unisoc_wcn_slp) {
-		if (unlikely(!sdio_wait_pub_int_done())) {
-			atomic_set(&p_data->flag_suspending, 0);
-			pr_err("[%s]PUB int xmit_lock:%d\n", __func__,
-					mutex_is_locked(&p_data->xmit_lock));
-			goto fail_to_suspend;
-		}
+		sdio_wait_pub_int_done();
 		sdio_record_power_notify(false);
 	}
 
-	atomic_set(&p_data->flag_resume, 0);
 	atomic_set(&p_data->flag_suspending, 0);
+	atomic_set(&p_data->flag_resume, 0);
 	if (atomic_read(&p_data->irq_cnt))
 		sdiohal_lock_rx_ws();
 
@@ -1024,29 +995,7 @@ static int sdiohal_suspend(struct device *dev)
 	}
 	mdbg_device_unlock_notify();
 
-	if (mutex_is_locked(&p_data->xmit_lock)) {
-		pr_warn("Last xmit_lock: Enter task(%s) caller: %ps, time=%llu\n",
-			p_data->sdcb.op_enter_comm, p_data->sdcb.op_enter_builtin_addr[0],
-			p_data->op_enter_ns);
-	}
-	/* WARNING: wait for sending to complete? */
-	pr_info("[%s]done xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
 	return 0;
-
-fail_to_suspend:
-	for (chn = chn - 1; chn >= 0; chn--) {
-		sdiohal_ops = chn_ops(chn);
-		if (sdiohal_ops && sdiohal_ops->power_notify) {
-			ret = sdiohal_ops->power_notify(chn, true);
-			if (ret != 0)
-				pr_info("[%s] chn:%d resume fail\n", __func__, chn);
-		}
-	}
-
-	mdbg_device_unlock_notify();
-	pr_info("[%s]failed xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
-
-	return -EBUSY;
 }
 
 static int sdiohal_resume(struct device *dev)
@@ -1057,7 +1006,7 @@ static int sdiohal_resume(struct device *dev)
 	int chn;
 	int ret;
 
-	pr_info("[%s]enter xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
+	pr_debug("[%s]enter\n", __func__);
 
 	if (WCN_CARD_EXIST(&p_data->xmit_cnt)) {
 		func = container_of(dev, struct sdio_func, dev);
@@ -1066,7 +1015,6 @@ static int sdiohal_resume(struct device *dev)
 
 	atomic_set(&p_data->flag_resume, 1);
 	mdbg_device_lock_notify();
-	wake_up_all(&p_data->resume_waitq);
 
 	for (chn = 0; chn < SDIO_CHANNEL_NUM; chn++) {
 		sdiohal_ops = chn_ops(chn);
@@ -1078,7 +1026,6 @@ static int sdiohal_resume(struct device *dev)
 		}
 	}
 	mdbg_device_unlock_notify();
-	pr_debug("[%s]done xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
 
 	return 0;
 }

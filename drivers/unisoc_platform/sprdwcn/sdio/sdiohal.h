@@ -174,8 +174,6 @@
 #define SDIOHAL_REMOVE_CARD_VAL	0x8000
 #define WCN_CARD_EXIST(xmit)	(atomic_read(xmit) < SDIOHAL_REMOVE_CARD_VAL)
 
-#define SDIOHAL_RESUME_TIMEOUT	50000 /* 50000ms */
-
 struct sdiohal_frag_mg {
 	struct page_frag frag;
 	unsigned int pagecnt_bias;
@@ -307,7 +305,6 @@ struct sdiohal_data_t {
 	u64 op_expire_cnt;
 	/*SDIO debug control block*/
 	struct sdiohal_debug_t sdcb;
-	wait_queue_head_t resume_waitq;
 };
 
 struct sdiohal_data_t *sdiohal_get_data(void);
@@ -342,8 +339,8 @@ void sdiohal_cp_tx_wakeup(enum slp_subsys subsys);
 void sdiohal_cp_rx_sleep(enum slp_subsys subsys);
 void sdiohal_cp_rx_wakeup(enum slp_subsys subsys);
 
-bool sdiohal_is_resumed(bool important);
 void sdiohal_resume_check(void);
+void sdiohal_resume_wait(void);
 void sdiohal_op_enter(void);
 void sdiohal_op_leave(void);
 void sdiohal_sdma_enter(void);

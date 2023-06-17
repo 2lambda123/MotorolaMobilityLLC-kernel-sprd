@@ -332,8 +332,8 @@ static void gnss_power_on(bool enable)
 		else {
 			gnss_common_ctl_dev.gnss_status = GNSS_STATUS_POWERON;
 		}
-	} else if (!enable && ((gnss_common_ctl_dev.gnss_status
-					== GNSS_STATUS_POWERON) || (gnss_common_ctl_dev.gnss_status == GNSS_STATUS_ASSERT))) {
+	} else if (!enable && gnss_common_ctl_dev.gnss_status
+			== GNSS_STATUS_POWERON) {
 		gnss_common_ctl_dev.gnss_status = GNSS_STATUS_POWEROFF_GOING;
 
 		/* only marlin3lite and qogirl6 need */
