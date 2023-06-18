@@ -228,7 +228,7 @@ int sdiohal_rx_thread(void *data)
 		sdiohal_pr_perf("rx sch time:%ld\n",
 			(long)(p_data->tm_end_irq - p_data->tm_begin_irq));
 
-		sdiohal_resume_wait();
+		sdiohal_resume_check();
 		sdiohal_cp_rx_wakeup(PACKER_RX);
 
 read_again:

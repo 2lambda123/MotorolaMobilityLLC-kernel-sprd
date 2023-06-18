@@ -37,6 +37,7 @@
 #include "wcn_txrx.h"
 #include "mdbg_type.h"
 #include "../include/wcn_dbg.h"
+#include "../sdio/sdiohal.h"
 
 u32 wcn_print_level = WCN_DEBUG_OFF;
 
@@ -131,7 +132,8 @@ void wcn_dump_process(enum wcn_source_type type)
 	}
 
 	dump_cnt++;
-
+	if (g_match_config && g_match_config->unisoc_wcn_m3lite)
+		sdiohal_dump_aon_reg();
 	if (g_match_config && g_match_config->unisoc_wcn_integrated)
 		mdbg_dump_mem_integ(type);
 	else
