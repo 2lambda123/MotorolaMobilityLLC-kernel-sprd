@@ -35,9 +35,25 @@
 		novatek,swrst-n8-addr = <0x03F0FE>;
 		novatek,spi-rd-fast-addr = <0x03F310>;
 
+		pinctrl-names = "tp_extconf0","tp_extconf1";
+		pinctrl-0 = <&tp_extconf0>;
+		pinctrl-1 = <&tp_extconf1>;
 		/* MP */
 		//novatek,mp-support-dt;
 
 		#include "nvt-touchscreen-novatek-nt36xxx-spi.dtsi"
+	};
+};
+
+&pin_controller {
+
+	tp_extconf0: extint0 {
+		pins = "QOGIRL6_EXTINT0";
+		function = "func1";
+	};
+
+	tp_extconf1: gpio {
+		pins = "QOGIRL6_EXTINT0";
+		function = "func4";
 	};
 };
