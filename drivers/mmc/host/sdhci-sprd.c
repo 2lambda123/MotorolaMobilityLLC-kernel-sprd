@@ -754,9 +754,8 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 	u32 *p = sprd_host->phy_delay;
 	int err = 0;
 	int i = 0;
-	bool value, first_vl, prev_vl = 0;
+	bool value, first_vl;
 	int *value_t;
-	struct ranges_t *ranges;
 	int length;
 	unsigned int range_count = 0;
 	int longest_range_len = 0;
@@ -788,12 +787,13 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 	pr_info("%s: dll config 0x%08x, dll count %d, tuning length: %d\n",
 		mmc_hostname(mmc), dll_cfg, dll_cnt, length);
 
-	ranges = kmalloc_array(length + 1, sizeof(*ranges), GFP_KERNEL);
-	if (!ranges)
+	sprd_host->ranges = kmalloc_array(length + 1, sizeof(*sprd_host->ranges), GFP_KERNEL);
+	if (!sprd_host->ranges)
 		return -ENOMEM;
 	value_t = kmalloc_array(length + 1, sizeof(*value_t), GFP_KERNEL);
 	if (!value_t) {
-		kfree(ranges);
+		kfree(sprd_host->ranges);
+		sprd_host->ranges = NULL;
 		return -ENOMEM;
 	}
 
@@ -817,6 +817,8 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 	sprd_host->wait_read_idle = false;
 
 	do {
+		sprd_host->tuning_flag = 1;
+
 		/*
 		 * When the wait_read_idle flag is set, we need to waiting fo the HC state
 		 * become idle before the next tuning commond is sent. The maximum polling
@@ -839,7 +841,6 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 
 		sdhci_sprd_set_dll_value(host, &dll_dly, opcode, i, type);
 
-		sprd_host->tuning_flag = 1;
 		if (type == SDHCI_SPRD_TUNING_SD_HS) {
 			if (opcode == MMC_SET_BLOCKLEN)
 				value = !mmc_send_tuning_cmd(mmc);
@@ -875,26 +876,18 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 
 		sprd_host->tuning_flag = 0;
 
-		if ((!prev_vl) && value) {
-			range_count++;
-			ranges[range_count - 1].start = i;
-		}
 		if (value) {
 			pr_debug("%s tuning ok: %d\n", mmc_hostname(mmc), i);
-			ranges[range_count - 1].end = i;
 			value_t[i] = value;
 		} else {
 			pr_debug("%s tuning fail: %d\n", mmc_hostname(mmc), i);
 			value_t[i] = value;
 		}
-
-		prev_vl = value;
 	} while (++i <= length);
 
 	mid_dll_cnt = length - dll_cnt;
 	sprd_host->dll_cnt = dll_cnt;
 	sprd_host->mid_dll_cnt = mid_dll_cnt;
-	sprd_host->ranges = ranges;
 
 	first_vl = (value_t[0] && value_t[dll_cnt]);
 	if (type == SDHCI_SPRD_TUNING_SD_HS)
@@ -910,26 +903,26 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 	}
 
 	if (type == SDHCI_SPRD_TUNING_SD_HS) {
-		if ((range_count > 1) && (ranges[range_count - 1].end == 127)
-				&& (ranges[0].start == 0)) {
-			ranges[0].start = ranges[range_count - 1].start;
+		if ((range_count > 1) && (sprd_host->ranges[range_count - 1].end == 127)
+				&& (sprd_host->ranges[0].start == 0)) {
+			sprd_host->ranges[0].start = sprd_host->ranges[range_count - 1].start;
 			range_count--;
 
-			if (ranges[0].end >= mid_dll_cnt)
-				ranges[0].end = mid_dll_cnt;
+			if (sprd_host->ranges[0].end >= mid_dll_cnt)
+				sprd_host->ranges[0].end = mid_dll_cnt;
 		}
 	} else {
 		if ((range_count > 1) && first_vl && value) {
-			ranges[0].start = ranges[range_count - 1].start;
+			sprd_host->ranges[0].start = sprd_host->ranges[range_count - 1].start;
 			range_count--;
 
-			if (ranges[0].end >= mid_dll_cnt)
-				ranges[0].end = mid_dll_cnt;
+			if (sprd_host->ranges[0].end >= mid_dll_cnt)
+				sprd_host->ranges[0].end = mid_dll_cnt;
 		}
 	}
 
 	for (i = 0; i < range_count; i++) {
-		int len = (ranges[i].end - ranges[i].start + 1);
+		int len = (sprd_host->ranges[i].end - sprd_host->ranges[i].start + 1);
 
 		if (len < 0) {
 			if (type == SDHCI_SPRD_TUNING_SD_HS)
@@ -939,7 +932,7 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 		}
 
 		pr_debug("%s: good tuning phase range %d ~ %d\n",
-			 mmc_hostname(mmc), ranges[i].start, ranges[i].end);
+			 mmc_hostname(mmc), sprd_host->ranges[i].start, sprd_host->ranges[i].end);
 
 		if (longest_range_len < len) {
 			longest_range_len = len;
@@ -948,15 +941,15 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 
 	}
 	pr_info("%s: the best tuning step range %d-%d(the length is %d)\n",
-		mmc_hostname(mmc), ranges[longest_range].start,
-		ranges[longest_range].end, longest_range_len);
+		mmc_hostname(mmc), sprd_host->ranges[longest_range].start,
+		sprd_host->ranges[longest_range].end, longest_range_len);
 
 	if ((longest_range_len == dll_cnt) && (type == SDHCI_SPRD_TUNING_SD_UHS_CMD))
 		sprd_host->cmd_dly_all_pass = true;
 	else
 		sprd_host->cmd_dly_all_pass = false;
 
-	mid_step = ranges[longest_range].start + longest_range_len / 2;
+	mid_step = sprd_host->ranges[longest_range].start + longest_range_len / 2;
 	mid_step %= dll_cnt;
 
 	if (type == SDHCI_SPRD_TUNING_SD_UHS_CMD)
@@ -990,7 +983,9 @@ out:
 	if (!cfg_use_sdma)
 		host->flags &= ~SDHCI_USE_SDMA;
 
-	kfree(ranges);
+	kfree(sprd_host->ranges);
+	sprd_host->ranges = NULL;
+
 	kfree(value_t);
 
 	return err;
