@@ -56,7 +56,9 @@
 #define HOST_IS_SD_TYPE(c) (((c)->caps2 & (MMC_CAP2_NO_MMC | MMC_CAP2_NO_SDIO)) \
 					== (MMC_CAP2_NO_MMC | MMC_CAP2_NO_SDIO))
 
-#define SEND_SD_SWITCH	6
+#define SEND_SD_SWITCH		6
+#define SEND_TUNING_BLOCK		19
+#define SEND_TUNING_BLOCK_HS200		21
 
 /* SDHCI_ARGUMENT2 register high 16bit */
 #define SDHCI_SPRD_ARG2_STUFF		GENMASK(31, 16)
@@ -310,6 +312,14 @@ static inline void sdhci_sprd_writeb(struct sdhci_host *host, u8 val, int reg)
 	struct sdhci_sprd_host *sprd_host = TO_SPRD_HOST(host);
 	u32 status;
 	u64 i = 0;
+
+	/* Spec indicates the tuning process should be shorter than 150ms for 40
+	 * executions of tuning command, and therefore data timeout value should
+	 * be shorter than before for single tuning commond in Spreadtrum's platform.
+	 */
+	if (unlikely(reg == SDHCI_TIMEOUT_CONTROL) &&
+	   (host->cmd->opcode == SEND_TUNING_BLOCK || host->cmd->opcode == SEND_TUNING_BLOCK))
+		val = 0x4;
 
 	if (unlikely(reg == SDHCI_SOFTWARE_RESET)) {
 		/*
@@ -1005,6 +1015,7 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	enum sdhci_sprd_tuning_type type = SDHCI_SPRD_TUNING_DEFAULT;
 	int err = 0;
 
+retry_tuning:
 	/*
 	 * For better compatibility with some SD Cards,
 	 * if a sd card failed in tuning CMD and DATA line merged,
@@ -1024,6 +1035,7 @@ static int sdhci_sprd_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		pr_err("%s: cmd and data tuning merged failed, afterwards tuning separately\n",
 			mmc_hostname(mmc));
 		sprd_host->tuning_merged = false;
+		goto retry_tuning;
 	}
 
 	if (!err && (type == SDHCI_SPRD_TUNING_SD_UHS_CMD)) {
