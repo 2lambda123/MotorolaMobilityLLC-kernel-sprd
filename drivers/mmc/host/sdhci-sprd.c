@@ -828,10 +828,14 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 			if (read_poll_timeout(sdhci_readl, tmp, (!(tmp & SDHCI_DOING_READ) &&
 			    ((tmp & SDHCI_DATA_LVL_MASK) == SDHCI_DATA_LVL_MASK)),
 			    USEC_PER_MSEC, 4 * USEC_PER_SEC, false, host, SDHCI_PRESENT_STATE)) {
-				pr_err("%s: wait device idle fail, exit tuning!\n",
+#ifdef CONFIG_SPRD_DEBUG
+				panic("wait host controller idle timeout, please check");
+#else
+				pr_err("%s: wait host controller idle timeout, please check\n",
 					mmc_hostname(mmc));
 				err = -EIO;
 				goto out;
+#endif
 			}
 			sdhci_reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
 			sprd_host->wait_read_idle = false;
@@ -982,6 +986,9 @@ out:
 		host->flags |= SDHCI_USE_ADMA;
 	if (!cfg_use_sdma)
 		host->flags &= ~SDHCI_USE_SDMA;
+
+	if (err == -EIO)
+		sdhci_writel(host, p[mmc->ios.timing], SDHCI_SPRD_REG_32_DLL_DLY);
 
 	kfree(sprd_host->ranges);
 	sprd_host->ranges = NULL;
