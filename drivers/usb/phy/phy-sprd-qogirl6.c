@@ -502,7 +502,7 @@ static int sprd_hsphy_vbus_notify(struct notifier_block *nb,
 	if (phy->shutdown)
 		return 0;
 
-	if (phy->is_host) {
+	if (usb_phy->last_event == USB_EVENT_ID) {
 		dev_info(phy->dev, "USB PHY is host mode\n");
 		return 0;
 	}

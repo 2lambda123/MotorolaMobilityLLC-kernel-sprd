@@ -763,8 +763,8 @@ static int sprd_ssphy_vbus_notify(struct notifier_block *nb,
 		return 0;
 	}
 
-	if (phy->is_host || usb_phy->last_event == USB_EVENT_ID) {
-		dev_info(usb_phy->dev, "USB PHY is host mode\n");
+	if (usb_phy->last_event == USB_EVENT_ID) {
+		dev_info(phy->dev, "USB PHY is host mode\n");
 		return 0;
 	}
 
