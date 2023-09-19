@@ -100,7 +100,7 @@ static ssize_t cp_dump_read(struct file *filp,
 	base = cp_dump->dump_info->regions[read_region].address;
 	size = cp_dump->dump_info->regions[read_region].size;
 	offset = *ppos;
-	pr_err("read, offset = 0x%lx, count = 0x%lx!\n",
+	pr_debug("read, offset = 0x%lx, count = 0x%lx!\n",
 		offset, count);
 
 	if (size <= offset)
@@ -316,7 +316,6 @@ static long cp_dump_ioctl(struct file *filp, unsigned int cmd, unsigned long arg
 		}
 		break;
 	default:
-		ret = -EINVAL;
 		break;
 	}
 
@@ -428,7 +427,6 @@ static int  cp_dump_remove(struct platform_device *pdev)
 		mutex_destroy(&cp_dump->rd_mutex);
 		mutex_destroy(&cp_dump->wt_mutex);
 		misc_deregister(&cp_dump->mdev);
-		devm_kfree(cp_dump->p_dev, cp_dump);
 	}
 
 	return 0;
