@@ -680,9 +680,8 @@ static int bq2560x_charger_set_limit_current(struct bq2560x_charger_info *info,
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
 		limit_cur = info->actual_limit_cur;
+		dev_info(info->dev, "set limit current limit_cur = %d\n", limit_cur);
 	}
-
-	dev_dbg(info->dev, "%s:line%d: set limit cur = %d\n", __func__, __LINE__, limit_cur);
 
 	if (limit_cur >= BQ2560X_LIMIT_CURRENT_MAX)
 		limit_cur = BQ2560X_LIMIT_CURRENT_MAX;
@@ -699,8 +698,8 @@ static int bq2560x_charger_set_limit_current(struct bq2560x_charger_info *info,
 	if (ret)
 		dev_err(info->dev, "set bq2560x limit cur failed\n");
 
-	dev_info(info->dev, "set limit current reg_val = %#x, actual_limit_cur = %d\n",
-		 reg_val, info->actual_limit_cur);
+	dev_info(info->dev, "set limit_cur = %d, reg_val = %#x, actual_limit_cur = %d\n",
+		 limit_cur, reg_val, info->actual_limit_cur);
 
 out:
 	mutex_unlock(&info->input_limit_cur_lock);

@@ -246,8 +246,6 @@ static int sgm41513_charger_set_limit_current(struct sgm41513_charger_info *info
 	u8 reg_val;
 	int ret = 0;
 
-	dev_dbg(info->dev, "%s:line%d: limit cur = %d\n", __func__, __LINE__, limit_cur);
-
 	mutex_lock(&info->input_limit_cur_lock);
 	if (enable) {
 		ret = sgm41513_charger_get_limit_current(info, &limit_cur);
@@ -259,6 +257,7 @@ static int sgm41513_charger_set_limit_current(struct sgm41513_charger_info *info
 		if (limit_cur == info->actual_limit_cur)
 			goto out;
 		limit_cur = info->actual_limit_cur;
+		dev_info(info->dev, "set limit current limit_cur = %d\n", limit_cur);
 	}
 
 	limit_cur = limit_cur / 1000;
@@ -275,8 +274,8 @@ static int sgm41513_charger_set_limit_current(struct sgm41513_charger_info *info
 	if (ret)
 		dev_err(info->dev, "set sgm41513 limit cur failed\n");
 
-	dev_info(info->dev, "set limit current reg_val = %#x, actual_limit_cur = %d\n",
-		 reg_val, info->actual_limit_cur);
+	dev_info(info->dev, "set limit_cur = %d, reg_val = %#x, actual_limit_cur = %d\n",
+		 limit_cur, reg_val, info->actual_limit_cur);
 
 out:
 	mutex_unlock(&info->input_limit_cur_lock);
