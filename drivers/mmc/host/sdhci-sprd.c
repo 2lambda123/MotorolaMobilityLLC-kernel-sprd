@@ -790,7 +790,7 @@ static int sdhci_sprd_tuning(struct mmc_host *mmc, u32 opcode, enum sdhci_sprd_t
 		dll_cnt = sdhci_readl(host, SDHCI_SPRD_REG_32_DLL_STS0) & 0xff;
 
 	/* dll lock is half mode by default after r11*/
-	if (sprd_host->ip_ver >= SDHCI_IP_VER_R11)
+	if ((sprd_host->ip_ver >= SDHCI_IP_VER_R11) || (type == SDHCI_SPRD_TUNING_SD_HS))
 		dll_cnt = dll_cnt << 1;
 
 	length = (dll_cnt * 150) / 100;
