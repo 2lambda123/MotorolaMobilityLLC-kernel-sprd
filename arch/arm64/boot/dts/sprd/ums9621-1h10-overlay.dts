@@ -139,6 +139,8 @@
 				coeff-offset = <4000>;
 				temp-const = <837>;
 				const-offset = <4000>;
+				temp-diff = <350 250 300>;
+				virt-temp-diff = <200>;
 			};
 
 			sprd-uid {
