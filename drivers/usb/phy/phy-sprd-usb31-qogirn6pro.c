@@ -33,6 +33,8 @@
 #include <linux/usb/sprd_commonphy.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-mask.h>
 #include <dt-bindings/soc/sprd,qogirn6pro-regs.h>
+#include <dt-bindings/mfd/sprd,ump9620-mask.h>
+#include <dt-bindings/mfd/sprd,ump9620-regs.h>
 #include <linux/usb/sprd_usbm.h>
 #include "ptn38003a-i2c.h"
 
@@ -43,6 +45,7 @@ struct sprd_ssphy {
 	struct notifier_block		typec_nb;
 	void __iomem		*base;
 	struct sprd_bc1p2_priv bc1p2_info;
+	struct regmap		*pmu_apb;
 	struct regmap		*aon_apb;
 	struct regmap		*ipa_apb;
 	struct regmap		*ipa_dispc1_glb_apb;
@@ -61,6 +64,7 @@ struct sprd_ssphy {
 	atomic_t		susped;
 	bool			is_host;
 	bool			shutdown;
+	bool			ufs_keep_vddgen1;
 };
 
 #define PHY_INIT_TIMEOUT 500
@@ -139,6 +143,8 @@ struct sprd_ssphy {
 #define REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_PHY_BIST_TEST   0x0018
 #define REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_PHY             0x001C
 #define REG_ANLG_PHY_G0L_ANALOG_USB20_REG_SEL_CFG_0         0x0020
+
+#define BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN	BIT(5)
 
 #define CHGR_DET_FGU_CTRL		0x23a0
 #define DP_DM_FS_ENB			BIT(14)
@@ -338,6 +344,49 @@ static void usb_config_4_cts(struct sprd_ssphy *phy)
 	regmap_write(phy->ipa_usb31_dp, 0xc, reg);
 }
 
+static void sprd_ssphy_power_control(struct sprd_ssphy *phy)
+{
+	u32 reg = 0, msk = 0;
+
+	if (!phy->pmic) {
+		/*
+		 * In FPGA platform, Disable low power will take some time
+		 * before the DWC3 Core register is accessible.
+		 */
+		usleep_range(1000, 2000);
+	} else {
+		/* DCDCCORE DROP & DCDCGEN1 PD & AVDD18 & AVDD12 */
+		if (phy->ufs_keep_vddgen1) {
+			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
+			reg &= ~MASK_ANA_SLP_DCDCCORE_DROP_EN;
+			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		} else {
+			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
+			reg &= ~(MASK_ANA_SLP_DCDCCORE_DROP_EN | MASK_ANA_SLP_DCDCGEN1_PD_EN);
+			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		}
+		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, &reg);
+		reg &= ~(MASK_ANA_SLP_LDO_AVDD12_PD_EN | MASK_ANA_SLP_LDO_AVDD18_PD_EN);
+		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, reg);
+
+		/* DCXO */
+		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, &reg);
+		reg &= ~MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN;
+		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, reg);
+
+		/* REFOUT0 */
+		regmap_read(phy->pmic, 0xe080, &reg);
+		reg &= ~BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN;
+		regmap_write(phy->pmic, 0xe080, reg);
+	}
+	/* usb31pll force on, chip sleep bypass allpllpd */
+	reg = msk = MASK_PMU_APB_USB31PLLV_FRC_ON;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_USB31PLLV_REL_CFG, msk, reg);
+	reg = msk = MASK_PMU_APB_PAD_OUT_CHIP_SLEEP_PLL_PD_MASK;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_PAD_OUT_CHIP_SLEEP_CFG, msk, reg);
+
+}
+
 static int sprd_ssphy_init(struct usb_phy *x)
 {
 	struct sprd_ssphy *phy = container_of(x, struct sprd_ssphy, phy);
@@ -379,11 +428,6 @@ static int sprd_ssphy_init(struct usb_phy *x)
 	}
 
 	if (!sprd_usbm_hsphy_get_onoff()) {
-		/*enable analog:0x64900004*/
-		reg = msk = MASK_AON_APB_AON_USB2_TOP_EB | MASK_AON_APB_OTG_PHY_EB |
-							MASK_AON_APB_ANA_EB;
-		ret |= regmap_update_bits(phy->aon_apb, REG_AON_APB_APB_EB1, msk, reg);
-
 		/* enable analog */
 		reg = msk = MASK_AON_APB_CGM_OTG_REF_EN | MASK_AON_APB_CGM_DPHY_REF_EN;
 		ret |= regmap_update_bits(phy->aon_apb, REG_AON_APB_CGM_REG1, msk, reg);
@@ -537,13 +581,12 @@ static int sprd_ssphy_init(struct usb_phy *x)
 		}
 	}
 
-	if (!phy->pmic) {
-		/*
-		 *In FPGA platform, Disable low power will take some time
-		 *before the DWC3 Core register is accessible.
-		 */
-		usleep_range(1000, 2000);
-	}
+	sprd_ssphy_power_control(phy);
+
+	/* USB3 PHY stable, usb31pll force on, chip sleep bypass allpllpd */
+	reg = msk = MASK_PMU_APB_REG_USB31_PHY_UPCS_PWR_STABLE |
+		MASK_PMU_APB_REG_USB31_PHY_PCS_PWR_STABLE;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_SNPS_PHY_PWR_STABLE, msk, reg);
 
 	atomic_set(&phy->inited, 1);
 
@@ -620,6 +663,36 @@ static void sprd_ssphy_shutdown(struct usb_phy *x)
 
 	if (regulator_is_enabled(phy->vdd))
 		regulator_disable(phy->vdd);
+
+	if (phy->pmic) {
+		if (phy->ufs_keep_vddgen1) {
+			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
+			reg |= MASK_ANA_SLP_DCDCCORE_DROP_EN;
+			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		} else {
+			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
+			reg |= (MASK_ANA_SLP_DCDCCORE_DROP_EN | MASK_ANA_SLP_DCDCGEN1_PD_EN);
+			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		}
+		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, &reg);
+		reg |= (MASK_ANA_SLP_LDO_AVDD12_PD_EN | MASK_ANA_SLP_LDO_AVDD18_PD_EN);
+		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, reg);
+
+		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, &reg);
+		reg |= MASK_ANA_SLP_LDO_VDD18_DCXO_LP_EN;
+		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, reg);
+		/* REFOUT0 */
+		regmap_read(phy->pmic, 0xe080, &reg);
+		reg |= BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN;
+		regmap_write(phy->pmic, 0xe080, reg);
+	}
+	msk = MASK_PMU_APB_USB31PLLV_FRC_ON;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_USB31PLLV_REL_CFG, msk, 0);
+	msk = MASK_PMU_APB_PAD_OUT_CHIP_SLEEP_PLL_PD_MASK;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_PAD_OUT_CHIP_SLEEP_CFG, msk, 0);
+	msk = MASK_PMU_APB_REG_USB31_PHY_UPCS_PWR_STABLE |
+		MASK_PMU_APB_REG_USB31_PHY_PCS_PWR_STABLE;
+	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_SNPS_PHY_PWR_STABLE, msk, 0);
 
 	ptn38003a_mode_usb32_set(0);
 
@@ -960,6 +1033,7 @@ static int sprd_ssphy_notify_disconnect(struct usb_phy *x,
 	regmap_update_bits(phy->ana_g0l,
 			REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_UTMI_CTL1,	msk, 0);
 	dev_info(x->dev, "ssphy set vbus invalid!\n");
+
 	return 0;
 }
 
@@ -1002,6 +1076,13 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	phy->base = devm_ioremap(dev, res->start, resource_size(res));
 	if (IS_ERR(phy->base))
 		return PTR_ERR(phy->base);
+
+	phy->pmu_apb = syscon_regmap_lookup_by_phandle(dev->of_node,
+						       "sprd,syscon-pmu-apb");
+	if (IS_ERR(phy->pmu_apb)) {
+		dev_err(dev, "failed to map pmu-apb registers (via syscon)\n");
+		return PTR_ERR(phy->pmu_apb);
+	}
 
 	phy->aon_apb = syscon_regmap_lookup_by_phandle(dev->of_node,
 						       "sprd,syscon-aon-apb");
@@ -1069,6 +1150,10 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	ret = sprd_eye_pattern_prepared(phy, dev);
 	if (ret < 0)
 		dev_warn(dev, "sprd_eye_pattern_prepared failed, ret = %d\n", ret);
+
+	/* REG_AON_APB_BOOT_MODE */
+	regmap_read(phy->aon_apb, REG_AON_APB_BOOT_MODE, &reg);
+	phy->ufs_keep_vddgen1 = (reg & 0x3) == 0x1 ? 1 : 0;
 
 	if (!phy->pmic) {
 		/*
