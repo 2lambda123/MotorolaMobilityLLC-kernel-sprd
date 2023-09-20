@@ -311,6 +311,7 @@
 &sdio0 {
 	sprd,phy-delay-sd-uhs-sdr104 = <0x7f 0x94 0xa7 0xa7>;
 	sprd,phy-delay-sd-uhs-sdr50 = <0x7f 0x4a 0x4a 0x4a>;
+	sprd,phy-delay-sd-highspeed = <0x7f 0xb0 0xb1 0xb1>;
 	vmmc-supply = <&vddsdcore>;
 	vqmmc-supply = <&vddsdio>;
 	voltage-ranges = <3000 3000>;
