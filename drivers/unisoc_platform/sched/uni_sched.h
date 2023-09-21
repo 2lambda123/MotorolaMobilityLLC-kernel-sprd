@@ -389,9 +389,9 @@ static inline int group_boost_margin(long util, int boost)
 static inline unsigned long boosted_task_util(struct task_struct *task)
 {
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	unsigned long util = walt_task_util(task);
+	int util = walt_task_util(task);
 #else
-	unsigned long util = task_util_est(task);
+	int util = task_util_est(task);
 #endif
 	int boost = task_group_boost(task);
 	int margin = group_boost_margin(util, boost);
