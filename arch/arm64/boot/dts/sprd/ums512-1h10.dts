@@ -232,7 +232,7 @@
 
 &hsphy {
 	vdd-supply = <&vddusb33>;
-	extcon = <&extcon_gpio>;
+	extcon = <&pmic_typec>;
 	/* avdd1v8 off on chipsleep */
 	avdd1v8-chipsleep-off;
 	status = "okay";
@@ -429,9 +429,13 @@
 };
 
 &usb {
-	extcon = <&extcon_gpio>, <&pmic_typec>;
+	extcon = <&pmic_typec>, <&pmic_typec>;
 	vddvbus-supply = <&vddvbus>;
 	status = "okay";
+};
+
+&pmic_typec {
+	extcon = <&extcon_gpio>;
 };
 
 &pmic_fgu {

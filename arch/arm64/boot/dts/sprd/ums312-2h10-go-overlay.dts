@@ -349,6 +349,7 @@
 };
 
 &pmic_typec {
+	extcon = <&extcon_gpio>;
 	no_support_typec_analog_earphone;
 };
 
@@ -359,11 +360,11 @@
 
 &hsphy {
 	vdd-supply = <&vddusb33>;
-	extcon = <&extcon_gpio>;
+	extcon = <&pmic_typec>;
 };
 
 &usb {
-	extcon = <&extcon_gpio>, <&pmic_typec>;
+	extcon = <&pmic_typec>, <&pmic_typec>;
 	vbus-supply = <&vddvbus>;
 };
 

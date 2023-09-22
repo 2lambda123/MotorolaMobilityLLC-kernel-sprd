@@ -225,7 +225,7 @@
 
 &hsphy {
 	vdd-supply = <&vddusb33>;
-	extcon = <&extcon_gpio>;
+	extcon = <&pmic_typec>;
 	/* first value is device eye-patt setting, the second is host */
 	sprd,hsphy-tunehsamp = /bits/ 8 <0x03 0x03>;
 	sprd,hsphy-tuneeq = /bits/ 8 <0x00 0x00>;
@@ -258,9 +258,13 @@
 };
 
 &usb {
-	extcon = <&extcon_gpio>, <&pmic_typec>;
+	extcon = <&pmic_typec>, <&pmic_typec>;
 	vddvbus-supply = <&vddvbus>;
 	status = "okay";
+};
+
+&pmic_typec {
+	extcon = <&extcon_gpio>;
 };
 
 &pmic_fgu {
