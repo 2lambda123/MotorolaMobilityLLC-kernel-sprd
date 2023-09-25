@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+//This file has been modified by Unisoc (Shanghai) Technologies Co., Ltd in 2023.
 #ifndef LINUX_MMC_SWCQ_H
 #define LINUX_MMC_SWCQ_H
 #include <linux/blkdev.h>
@@ -165,6 +166,13 @@ struct mmc_swcq {
 	struct dbg_run_host_log cmd_history[dbg_max_cnt];/*cmd hisotry buffer*/
 	int recovery_cnt; /* record the times of entering cmdq recovery mode */
 	bool cmdq_support;	/* Command Queue supported */
+	u64 r1_address_error;
+	u64 r1_block_len_error;
+	u64 r1_wp_violation;
+	u64 r1_card_ecc_failed;
+	u64 r1_cc_error;
+	u64 r1_error;
+	u64 r1_out_of_range;
 };
 /*
  * There is one mmc_blk_data per slot.

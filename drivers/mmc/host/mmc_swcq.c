@@ -121,6 +121,12 @@ void swcq_debug_update(int type, struct mmc_request *mrq, struct mmc_swcq *swcq)
 		pr_err("|__swcq    mmc0: cmdq_mode= %d, recovery_cnt= %d, qcnt= %d, cmdq_cnt= %d\n",
 			swcq->cmdq_mode, swcq->recovery_cnt,
 			atomic_read(&swcq->qcnt), atomic_read(&swcq->cmdq_cnt));
+
+		pr_err("|__swcq    mmc0: cmd resp err cnt %d, %d, %d, %d, %d, %d, %d\n",
+			swcq->r1_address_error, swcq->r1_block_len_error, swcq->r1_wp_violation,
+			swcq->r1_card_ecc_failed, swcq->r1_cc_error, swcq->r1_error,
+			swcq->r1_out_of_range);
+
 		memset(&info->issue_2_start, 0, sizeof(unsigned long) * SWCQ_ARRAY_SIZE * 2);
 		info->cnt_time = ktime_to_ms(ktime_get());
 	}
@@ -1227,10 +1233,31 @@ static void mmc_blk_cmdq_end_request(struct mmc_request *mrq, int task_id)
 	struct mmc_queue *mq = q->queuedata;
 	struct mmc_host *host = mq->card->host;
 	struct mmc_swcq *swcq = host->cqe_private;
+	struct mmc_blk_request *brq = &mqrq->brq;
 
 	if (swcq_mmc_blk_rq_error(&mqrq->brq) ||
 	    swcq_mmc_blk_urgent_bkops_needed(mq, mqrq)) {
 		swcq->recovery_cnt++;
+		if (brq->cmd.resp[0] & R1_ADDRESS_ERROR)
+			swcq->r1_address_error++;
+
+		if (brq->cmd.resp[0] & R1_BLOCK_LEN_ERROR)
+			swcq->r1_block_len_error++;
+
+		if (brq->cmd.resp[0] & R1_WP_VIOLATION)
+			swcq->r1_wp_violation++;
+
+		if (brq->cmd.resp[0] & R1_CARD_ECC_FAILED)
+			swcq->r1_card_ecc_failed++;
+
+		if (brq->cmd.resp[0] & R1_CC_ERROR)
+			swcq->r1_cc_error++;
+
+		if (brq->cmd.resp[0] & R1_ERROR)
+			swcq->r1_error++;
+
+		if (brq->cmd.resp[0] & R1_OUT_OF_RANGE)
+			swcq->r1_out_of_range++;
 	}
 
 	mmc_cmdq_post_request(swcq, task_id);
@@ -2409,6 +2436,13 @@ int mmc_swcq_init(struct mmc_swcq *swcq, struct mmc_host *mmc)
 	swcq->mode_need_change = true;
 	swcq->pump_busy = false;
 	swcq->recovery_cnt = 0;
+	swcq->r1_address_error = 0;
+	swcq->r1_block_len_error = 0;
+	swcq->r1_wp_violation = 0;
+	swcq->r1_card_ecc_failed = 0;
+	swcq->r1_cc_error = 0;
+	swcq->r1_error = 0;
+	swcq->r1_out_of_range = 0;
 	sprd_create_swcq_proc_init();
 	pr_notice("[notice] swcq init finish.\n");
 
