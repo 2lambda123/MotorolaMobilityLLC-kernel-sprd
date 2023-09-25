@@ -244,9 +244,18 @@ static void sdhci_sprd_health_and_powp(void *data, struct mmc_card *card)
 	if (!mmc_check_wp_fn(card->host))
 		mmc_set_powp(card);
 	/* print mmc device info */
-	pr_info("%s: manfid= 0x%06x, name= %s, prv= 0x%x fwrev= 0x%x\n",
-		mmc_hostname(card->host), card->cid.manfid, card->cid.prod_name,
-		card->cid.prv, card->cid.fwrev);
+	pr_info("%s: manfid= 0x%06x, name= %s, prv= 0x%x\n",
+		mmc_hostname(card->host), card->cid.manfid,
+		card->cid.prod_name, card->cid.prv);
+	if (card->ext_csd.rev < 7)
+		pr_info("%s: fwrev= 0x%x\n", mmc_hostname(card->host), card->cid.fwrev);
+	else
+		pr_info("%s: fwrev= 0x%*phN\n", mmc_hostname(card->host),
+			MMC_FIRMWARE_LEN, card->ext_csd.fwrev);
+	pr_info("%s: pre_eol_info=0x%02x, life_time= 0x%02x 0x%02x\n",
+		mmc_hostname(card->host), card->ext_csd.pre_eol_info,
+		card->ext_csd.device_life_time_est_typ_a,
+		card->ext_csd.device_life_time_est_typ_b);
 }
 
 static void sdhci_sprd_init_config(struct sdhci_host *host)

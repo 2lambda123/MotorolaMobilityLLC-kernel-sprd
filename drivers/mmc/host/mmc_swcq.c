@@ -313,10 +313,22 @@ void dump_cmd_history(struct mmc_swcq *swcq, int print_num)
 		return;
 
 	card = swcq->mmc->card;
-	if (card)
-		pr_err("%s: manfid= 0x%06x, name= %s, prv= 0x%x fwrev= 0x%x\n",
-			mmc_hostname(card->host), card->cid.manfid, card->cid.prod_name,
-			card->cid.prv, card->cid.fwrev);
+	if (card) {
+		/* print mmc device info */
+		pr_err("%s: manfid= 0x%06x, name= %s, prv= 0x%x\n",
+			mmc_hostname(card->host), card->cid.manfid,
+			card->cid.prod_name, card->cid.prv);
+		if (card->ext_csd.rev < 7)
+			pr_err("%s: fwrev= 0x%x\n", mmc_hostname(card->host), card->cid.fwrev);
+		else
+			pr_err("%s: fwrev= 0x%*phN\n", mmc_hostname(card->host),
+				MMC_FIRMWARE_LEN, card->ext_csd.fwrev);
+		pr_err("%s: pre_eol_info=0x%02x, life_time= 0x%02x 0x%02x\n",
+			mmc_hostname(card->host), card->ext_csd.pre_eol_info,
+			card->ext_csd.device_life_time_est_typ_a,
+			card->ext_csd.device_life_time_est_typ_b);
+	}
+
 	pr_err("==========dump cmd history[print_num:%d entries]==========\n", print_num);
 	j = swcq->dbg_host_cnt >= print_num ?
 		swcq->dbg_host_cnt - print_num : swcq->dbg_host_cnt - print_num + dbg_max_cnt;
