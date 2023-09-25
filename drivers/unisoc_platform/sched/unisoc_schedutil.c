@@ -25,6 +25,7 @@ struct sugov_tunables {
 	unsigned int		up_rate_limit_us;
 	unsigned int		down_rate_limit_us;
 	unsigned int		timer_slack_val_us;
+	unsigned int		cpu_busy_freq_control;
 	int			freq_margin;
 };
 
@@ -458,6 +459,19 @@ static void sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time)
 		sg_cpu->util = boost;
 }
 
+#ifdef CONFIG_NO_HZ_COMMON
+static bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu)
+{
+	unsigned long idle_calls = tick_nohz_get_idle_calls_cpu(sg_cpu->cpu);
+	bool ret = idle_calls == sg_cpu->saved_idle_calls;
+
+	sg_cpu->saved_idle_calls = idle_calls;
+	return ret;
+}
+#else
+static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
+#endif /* CONFIG_NO_HZ_COMMON */
+
 /*
  * Make sugov_should_update_freq() ignore the rate limit when DL
  * has increased the utilization.
@@ -496,11 +510,23 @@ static void sugov_update_single_freq(struct update_util_data *hook, u64 time,
 	struct sugov_cpu *sg_cpu = container_of(hook, struct sugov_cpu, update_util);
 	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	unsigned int next_f;
+	unsigned int cached_freq = sg_policy->cached_raw_freq;
 
 	if (!sugov_update_single_common(sg_cpu, time, flags))
 		return;
 
 	next_f = get_next_freq(sg_policy, sg_cpu->util, sg_cpu->max);
+	/*
+	 * Do not reduce the frequency if the CPU has not been idle
+	 * recently, as the reduction is likely to be premature then.
+	 */
+	if (sg_policy->tunables->cpu_busy_freq_control && sugov_cpu_is_busy(sg_cpu) &&
+		next_f < sg_policy->next_freq) {
+		next_f = sg_policy->next_freq;
+
+		/* Restore cached freq as next_freq has changed */
+		sg_policy->cached_raw_freq = cached_freq;
+	}
 
 	if (!sugov_update_next_freq(sg_policy, time, next_f))
 		return;
@@ -722,6 +748,34 @@ static ssize_t timer_slack_val_us_store(struct gov_attr_set *attr_set,
 	return count;
 }
 
+static ssize_t cpu_busy_freq_control_show(struct gov_attr_set *attr_set, char *buf)
+{
+	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+
+	return snprintf(buf, sizeof(tunables->cpu_busy_freq_control), "%u\n",
+			tunables->cpu_busy_freq_control);
+}
+
+static ssize_t cpu_busy_freq_control_store(struct gov_attr_set *attr_set,
+					const char *buf, size_t count)
+{
+	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
+	unsigned int cpu_busy_freq_control;
+
+	if (!slack_timer_setup)
+		return -EINVAL;
+
+	if (kstrtouint(buf, 10, &cpu_busy_freq_control))
+		return -EINVAL;
+
+	if (cpu_busy_freq_control != 0 && cpu_busy_freq_control != 1)
+		return -EINVAL;
+
+	tunables->cpu_busy_freq_control = cpu_busy_freq_control;
+
+	return count;
+}
+
 static ssize_t freq_margin_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
@@ -749,12 +803,14 @@ static ssize_t freq_margin_store(struct gov_attr_set *attr_set,
 static struct governor_attr up_rate_limit_us = __ATTR_RW(up_rate_limit_us);
 static struct governor_attr down_rate_limit_us = __ATTR_RW(down_rate_limit_us);
 static struct governor_attr timer_slack_val_us = __ATTR_RW(timer_slack_val_us);
+static struct governor_attr cpu_busy_freq_control = __ATTR_RW(cpu_busy_freq_control);
 static struct governor_attr freq_margin = __ATTR_RW(freq_margin);
 
 static struct attribute *sugov_attrs[] = {
 	&up_rate_limit_us.attr,
 	&down_rate_limit_us.attr,
 	&timer_slack_val_us.attr,
+	&cpu_busy_freq_control.attr,
 	&freq_margin.attr,
 	NULL
 };
@@ -979,6 +1035,7 @@ static int usc_sugov_init(struct cpufreq_policy *policy)
 	tunables->down_rate_limit_us = cpufreq_policy_transition_delay_us(policy) * 2;
 	tunables->timer_slack_val_us =
 			TICK_NSEC / NSEC_PER_USEC + tunables->down_rate_limit_us;
+	tunables->cpu_busy_freq_control = 0;
 
 	tunables->freq_margin = DEFAULT_CPUMASK_FREQ_MARGIN;
 
