@@ -1990,9 +1990,12 @@ static bool cm_is_reach_fchg_threshold(struct charger_manager *cm)
 	}
 
 	if (cm->desc->adapter_max_vbus <= CM_PPS_5V_PROG_MAX) {
-		dev_dbg(cm->dev, "no need to require voltage, %d\n", cm->desc->adapter_max_vbus);
 		if (++cm->desc->fchg_voltage_check_count > CM_FAST_CHARGE_VOLTAGE_CHECK_COUNT)
 			cm->desc->fchg_voltage_check_count = CM_FAST_CHARGE_VOLTAGE_CHECK_COUNT;
+		else
+			dev_info(cm->dev, "%s, adapter max vol %duV lower than th %duV, cnt: %d\n",
+				 __func__, cm->desc->adapter_max_vbus, CM_PPS_5V_PROG_MAX,
+				 cm->desc->fchg_voltage_check_count);
 
 		return false;
 	}
