@@ -3964,6 +3964,7 @@ static void sprd_run_state_machine(struct sprd_tcpm_port *port)
 		if (port->role_swap_flag)
 			sprd_tcpm_set_swap(port, true, true);
 		sprd_tcpm_set_cc(port, SPRD_TYPEC_CC_RD);
+		sprd_tcpm_set_typec_rp_level(SPRD_TYPEC_CC_RP_1_5);
 		sprd_tcpm_set_typec_rp_rd(SPRD_TYPEC_CC_RD);
 		/* allow CC debounce */
 		sprd_tcpm_set_state(port, PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED,
