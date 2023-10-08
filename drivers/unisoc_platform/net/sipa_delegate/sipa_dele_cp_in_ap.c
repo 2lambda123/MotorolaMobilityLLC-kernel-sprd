@@ -168,8 +168,9 @@ static ssize_t sipa_dele_reset_store(struct device *dev,
 			dev_info(delegator->pdev, "Modem assert\n");
 			cancel_delayed_work(&delegator->restart_work);
 		}
-	} else if (strstr(buf, "Modem Reset")) {
-		dev_info(delegator->pdev, "Modem Reset\n");
+	} else if (strstr(buf, "Modem Reset") ||
+		   strstr(buf, "Modem Blocked")) {
+		dev_info(delegator->pdev, "reset sipa_dele for modem\n");
 		cancel_delayed_work(&delegator->restart_work);
 		queue_delayed_work(delegator->restart_wq,
 				   &delegator->restart_work,
