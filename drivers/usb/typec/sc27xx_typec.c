@@ -1246,15 +1246,15 @@ static void sc27xx_typec_handle_vbus(struct sc27xx_typec *sc)
 		 */
 		sc->vbus_only_connect = true;
 		dev_info(sc->dev, "vbus_only_connect\n");
-		extcon_set_state_sync(sc->edev, EXTCON_USB, true);
 		extcon_set_state_sync(sc->edev, EXTCON_SINK, true);
+		extcon_set_state_sync(sc->edev, EXTCON_USB, true);
 		return;
 	}
 
 	if (sc->vbus_only_connect) {
 		dev_info(sc->dev, "vbus_only_disconnect\n");
-		extcon_set_state_sync(sc->edev, EXTCON_USB, false);
 		extcon_set_state_sync(sc->edev, EXTCON_SINK, false);
+		extcon_set_state_sync(sc->edev, EXTCON_USB, false);
 	}
 	sc->vbus_only_connect = false;
 }
