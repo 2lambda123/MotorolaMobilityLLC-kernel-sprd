@@ -167,6 +167,7 @@ static void sprd_ufs_cmd_record(struct ufs_hba *hba, enum ufs_event_list event,
 					&lrbp->ucd_rsp_ptr->sr.sense_data, UFS_SENSE_SIZE);
 		} else {
 			/* inline crypto info */
+#ifdef CONFIG_SCSI_UFS_CRYPTO
 			crypto = le32_to_cpu(lrbp->utr_descriptor_ptr->header.dword_0) &
 				UTP_REQ_DESC_CRYPTO_ENABLE_CMD;
 			uei[idx].pkg.ci.crypto_en = crypto ? 1 : 0;
@@ -175,6 +176,12 @@ static void sprd_ufs_cmd_record(struct ufs_hba *hba, enum ufs_event_list event,
 				uei[idx].pkg.ci.keyslot =
 					crypto ? hba->lrb[tag].crypto_key_slot : 0;
 			} else {
+#else
+			uei[idx].pkg.ci.crypto_en = 0;
+			uei[idx].pkg.ci.keyslot = 0;
+
+			if (event != UFS_TRACE_SEND) {
+#endif
 				/* UFS_TREAC_SCSI_TIME_OUT */
 				uei[idx].pkg.ci.rq = rq;
 				uei[idx].pkg.ci.deadline = rq->deadline;
