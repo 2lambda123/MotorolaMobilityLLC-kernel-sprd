@@ -2367,6 +2367,12 @@ static void mmc_swcq_status(void *data, const struct blk_mq_queue_data *bd, int 
 		queue_flag = true;
 	}
 
+	if (!strcmp(mmc_hostname(mmc), "mmc1")) {
+		q->limits.discard_granularity = card->pref_erase << 9;
+		q->limits.max_hw_discard_sectors = UINT_MAX;
+		q->limits.max_discard_sectors = UINT_MAX;
+	}
+
 	req->cmd_flags &= ~REQ_FUA;
 }
 
