@@ -4541,6 +4541,9 @@ static int cm_charger_type_polling(struct charger_manager *cm)
 	if (!is_ext_usb_pwr_online(cm))
 		return 0;
 
+	if (cm->desc->is_fast_charge)
+		return 0;
+
 	if (cm->desc->charger_type != POWER_SUPPLY_USB_TYPE_UNKNOWN)
 		return 0;
 
