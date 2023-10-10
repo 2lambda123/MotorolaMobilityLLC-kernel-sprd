@@ -57,6 +57,7 @@
 					== (MMC_CAP2_NO_MMC | MMC_CAP2_NO_SDIO))
 
 #define SEND_SD_SWITCH		6
+#define SEND_SD_READ_EXTR_SINGLE		48
 #define SEND_TUNING_BLOCK		19
 #define SEND_TUNING_BLOCK_HS200		21
 
@@ -84,6 +85,9 @@
 
 #define SDHCI_SPRD_ADMA_BUF_PROCESS_L	0x220
 #define SDHCI_SPRD_ADMA_BUF_PROCESS_H	0x224
+
+#define SDHCI_SPRD_BLK_CNT_BUF	0x228
+#define SDHCI_SPRD_BLK_CNT_IO	0x22c
 
 #define SDHCI_SPRD_ADMA_PROCESS_L	0x240
 #define SDHCI_SPRD_ADMA_PROCESS_H	0x244
@@ -1217,6 +1221,33 @@ static void sdhci_sprd_set_power(struct sdhci_host *host, unsigned char mode,
 	sprd_host->power_mode = mmc->ios.power_mode;
 }
 
+static void sdhci_sprd_disable_sd_cache(struct sdhci_host *host)
+{
+	/*
+	 * Although some sd cards support cache feature, they have problems when
+	 * used in practice, so here we turn off the cache feature by modifying
+	 * the data returned by the device.
+	 */
+	if ((sdhci_readl(host, SDHCI_ARGUMENT) == 0x100001ff) &&
+		(SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND)) == SEND_SD_READ_EXTR_SINGLE) &&
+		(sdhci_readl(host, SDHCI_SPRD_BLK_CNT_BUF) == 1)) {
+		u64 buf_paddr;
+		void *buf_vaddr;
+
+		/*
+		 * SD_READ_EXTR_SINGLE command's receiving data buffer's address can be
+		 * obtained from the ADMA_BUF_PROCESS registers in Spreadtrum's platform,
+		 * but it needs to shift 512 bytes ahead of that.
+		 */
+		buf_paddr = (u64)sdhci_sprd_readl(host, SDHCI_SPRD_ADMA_BUF_PROCESS_H) << 32;
+		buf_paddr |= sdhci_sprd_readl(host, SDHCI_SPRD_ADMA_BUF_PROCESS_L);
+		buf_paddr -= 0x200;
+
+		buf_vaddr = __va(buf_paddr);
+		*(u32 *)(buf_vaddr + 4) &= (u32)0xfffffffe;
+	}
+}
+
 static void sdhci_sprd_dump_adma_info(struct sdhci_host *host)
 {
 	u64 desc_ptr;
@@ -1337,6 +1368,8 @@ static u32 sdhci_sprd_cqe_irq(struct sdhci_host *host, u32 intmask)
 
 	if (intmask & SDHCI_INT_ERROR_MASK)
 		sdhci_sprd_dump_vendor_regs(host);
+	else if ((host->mmc->index == 1) && (intmask & SDHCI_INT_DATA_END))
+		sdhci_sprd_disable_sd_cache(host);
 
 	if (sprd_host->tuning_flag)
 		sprd_host_tuning_info_update_intstatus(host);
