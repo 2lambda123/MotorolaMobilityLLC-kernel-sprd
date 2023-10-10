@@ -126,7 +126,8 @@ const char *modem_ctrl_args[MODEM_CTRL_NR] = {
 	"sysreset",
 	"dspreset",
 	"getstatus",
-	"fshutdown"
+	"fshutdown",
+	"autoshutdown"
 };
 
 static const struct modem_data modem_v4[SPRD_V4_MODEM_CNT] = {
@@ -743,7 +744,7 @@ static void modem_reg_ctrl(struct modem_device *modem, u32 index, int b_clear)
 	struct modem_ctrl *ctrl = modem->modem_ctrl;
 
 	reg = ctrl->ctrl_reg[index];
-	if (reg == MODEM_INVALID_REG)
+	if ((reg == MODEM_INVALID_REG) || (reg == MODEM_NULL_REG))
 		return;
 
 	map = ctrl->ctrl_map[index];
@@ -800,6 +801,9 @@ static void soc_modem_stop(struct modem_device *modem)
 
 	/* set cp force shutdown */
 	modem_reg_ctrl(modem, MODEM_CTRL_SHUT_DOWN, 0);
+
+	/* clear cp auto shutdown */
+	modem_reg_ctrl(modem, MODEM_CTRL_AUTO_SHUT_DOWN, 1);
 
 	/* waiting for power off stably */
 	msleep(50);
