@@ -236,6 +236,21 @@ static const struct sdhci_sprd_phy_cfg sdhci_sprd_phy_cfgs[] = {
 
 #define TO_SPRD_HOST(host) sdhci_pltfm_priv(sdhci_priv(host))
 
+/*
+ * convert mask to offset in 32bits,
+ * like convert 0x1E to 1, 0x00FF0000 to 16
+ */
+static int mask_to_offset(u32 mask)
+{
+	int offset;
+
+	for (offset = 0; offset < 32; offset++)
+		if ((mask >> offset) & BIT(0))
+			return offset;
+
+	return 0;
+}
+
 static void sdhci_sprd_health_and_powp(void *data, struct mmc_card *card)
 {
 	int err;
@@ -1122,7 +1137,7 @@ static void sdhci_sprd_fast_hotplug_enable(struct sdhci_sprd_host *sprd_host)
 	regmap_update_bits(sprd_host->reg_debounce_cn.regmap,
 		sprd_host->reg_debounce_cn.reg,
 		sprd_host->reg_debounce_cn.mask,
-		debounce_counter << 16);
+		debounce_counter << mask_to_offset(sprd_host->reg_debounce_cn.mask));
 	if (sprd_host->detect_gpio_polar)
 		regmap_update_bits(sprd_host->reg_detect_polar.regmap,
 			sprd_host->reg_detect_polar.reg,
