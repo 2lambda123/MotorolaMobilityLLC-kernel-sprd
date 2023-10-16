@@ -177,7 +177,7 @@
 				sound-dai = <&sprd_pcm_iis>;
 			};
 			cpu {
-				sound-dai = <&i2s0>;
+				sound-dai = <&i2s0 0>;
 			};
 			codec {
 				sound-dai = <0 0>;
