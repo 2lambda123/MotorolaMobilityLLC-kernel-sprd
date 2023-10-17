@@ -345,8 +345,8 @@ static inline void sdhci_sprd_writeb(struct sdhci_host *host, u8 val, int reg)
 	 * executions of tuning command, and therefore data timeout value should
 	 * be shorter than before for single tuning commond in Spreadtrum's platform.
 	 */
-	if (unlikely(reg == SDHCI_TIMEOUT_CONTROL) &&
-	   (host->cmd->opcode == SEND_TUNING_BLOCK || host->cmd->opcode == SEND_TUNING_BLOCK))
+	if (unlikely(reg == SDHCI_TIMEOUT_CONTROL) && host->cmd &&
+	   (host->cmd->opcode == SEND_TUNING_BLOCK || host->cmd->opcode == SEND_TUNING_BLOCK_HS200))
 		val = 0x4;
 
 	if (unlikely(reg == SDHCI_SOFTWARE_RESET)) {
