@@ -70,7 +70,7 @@
 #define SGM41511_ICHG_CURRENT_MAX		3000
 
 #define SGM41511_WAKE_UP_MS			1000
-#define SGM41511_PROBE_TIMEOUT			msecs_to_jiffies(3000)
+#define SGM41511_PROBE_TIMEOUT			msecs_to_jiffies(500)
 
 #define SGM41511_WATCH_DOG_TIME_OUT_MS		20000
 
@@ -818,6 +818,11 @@ static int sgm41511_charger_usb_get_property(struct power_supply *psy,
 		return -EINVAL;
 	}
 
+	if (unlikely(!psy->initialized && atomic_read(&psy->use_cnt) > 0)) {
+		dev_err(info->dev, "%s psy is not ready\n", __func__);
+		return -ENODEV;
+	}
+
 	if (!sgm41511_probe_is_ready(info)) {
 		dev_err(info->dev, "%s wait probe timeout\n", __func__);
 		return -EINVAL;
@@ -901,6 +906,11 @@ static int sgm41511_charger_usb_set_property(struct power_supply *psy,
 	if (!info) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
 		return -EINVAL;
+	}
+
+	if (unlikely(!psy->initialized && atomic_read(&psy->use_cnt) > 0)) {
+		dev_err(info->dev, "%s psy is not ready\n", __func__);
+		return -ENODEV;
 	}
 
 	/*
