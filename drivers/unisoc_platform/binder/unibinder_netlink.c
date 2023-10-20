@@ -32,13 +32,10 @@ static int skr_cmd_action(struct sk_buff *skb, struct genl_info *info)
 		int *pid = nla_data(info->attrs[BINDRE_GENL_ATTR_PID]);
 		int *skip_restore = nla_data(info->attrs[BINDRE_GENL_ATTR_SKIP_RESTORE]);
 
-		if (*skip_restore)
-			set_thread_flags(*pid, SCHED_FLAG_SKIP_RESTORE);
-		else
-			remove_thread_flags(*pid, SCHED_FLAG_SKIP_RESTORE);
+		set_thread_flags(*pid, UBFF_SCHED_SKIP_RESTORE, *skip_restore);
 	} else {
 		pr_info("skip restore message lack info");
-		return -1;
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -51,13 +48,10 @@ static int ihrt_cmd_action(struct sk_buff *skb, struct genl_info *info)
 		int *pid = nla_data(info->attrs[BINDRE_GENL_ATTR_PID]);
 		int *inherit_rt = nla_data(info->attrs[BINDRE_GENL_ATTR_INHERIT_RT]);
 
-		if (*inherit_rt)
-			set_thread_flags(*pid, SCHED_FLAG_INHERIT_RT);
-		else
-			remove_thread_flags(*pid, SCHED_FLAG_INHERIT_RT);
+		set_thread_flags(*pid, UBFF_SCHED_INHERIT_RT, *inherit_rt);
 	} else {
 		pr_info("inherit rt message lack info");
-		return -1;
+		return -EINVAL;
 	}
 	return 0;
 }
