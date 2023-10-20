@@ -256,11 +256,6 @@ static int sprd_ssphy_set_vbus(struct usb_phy *x, int on)
 		regmap_write(phy->ana_g0l,
 			REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_TRIMMING, reg);
 
-		/* set USB connector type is A-type*/
-		msk = MASK_AON_APB_USB2_PHY_IDDIG;
-		ret |= regmap_update_bits(phy->aon_apb,
-			REG_AON_APB_OTG_PHY_CTRL, msk, 0);
-
 		msk = BIT_ANLG_PHY_G0L_DBG_SEL_ANALOG_USB20_USB20_DMPULLDOWN |
 			BIT_ANLG_PHY_G0L_DBG_SEL_ANALOG_USB20_USB20_DPPULLDOWN;
 		ret |= regmap_update_bits(phy->ana_g0l,
@@ -286,9 +281,6 @@ static int sprd_ssphy_set_vbus(struct usb_phy *x, int on)
 			REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_TRIMMING, reg);
 
 		if (!sprd_usbm_hsphy_get_onoff()) {
-			reg = msk = MASK_AON_APB_USB2_PHY_IDDIG;
-			ret |= regmap_update_bits(phy->aon_apb,
-				REG_AON_APB_OTG_PHY_CTRL, msk, reg);
 
 			msk = BIT_ANLG_PHY_G0L_DBG_SEL_ANALOG_USB20_USB20_DMPULLDOWN |
 				BIT_ANLG_PHY_G0L_DBG_SEL_ANALOG_USB20_USB20_DPPULLDOWN;
