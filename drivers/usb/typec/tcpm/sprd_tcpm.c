@@ -5041,6 +5041,8 @@ int sprd_tcpm_update_sink_capabilities(struct sprd_tcpm_port *port, const u32 *p
 				       unsigned int nr_pdo,
 				       unsigned int operating_snk_mw)
 {
+	unsigned int delay_ms = 0;
+
 	if (sprd_tcpm_validate_caps(port, pdo, nr_pdo))
 		return -EINVAL;
 
@@ -5048,6 +5050,10 @@ int sprd_tcpm_update_sink_capabilities(struct sprd_tcpm_port *port, const u32 *p
 	port->nr_snk_pdo = sprd_tcpm_copy_pdos(port->snk_pdo, pdo, nr_pdo);
 	port->operating_snk_mw = operating_snk_mw;
 	port->update_sink_caps = true;
+	if (port->drs_not_vdm) {
+		delay_ms = 50;
+		sprd_tcpm_log(port, "drs vdm, delay 50ms to request pdo");
+	}
 
 	switch (port->state) {
 	case SNK_NEGOTIATE_CAPABILITIES:
@@ -5058,7 +5064,7 @@ int sprd_tcpm_update_sink_capabilities(struct sprd_tcpm_port *port, const u32 *p
 		if (port->pps_data.active)
 			sprd_tcpm_set_state(port, SNK_NEGOTIATE_PPS_CAPABILITIES, 0);
 		else
-			sprd_tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, 0);
+			sprd_tcpm_set_state(port, SNK_NEGOTIATE_CAPABILITIES, delay_ms);
 		break;
 	default:
 		break;
