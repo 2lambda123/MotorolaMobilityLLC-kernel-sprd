@@ -64,7 +64,12 @@ struct sprd_ssphy {
 	atomic_t		susped;
 	bool			is_host;
 	bool			shutdown;
-	bool			ufs_keep_vddgen1;
+	bool			avdd1v8_is_off;
+	bool			avdd1v2_is_off;
+	bool			vddcore_is_off;
+	bool			dcdcmm_is_off;
+	bool			vdd1v8dcxo_is_off;
+	bool			refout_is_off;
 };
 
 #define PHY_INIT_TIMEOUT 500
@@ -144,7 +149,10 @@ struct sprd_ssphy {
 #define REG_ANLG_PHY_G0L_ANALOG_USB20_USB20_PHY             0x001C
 #define REG_ANLG_PHY_G0L_ANALOG_USB20_REG_SEL_CFG_0         0x0020
 
+#define REG_ANA_UMP9622_SLP_DCXO_26M_REF		0xe080
 #define BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN	BIT(5)
+#define REG_ANA_UMP9621_SLP_DCDCMM				0xa0ac
+#define MASK_ANA_UMP9621_SLP_DCDCMM_PD_EN			0x1
 
 #define CHGR_DET_FGU_CTRL		0x23a0
 #define DP_DM_FS_ENB			BIT(14)
@@ -356,29 +364,57 @@ static void sprd_ssphy_power_control(struct sprd_ssphy *phy)
 		usleep_range(1000, 2000);
 	} else {
 		/* DCDCCORE DROP & DCDCGEN1 PD & AVDD18 & AVDD12 */
-		if (phy->ufs_keep_vddgen1) {
-			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
-			reg &= ~MASK_ANA_SLP_DCDCCORE_DROP_EN;
-			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
-		} else {
-			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
-			reg &= ~(MASK_ANA_SLP_DCDCCORE_DROP_EN | MASK_ANA_SLP_DCDCGEN1_PD_EN);
-			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
+		if (reg & MASK_ANA_SLP_DCDCCORE_DROP_EN) {
+			phy->vddcore_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_DCDC_PD_CTRL,
+				MASK_ANA_SLP_DCDCCORE_DROP_EN, 0);
 		}
+
 		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, &reg);
-		reg &= ~(MASK_ANA_SLP_LDO_AVDD12_PD_EN | MASK_ANA_SLP_LDO_AVDD18_PD_EN);
-		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, reg);
+		if (reg & MASK_ANA_SLP_LDO_AVDD18_PD_EN) {
+			phy->avdd1v8_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL1,
+				MASK_ANA_SLP_LDO_AVDD18_PD_EN, 0);
+		}
+
+		if (reg & MASK_ANA_SLP_LDO_AVDD12_PD_EN) {
+			phy->avdd1v2_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL1,
+				MASK_ANA_SLP_LDO_AVDD12_PD_EN, 0);
+		}
+
+		/* DCDCMM */
+		regmap_read(phy->pmic, REG_ANA_UMP9621_SLP_DCDCMM, &reg);
+		if (reg & MASK_ANA_UMP9621_SLP_DCDCMM_PD_EN) {
+			phy->dcdcmm_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_UMP9621_SLP_DCDCMM,
+				MASK_ANA_UMP9621_SLP_DCDCMM_PD_EN, 0);
+		}
 
 		/* DCXO */
 		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, &reg);
-		reg &= ~MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN;
-		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, reg);
+		if (reg & MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN) {
+			phy->vdd1v8dcxo_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL0,
+				MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN, 0);
+		}
 
 		/* REFOUT0 */
-		regmap_read(phy->pmic, 0xe080, &reg);
-		reg &= ~BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN;
-		regmap_write(phy->pmic, 0xe080, reg);
+		regmap_read(phy->pmic, REG_ANA_UMP9622_SLP_DCXO_26M_REF, &reg);
+		if (reg & BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN) {
+			phy->refout_is_off = true;
+			regmap_update_bits(phy->pmic,
+				REG_ANA_UMP9622_SLP_DCXO_26M_REF,
+				BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN, 0);
+		}
 	}
+
 	/* usb31pll force on, chip sleep bypass allpllpd */
 	reg = msk = MASK_PMU_APB_USB31PLLV_FRC_ON;
 	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_USB31PLLV_REL_CFG, msk, reg);
@@ -665,27 +701,55 @@ static void sprd_ssphy_shutdown(struct usb_phy *x)
 		regulator_disable(phy->vdd);
 
 	if (phy->pmic) {
-		if (phy->ufs_keep_vddgen1) {
-			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
-			reg |= MASK_ANA_SLP_DCDCCORE_DROP_EN;
-			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
-		} else {
-			regmap_read(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, &reg);
-			reg |= (MASK_ANA_SLP_DCDCCORE_DROP_EN | MASK_ANA_SLP_DCDCGEN1_PD_EN);
-			regmap_write(phy->pmic, REG_ANA_SLP_DCDC_PD_CTRL, reg);
+		if (phy->vddcore_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_DCDC_PD_CTRL,
+				MASK_ANA_SLP_DCDCCORE_DROP_EN, MASK_ANA_SLP_DCDCCORE_DROP_EN);
+			phy->vddcore_is_off = 0;
 		}
-		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, &reg);
-		reg |= (MASK_ANA_SLP_LDO_AVDD12_PD_EN | MASK_ANA_SLP_LDO_AVDD18_PD_EN);
-		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL1, reg);
 
-		regmap_read(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, &reg);
-		reg |= MASK_ANA_SLP_LDO_VDD18_DCXO_LP_EN;
-		regmap_write(phy->pmic, REG_ANA_SLP_LDO_PD_CTRL0, reg);
+		if (phy->avdd1v8_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL1,
+				MASK_ANA_SLP_LDO_AVDD18_PD_EN, MASK_ANA_SLP_LDO_AVDD18_PD_EN);
+			phy->avdd1v8_is_off = 0;
+		}
+
+		if (phy->avdd1v2_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL1,
+				MASK_ANA_SLP_LDO_AVDD12_PD_EN, MASK_ANA_SLP_LDO_AVDD12_PD_EN);
+			phy->avdd1v2_is_off = 0;
+		}
+
+		/* DCDCMM */
+		if (phy->dcdcmm_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_UMP9621_SLP_DCDCMM,
+				MASK_ANA_UMP9621_SLP_DCDCMM_PD_EN,
+				MASK_ANA_UMP9621_SLP_DCDCMM_PD_EN);
+			phy->dcdcmm_is_off = 0;
+		}
+
+		/* DCXO */
+		if (phy->vdd1v8dcxo_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_SLP_LDO_PD_CTRL0,
+				MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN,
+				MASK_ANA_SLP_LDO_VDD18_DCXO_PD_EN);
+			phy->vdd1v8dcxo_is_off = 0;
+		}
+
 		/* REFOUT0 */
-		regmap_read(phy->pmic, 0xe080, &reg);
-		reg |= BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN;
-		regmap_write(phy->pmic, 0xe080, reg);
+		if (phy->refout_is_off) {
+			regmap_update_bits(phy->pmic,
+				REG_ANA_UMP9622_SLP_DCXO_26M_REF,
+				BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN,
+				BIT_ANA_UMP9622_SLP_DCXO_26M_REF_OUT0_EN);
+			phy->refout_is_off = 0;
+		}
 	}
+
 	msk = MASK_PMU_APB_USB31PLLV_FRC_ON;
 	regmap_update_bits(phy->pmu_apb, REG_PMU_APB_USB31PLLV_REL_CFG, msk, 0);
 	msk = MASK_PMU_APB_PAD_OUT_CHIP_SLEEP_PLL_PD_MASK;
@@ -1150,10 +1214,6 @@ static int sprd_ssphy_probe(struct platform_device *pdev)
 	ret = sprd_eye_pattern_prepared(phy, dev);
 	if (ret < 0)
 		dev_warn(dev, "sprd_eye_pattern_prepared failed, ret = %d\n", ret);
-
-	/* REG_AON_APB_BOOT_MODE */
-	regmap_read(phy->aon_apb, REG_AON_APB_BOOT_MODE, &reg);
-	phy->ufs_keep_vddgen1 = (reg & 0x3) == 0x1 ? 1 : 0;
 
 	if (!phy->pmic) {
 		/*
