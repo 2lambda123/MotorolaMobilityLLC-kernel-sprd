@@ -1085,26 +1085,6 @@ static int __send_signal(int sig, struct kernel_siginfo *info, struct task_struc
 	int override_rlimit;
 	int ret = 0, result;
 
-#ifdef CONFIG_SPRD_SIGNAL_DEBUG
-	struct task_struct *tar_process_g;
-	struct pid *tar_process_tgid;
-
-	if (sig == SIGKILL || sig == SIGTERM) {
-		tar_process_tgid = find_get_pid(task_tgid_nr(t));
-		tar_process_g = get_pid_task(tar_process_tgid, PIDTYPE_PID);
-		if ((tar_process_g != NULL) && (!strcmp(tar_process_g->comm, "system_server")
-					|| !strcmp(t->comm, "surfaceflinger")
-					|| !strcmp(t->comm, "netd")
-					|| !strcmp(t->comm, "inputflinger")
-					|| !strcmp(t->comm, "servicemanager"))) {
-			pr_warn("Signal_Debug: Req_proc is %s, pid=%d, Tar_proc is %s, pid=%d\n",
-				current->comm, task_pid_nr(current), t->comm, task_pid_nr(t));
-			pr_warn("Signal_Debug: Tar_proc_group is %s, tgid=%d, sig=%d\n",
-				tar_process_g->comm, task_tgid_nr(t), sig);
-		}
-	}
-#endif
-
 	assert_spin_locked(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
