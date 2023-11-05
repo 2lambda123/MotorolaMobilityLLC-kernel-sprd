@@ -1409,9 +1409,6 @@ static int dwc3_sprd_probe(struct platform_device *pdev)
 		goto err_ipa_clk;
 	}
 
-	usb_phy_init(sdwc->hs_phy);
-	usb_phy_init(sdwc->ss_phy);
-
 	if (IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE) ||
 		IS_ENABLED(CONFIG_USB_DWC3_HOST)) {
 		sdwc->vbus = devm_regulator_get(dev, "vbus");
