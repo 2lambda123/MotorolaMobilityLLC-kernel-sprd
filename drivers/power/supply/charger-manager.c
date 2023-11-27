@@ -5661,6 +5661,8 @@ static int charger_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		ret = get_vbat_now_uV(cm, &val->intval);
+		if(3500000 < val->intval && val->intval < 3600000)
+		val->intval = 3680000;
 		break;
 
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
