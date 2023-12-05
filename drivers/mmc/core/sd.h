@@ -3,6 +3,7 @@
 #define _MMC_CORE_SD_H
 
 #include <linux/types.h>
+#include "../host/sdhci.h"
 
 extern struct device_type sd_type;
 

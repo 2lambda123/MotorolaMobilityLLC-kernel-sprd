@@ -27,6 +27,7 @@
 #include "mmc_ops.h"
 #include "sd.h"
 #include "sd_ops.h"
+#include "../host/sdhci.h"
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -1826,6 +1827,7 @@ int mmc_attach_sd(struct mmc_host *host)
 {
 	int err;
 	u32 ocr, rocr;
+	struct sdhci_host *host1 = mmc_priv(host);
 
 	WARN_ON(!host->claimed);
 
@@ -1885,6 +1887,10 @@ remove_card:
 	mmc_claim_host(host);
 err:
 	mmc_detach_bus(host);
+
+	host1->data->timeout_ns = 3000000000;
+	pr_err("present data timeout %d ns\n",
+		host1->data->timeout_ns);
 
 	pr_err("%s: error %d whilst initialising SD card\n",
 		mmc_hostname(host), err);
