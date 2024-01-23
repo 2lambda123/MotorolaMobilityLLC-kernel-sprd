@@ -69,6 +69,7 @@
 #define MODEM_READ_MINI_MEM_PHY 0xfc
 
 #define RUN_STATE_INVALID 0xff
+#define MINI_DUMP_NAME_MAX_LEN  20
 
 #define MODEM_VMALLOC_SIZE_LIMIT 4096
 
@@ -347,6 +348,28 @@ static ssize_t sprd_modem_seg_dump(struct modem_device *modem, u32 base, u32 max
 	return total;
 }
 
+static bool sprd_mini_dump_check_parent_name(struct modem_dump_info **info, size_t count)
+{
+	char mini_parent_name[MINI_DUMP_NAME_MAX_LEN] = {0};
+
+	if (!count)
+		return false;
+
+	strncpy(mini_parent_name, (*info)->parent_name, sizeof(mini_parent_name));
+	mini_parent_name[MINI_DUMP_NAME_MAX_LEN - 1] = '\0';
+	if (strstr(mini_parent_name, "sharemem")
+		|| strstr(mini_parent_name, "pscp")
+		|| strstr(mini_parent_name, "phy")
+		|| strstr(mini_parent_name, "ldsp")
+		|| strstr(mini_parent_name, "tgdsp")
+		|| strstr(mini_parent_name, "warm")
+		|| strstr(mini_parent_name, "modem")
+		|| strstr(mini_parent_name, "dsp"))
+		return true;
+
+	return false;
+}
+
 static ssize_t modem_read_mini_dump(struct file *filp,
 			  char __user *buf, size_t count, loff_t *ppos,
 			  phys_addr_t base, size_t size)
@@ -386,14 +409,15 @@ static ssize_t modem_read_mini_dump(struct file *filp,
 		list_each_dump_info(vmem, &s_cur_info, &mini_number);
 
 	while (s_cur_info) {
-		if (!count)
+		if (!sprd_mini_dump_check_parent_name(&s_cur_info, count)) {
+			dev_info(modem->p_dev, "minidump parent_name no init,disable mini_dump!\n");
 			break;
-		len = sprintf(head,
-				  "%s_%s_0x%8x_0x%x.bin",
-				  s_cur_info->parent_name,
-				  s_cur_info->name,
-				  s_cur_info->start_addr,
-				  s_cur_info->size);
+                }
+		len = snprintf(head, sizeof(head), "%s_%s_0x%8x_0x%x.bin",
+			s_cur_info->parent_name,
+			s_cur_info->name,
+			s_cur_info->start_addr,
+			s_cur_info->size);
 
 		if (*ppos > len) {
 			offset = *ppos - len;
