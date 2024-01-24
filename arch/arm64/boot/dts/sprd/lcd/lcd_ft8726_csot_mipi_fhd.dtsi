@@ -1,0 +1,185 @@
+/*
+ * ft8726  LCD config dtsi file for spreadtrum
+ *
+ * Copyright (C) 2022, Spreadtrum Communications Inc.
+ *
+ * SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ */
+ 
+/ {
+	fragment {
+		target-path = "/";
+		__overlay__ {
+			lcds {
+				lcd_ft8726_csot_mipi_fhd: lcd_ft8726_csot_mipi_fhd {
+
+					sprd,dsi-work-mode = <1>;          /* video burst mode*/
+					sprd,dsi-lane-number = <4>;
+					sprd,dsi-color-format = "rgb888";
+					/* sprd,power-gpio-delay = <20>;      ms */
+					sprd,phy-bit-clock = <1152000>;	   /* kbps */
+					sprd,phy-escape-clock = <20000>;   /* kHz */
+
+					sprd,width-mm = <70>;
+					sprd,height-mm = <155>;
+					sprd,dpi-clk-div = <6>;
+					sprd,video-lp-cmd-enable = <1>;
+					sprd,hporch-lp-disable = <1>;
+
+					sprd,esd-check-enable = <1>;
+					sprd,esd-check-mode = <0>;
+					sprd,esd-check-period = <2000>;
+					sprd,esd-check-reg-count = <1>;
+					sprd,esd-check-register = [0A];
+					sprd,esd-check-value-len = <1>;
+					sprd,esd-check-value = [9C];
+					sprd,reset-on-sequence = <1 5>, <0 5>, <1 15>;
+					//sprd,reset-off-sequence = <0 5>;
+
+					sprd,use-dcs-write;
+					sprd,initial-command = [
+						15 00 00 02 00 00
+						39 00 00 04 FF 87 20 01
+						15 00 00 02 00 80
+						39 00 00 03 FF 87 20
+						15 00 00 02 00 A0
+						39 00 00 04 CA 02 02 02
+						15 00 00 02 00 80
+						39 00 00 0D CA 8A E9 CA A9 B8 B6 9D B8 A9 AC 93 84
+						15 00 00 02 00 90
+						39 00 00 0A CA FE FF 13 FC FF CC FA FF 8E
+						15 00 00 02 00 80
+						39 00 00 07 C0 00 43 00 2D 00 11
+						15 00 00 02 00 90
+						39 00 00 07 C0 00 43 00 2D 00 11
+						15 00 00 02 00 A0
+						39 00 00 07 C0 00 5A 00 2D 00 11
+						15 00 00 02 00 B0
+						39 00 00 06 C0 00 BB 00 2D 11
+						15 00 00 02 00 60
+						39 00 00 07 C0 00 9F 00 2D 00 11
+						15 00 00 02 00 70
+						39 00 00 0D C0 00 C0 00 C0 0D 02 B6 00 00 13 01 3D
+						15 00 00 02 00 A3
+						39 00 00 07 C1 00 6C 00 3E 00 02
+						15 00 00 02 00 80
+						39 00 00 11 CE 01 81 FF FF 00 C0 00 C8 00 00 00 00 00 70 00 98
+						15 00 00 02 00 90
+						39 00 00 10 CE 00 A7 0F 2D 00 A7 80 FF FF 00 06 40 0D 16 00
+						15 00 00 02 00 E1
+						39 00 00 0C CE 0A 02 B6 02 B6 00 00 00 00 00 00
+						15 00 00 02 00 F1
+						39 00 00 0A CE 27 1D 00 00 DE 00 FD 00 00
+						15 00 00 02 00 B0
+						39 00 00 05 CF 00 00 AE B2
+						15 00 00 02 00 B5
+						39 00 00 05 CF 05 05 05 09
+						15 00 00 02 00 E4
+						39 00 00 0D CF 09 F1 09 F0 09 F0 09 F0 09 F0 09 F0
+						15 00 00 02 00 80
+						39 00 00 03 C1 00 00
+						15 00 00 02 00 F6
+						15 00 00 02 CF 3C
+						15 00 00 02 00 F1
+						15 00 00 02 CF 3C
+						15 00 00 02 00 A0
+						39 00 00 10 C2 82 04 00 05 8C 81 04 00 05 8C 80 04 00 05 8C
+						15 00 00 02 00 B0
+						39 00 00 10 C2 01 04 00 05 8C 02 04 00 05 8C 03 04 00 05 8C
+						15 00 00 02 00 C0
+						39 00 00 0B C2 04 04 00 05 8C 05 04 00 05 8C
+						15 00 00 02 00 86
+						39 00 00 07 C0 01 01 01 01 12 04
+						15 00 00 02 00 96
+						39 00 00 07 C0 01 01 01 01 12 04
+						15 00 00 02 00 A6
+						39 00 00 07 C0 00 01 00 01 19 04
+						15 00 00 02 00 A3
+						39 00 00 07 CE 01 07 01 01 29 05
+						15 00 00 02 00 B3
+						39 00 00 07 CE 01 07 01 01 29 05
+						15 00 00 02 00 66
+						39 00 00 07 C0 01 07 01 01 29 05
+						15 00 00 02 00 80
+						15 00 00 02 A7 03
+						15 00 00 02 00 00
+						39 00 00 29 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 30
+						39 00 00 29 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 60
+						39 00 00 29 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 90
+						39 00 00 29 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 C0
+						39 00 00 29 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 F0
+						39 00 00 11 E1 05 06 09 10 59 1A 22 28 32 4B 3A 41 46 4B 8A 50
+						15 00 00 02 00 00
+						39 00 00 19 E2 58 5F 66 29 6D 74 7B 84 5D 8E 94 9A A1 47 AA B5 C3 CD FD D9 EA F7 FF 07
+						15 00 00 02 00 F1
+						15 00 00 02 CF 3C
+						15 00 00 02 00 F6
+						15 00 00 02 CF 3C
+						15 00 00 02 00 00
+						15 00 00 02 1C 02
+						15 00 00 02 00 B5
+						15 00 00 02 CA 04
+						15 00 00 02 00 B0
+						39 00 00 04 CA 05 05 0B
+						15 00 00 02 00 82
+						39 00 00 03 CE 0B 0B
+						15 00 00 02 00 A0
+						39 00 00 04 CA 04 04 04
+						15 00 00 02 00 00
+						39 00 00 04 FF FF FF FF
+						39 00 00 03 5E 06 00
+						39 00 00 03 51 00 00
+						15 00 00 02 55 02
+						15 00 00 02 53 2C
+						15 00 00 02 35 00
+						05 5A 00 01 11
+						05 05 00 01 29
+					];
+					sprd,sleep-in-command = [
+						05 14 00 01 28
+						05 96 00 01 10
+					];
+					sprd,sleep-out-command = [
+						05 5A 00 01 11
+						05 05 00 01 29
+					];
+					sprd,cabc-on-command = [
+						39 00 00 02 55 02
+					];
+					sprd,cabc-off-command = [
+						39 00 00 02 55 00
+					];
+					oled-backlight{
+						//default-brightness-level = <819>;
+						//sprd,max-level = <2047>;
+						brightness-levels = [
+							39 00 00 03 51 66 06
+						];
+					};
+
+					display-timings {
+						native-mode = <&ft8726_csot_timing0>;
+
+						ft8726_csot_timing0: timing0 {
+							clock-frequency = <192000000>;
+							hactive = <1080>;
+							vactive = <2400>;
+							hback-porch = <16>;
+							hfront-porch = <190>;
+							vback-porch = <32>;
+							vfront-porch = <20>;
+							hsync-len = <10>;
+							vsync-len = <10>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+

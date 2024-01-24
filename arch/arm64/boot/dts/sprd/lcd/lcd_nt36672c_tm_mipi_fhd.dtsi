@@ -1,0 +1,190 @@
+/*
+ * nt36672c  LCD config dtsi file for spreadtrum
+ *
+ * Copyright (C) 2022, Spreadtrum Communications Inc.
+ *
+ * SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ */
+
+/ {
+	fragment {
+		target-path = "/";
+		__overlay__ {
+			lcds {
+				lcd_nt36672c_tm_mipi_fhd: lcd_nt36672c_tm_mipi_fhd {
+
+					sprd,dsi-work-mode = <1>;          /* video burst mode*/
+					sprd,dsi-lane-number = <4>;
+					sprd,dsi-color-format = "rgb888";
+
+					sprd,phy-bit-clock = <1152000>;	   /* kbps */
+					sprd,phy-escape-clock = <20000>;   /* kHz */
+					/* sprd,power-gpio-delay = <20>;      ms */
+					sprd,width-mm = <70>;
+					sprd,height-mm = <155>;
+					sprd,dpi-clk-div = <6>;
+					sprd,video-lp-cmd-enable = <1>;
+					sprd,hporch-lp-disable = <1>;
+
+					sprd,esd-check-enable = <1>;
+					sprd,esd-check-mode = <2>;
+					sprd,esd-check-period = <2000>;
+					sprd,esd-check-reg-count = <1>;
+					sprd,esd-check-register = [0A];
+					sprd,esd-check-value-len = <1>;
+					sprd,esd-check-value = [9C];
+					sprd,reset-on-sequence = <0 5>, <1 5>, <0 5>, <1 15>;
+					//sprd,reset-off-sequence = <0 5>;
+
+					//sprd,use-dcs-write;
+					sprd,initial-command = [
+						15 00 00 02 FF 27
+						15 00 00 02 FB 01
+						15 00 00 02 3F 13
+						15 00 00 02 40 50
+						15 00 00 02 4F 07
+						15 00 00 02 FF 10
+						15 00 00 02 FB 01
+						15 00 00 02 36 00
+						39 02 00 06 3B 03 14 36 04 04
+						15 00 00 02 B0 00
+						15 00 00 02 C0 00
+						/*cabc begin*/
+						15 00 00 02 FF 23
+						15 00 00 02 FB 01
+						15 00 00 02 00 60
+						15 00 00 02 07 00
+						15 00 00 02 08 03
+						15 00 00 02 09 55
+						15 00 00 02 10 82
+						15 00 00 02 11 01
+						15 00 00 02 12 95
+						15 00 00 02 15 68
+						15 00 00 02 16 0B
+						15 00 00 02 30 FF
+						15 00 00 02 31 FD
+						15 00 00 02 32 FA
+						15 00 00 02 33 F7
+						15 00 00 02 34 F4
+						15 00 00 02 35 F0
+						15 00 00 02 36 ED
+						15 00 00 02 37 EC
+						15 00 00 02 38 EB
+						15 00 00 02 39 EA
+						15 00 00 02 3A E9
+						15 00 00 02 3B E8
+						15 00 00 02 3D E7
+						15 00 00 02 3F E6
+						15 00 00 02 40 E5
+						15 00 00 02 41 E4
+						15 00 00 02 45 FF
+						15 00 00 02 46 FA
+						15 00 00 02 47 F2
+						15 00 00 02 48 E8
+						15 00 00 02 49 E4
+						15 00 00 02 4A DC
+						15 00 00 02 4B D7
+						15 00 00 02 4C D5
+						15 00 00 02 4D D3
+						15 00 00 02 4E D2
+						15 00 00 02 4F D0
+						15 00 00 02 50 CE
+						15 00 00 02 51 CD
+						15 00 00 02 52 CB
+						15 00 00 02 53 C6
+						15 00 00 02 54 C3
+						/*cabc end*/
+						15 00 00 02 FF 25
+						15 00 00 02 FB 01
+						15 00 00 02 18 22
+						15 00 00 02 FF F0
+						15 00 00 02 FB 01
+						15 00 00 02 1C 01
+						15 00 00 02 33 01
+						15 00 00 02 5A 00
+						15 00 00 02 FF C0
+						15 00 00 02 FB 01
+						15 00 00 02 9C 11
+						15 00 00 02 9D 11
+						15 00 00 02 FF D0
+						15 00 00 02 FB 01
+						15 00 00 02 53 22
+						15 00 00 02 54 02
+						15 00 00 02 1C 88
+						15 00 00 02 1D 08
+						15 00 00 02 FF 2A
+						15 00 00 02 FB 01
+						15 00 00 02 04 40
+						15 00 00 02 1B 2A
+						15 00 00 02 1D 20
+						15 00 00 02 1E 7F
+						15 00 00 02 FF 10
+						15 00 00 02 FB 01
+						39 00 00 03 68 02 01
+						39 00 00 03 51 00 00
+						39 00 00 03 5E 00 0F
+						15 00 00 02 55 02
+						15 00 00 02 53 2C
+						15 00 00 02 35 00
+						05 50 00 01 11
+						05 05 00 01 29
+					];
+					sprd,sleep-in-command = [
+						39 0A 00 01 28
+						39 64 00 01 10
+					];
+					sprd,sleep-out-command = [
+						39 50 00 01 11
+						39 05 00 01 29
+					];
+					sprd,cabc-on-command = [
+						39 00 00 02 FF 10
+						39 00 00 02 FB 01
+						39 00 00 02 55 02
+					];
+					sprd,cabc-off-command = [
+						39 00 00 02 FF 10
+						39 00 00 02 FB 01
+						39 00 00 02 55 01
+					];
+					sprd,mipi-in-command = [
+						15 00 00 02 FF C0
+						15 00 00 02 FB 01
+						15 00 00 02 4B 00
+					];
+					sprd,mipi-out-command = [
+						15 00 00 02 FF C0
+						15 00 00 02 FB 01
+						15 01 00 02 4B 1F
+						15 01 00 02 4B 00
+						15 01 00 02 4B 1F
+					];
+					oled-backlight{
+						//default-brightness-level = <819>;
+						//sprd,max-level = <2047>;
+						brightness-levels = [
+							39 00 00 03 51 06 66
+						];
+					};
+
+					display-timings {
+						native-mode = <&nt36672c_tm_timing0>;
+
+						nt36672c_tm_timing0: timing0 {
+							clock-frequency = <192000000>;
+							hactive = <1080>;
+							vactive = <2400>;
+							hback-porch = <100>;
+							hfront-porch = <100>;
+							vback-porch = <32>;
+							vfront-porch = <32>;
+							hsync-len = <12>;
+							vsync-len = <10>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+
