@@ -149,6 +149,14 @@ config BACKLIGHT_CLASS_DEVICE
 	  To have support for your specific LCD panel you will have to
 	  select the proper drivers which depend on this option.
 
+config LEDS_AW99703
+        tristate "LED Support for AW99703"
+        depends on LEDS_CLASS && I2C
+        help
+          this option enables support for the AW99703 LED connected
+          through I2C. Say Y to enable support for the AW99703 LED
+          light automatically.
+
 if BACKLIGHT_CLASS_DEVICE
 
 config BACKLIGHT_ATMEL_LCDC

@@ -11,6 +11,9 @@
 #include "lcd/lcd_ft8726_csot_mipi_fhd.dtsi"
 #include "lcd/lcd_ili7807s_txd_mipi_fhd.dtsi"
 #include "lcd/lcd_nt36672c2_tm_mipi_fhd.dtsi"
+#include "lcd/lcd_ili9883c_boe_mipi_hd.dtsi"
+#include "lcd/lcd_td4160_txd_mipi_hd.dtsi"
+#include "lcd/lcd_icnl9916c_tm_mipi_hd.dtsi"
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -1050,23 +1053,6 @@
 	status = "okay";
 };
 
-&i2c3 {
-	status = "okay";
-	#address-cells = <1>;
-	#size-cells = <0>;
-	sec-nfc@27 {
-		compatible = "sec-nfc";
-		reg = <0x27>;
-		clock-names = "nfc_clk","source","enable";
-		clocks = <&aon_clk CLK_AUX2>, <&ext_26m>, <&aonapb_gate CLK_AUX2_EB>;
-		sec-nfc,ven-gpio = <&ap_gpio 63 0>;
-		sec-nfc,firm-gpio = <&ap_gpio 61 0>;
-		sec-nfc,irq-gpio = <&ap_gpio 62 0>;
-		sec-nfc,clk-req = <&ap_gpio 60 0>;
-	};
-
-};
-
 &i2c2{
     status = "okay";
     clock-frequency = <400000>;
@@ -1309,9 +1295,7 @@
 };
 
 &panel {
-	//sprd,backlight = <&pwm_backlight>;
-	//sprd,surface-width = <1080>;
-	//sprd,surface-height = <2400>;
+	sprd,backlight = <&pwm_backlight>;
 	avdd-gpio = <&ap_gpio 113 GPIO_ACTIVE_HIGH>;
 	avee-gpio = <&ap_gpio 133 GPIO_ACTIVE_HIGH>;
 	reset-gpio = <&ap_gpio 50 GPIO_ACTIVE_HIGH>;
@@ -1321,19 +1305,9 @@
 &dpu {
 	sprd,logo-memory = <&logo_reserved>;
 
-	//sprd,backlight = <&pwm_backlight>;
-};
-/*
-&lcd_g40396_truly_mipi_fhd {
-	sprd,sr-width = <720>;
-	sprd,sr-height = <1600>;
+	sprd,backlight = <&pwm_backlight>;
 };
 
-&lcd_nt36672e_truly_mipi_fhd_nodsc {
-	sprd,sr-width = <720>;
-	sprd,sr-height = <1600>;
-};
-*/
 &pmic_fchg {
 	status = "okay";
 	sprd,input-voltage-microvolt = <5000000>;
