@@ -26,6 +26,7 @@ EXT_MODULES="
 ../modules/kernel5.15/microarray
 ../modules/kernel5.15/touchscreen/tp_nt36672
 ../modules/kernel5.15/touchscreen/focaltech_ft8726_spi_ts
+../modules/kernel5.15/touchscreen/ili7807s
 ../modules/kernel5.15/touchscreen/icnl9916c_spi
 ../modules/kernel5.15/touchscreen/ili9883c_spi
 ../modules/kernel5.15/touchscreen/omnivision_tcm_spi
