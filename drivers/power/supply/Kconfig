@@ -968,6 +968,13 @@ config CHARGER_UPM6920
 
           Say Y to include support for UPM Upm6920 Battery Charger.
 
+config CHARGER_SC89890
+         tristate "Spreadtrum SC89890 charger driver"
+         depends on MFD_SC27XX_PMIC || COMPILE_TEST
+         help
+          Say Y here to enable support for battery charging with SC89890
+          PMIC chips.
+
 config CHARGER_SGM41543
         tristate "SGM sgm41543 Charger"
         depends on I2C || COMPILE_TEST
