@@ -490,6 +490,9 @@ static ssize_t fpc_write(struct file *filp, const char __user *buf, size_t count
         fpc_power_regulator();
         fpc_pinctrl();
         fpc_gpio_request();
+    } else if(!strncmp(cmd, "wakelock", strlen("wakelock"))){
+        pr_err("fpc wakeup 30s %s cmd=%s\n", __func__, cmd);
+        __pm_wakeup_event(fpc_wakeup_s, (35 * 1000)); //5s for fwk enter auth mode
     } else {
         pr_err("%s id oid init spi uspi free 33\n", __func__);
         return FPC_ERR;
