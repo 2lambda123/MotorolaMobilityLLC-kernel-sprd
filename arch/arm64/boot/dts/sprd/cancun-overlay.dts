@@ -323,7 +323,7 @@
         reset-gpios = <&ap_gpio 63 0x00>;
         irq-gpios = <&ap_gpio 126 0x00>;
         // pidle-gpios = <&ap_gpio 48 0x00>;
-        clkreq-gpios = <&ap_gpio 60 0x00>;
+        //clkreq-gpios = <&ap_gpio 60 0x00>;
         //clocks = <&clock_rpmh RPMH_RF_CLK3>;
         clock-names = "nfc_ref_clk","source","enable";
         //st,clk_pinctrl;

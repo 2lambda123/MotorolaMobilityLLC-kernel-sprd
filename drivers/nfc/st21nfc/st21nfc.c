@@ -26,10 +26,6 @@
 #include <linux/miscdevice.h>
 #include <linux/spinlock.h>
 #include <linux/of_gpio.h>
-#include <linux/regmap.h>
-#include <linux/compat.h>
-#include <linux/of_platform.h>
-#include <linux/regulator/consumer.h>
 #ifndef LEGACY
 #include <linux/workqueue.h>
 #include <linux/acpi.h>
@@ -43,6 +39,13 @@
 #endif
 #include <linux/of_irq.h>
 #include "st21nfc.h"
+
+#ifdef SPD_UMS9230_CLK_ENABLE
+#include <linux/regmap.h>
+#include <linux/compat.h>
+#include <linux/of_platform.h>
+#include <linux/regulator/consumer.h>
+#endif
 
 // Comment this out to remove the check of CLF response during probe
 //#define WITH_PING_DURING_PROBE
@@ -145,7 +148,9 @@ struct st21nfc_device {
 	/* CLK control */
 	bool clk_run;
 	struct clk *s_clk;
+#ifdef SPD_UMS9230_CLK_ENABLE	
 	struct pmic_refout *sc27xx_refout;
+#endif	
 	uint8_t pinctrl_en;
 
 	/* GPIO for NFCC IRQ pin (input) */
@@ -162,6 +167,7 @@ struct st21nfc_device {
 	unsigned int polarity_mode;
 };
 
+#ifdef SPD_UMS9230_CLK_ENABLE
 static struct device_node *np = NULL;
 #define NFC_CLK_FREQ 26000000
 #define SEC_NFC_CLOCK_AP 1
@@ -170,7 +176,7 @@ static struct device_node *np = NULL;
 int pmic_refout_update(struct st21nfc_device *info, unsigned int refout_num, int refout_state){
 	 int ret;
 	 //add debug log
-	pr_err("cancun pmic debug start!\n");
+	 pr_debug("%s - cancun pmic debug start!\n", __func__);
 	 if (refout_num > info->sc27xx_refout->refnum){
 		 pr_err("%s- refnum is out.\n", __func__);
 		 return -EINVAL;
@@ -194,29 +200,28 @@ int pmic_refout_update(struct st21nfc_device *info, unsigned int refout_num, int
 	pr_err("cancun pmic debug end!\n");
 	 return ret;
 }
+#endif
 
 /*
  * Routine to enable clock.
  * this routine can be extended to select from multiple
  * sources based on clk_src_name.
  */
+#ifndef SPD_UMS9230_CLK_ENABLE 
 static int st21nfc_clock_select(struct st21nfc_device *st21nfc_dev)
 {
 	int ret = 0;
 
-	//st21nfc_dev->s_clk = clk_get(&st21nfc_dev->client->dev, "nfc_ref_clk");
+	st21nfc_dev->s_clk = clk_get(&st21nfc_dev->client->dev, "nfc_ref_clk");
 
 	/* if NULL we assume external crystal or newer MTK platform, and dont fail */
-	/*if (IS_ERR_OR_NULL(st21nfc_dev->s_clk)) {
+	if (IS_ERR_OR_NULL(st21nfc_dev->s_clk)) {
 		pr_err("%s, cannot get nfc clk", __func__);
 		return 0;
-	}*/
+	}
 
 	if (st21nfc_dev->clk_run == false) {
-		//ret = clk_prepare_enable(st21nfc_dev->s_clk);
-		pr_debug("%s : 2222222222222222222222 clk\n", __func__);
-		ret = pmic_refout_update(st21nfc_dev,4, 1);
-		pr_debug("%s : enble clk = %d\n", __func__,ret);
+		ret = clk_prepare_enable(st21nfc_dev->s_clk);
 
 		if (ret)
 			goto err_clk;
@@ -234,7 +239,6 @@ err_clk:
  */
 static int st21nfc_clock_deselect(struct st21nfc_device *st21nfc_dev)
 {
-	int ret = 0;
 	/* if NULL we assume external crystal and dont fail */
 	if (IS_ERR_OR_NULL(st21nfc_dev->s_clk)) {
 		pr_err("%s, cannot get nfc clk", __func__);
@@ -242,13 +246,13 @@ static int st21nfc_clock_deselect(struct st21nfc_device *st21nfc_dev)
 	}
 
 	if (st21nfc_dev->clk_run == true) {
-		//clk_disable_unprepare(st21nfc_dev->s_clk);
-		ret = pmic_refout_update(st21nfc_dev,4, 0);
-		pr_debug("%s : disable clk = %d\n", __func__,ret);
+		clk_disable_unprepare(st21nfc_dev->s_clk);
+
 		st21nfc_dev->clk_run = false;
 	}
 	return 0;
 }
+#endif
 
 static void st21nfc_disable_irq(struct st21nfc_device *st21nfc_dev)
 {
@@ -1204,8 +1208,10 @@ static int st21nfc_probe(struct i2c_client *client,
 	int ret;
 	struct st21nfc_device *st21nfc_dev;
 	struct device *dev = &client->dev;
+#ifdef SPD_UMS9230_CLK_ENABLE	
 	struct platform_device *pmic_device;
 	int reg_val;
+#endif	
 #ifdef RECOVERY_SUPPORT_IN_PING
 	int t;
 #endif
@@ -1229,7 +1235,6 @@ static int st21nfc_probe(struct i2c_client *client,
 					acpi_st21nfc_gpios);
 	if (ret)
 		pr_debug("Unable to add GPIO mapping table\n");
-		pr_debug("1111111111111111111111\n");
 
 // QCOM and MTK54 use standard GPIO definition
 	st21nfc_dev->gpiod_irq = devm_gpiod_get(dev, "irq", GPIOD_IN);
@@ -1294,7 +1299,7 @@ static int st21nfc_probe(struct i2c_client *client,
 			goto err_pidle_workqueue;
 		}
 	}
-
+#ifdef SPD_UMS9230_CLK_ENABLE
 	np = of_find_compatible_node(NULL, NULL, "sprd,sc27xx-refout");
     if (!np) {
         pr_err("%s-can't find refout node.\n", __func__);
@@ -1336,9 +1341,15 @@ static int st21nfc_probe(struct i2c_client *client,
         pr_info("%s- reg_val value is = %d, refout addr is:%x.", __func__, reg_val, &st21nfc_dev->sc27xx_refout);
     }
 	//add debug log 
-	pr_info("%s : start 1 \n", __func__);
-	
-	pr_debug("%s : 2222222222222222222222 clk\n", __func__);
+	pr_info("%s : start 1 \n", __func__);	
+
+	ret = pmic_refout_update(st21nfc_dev,4, 1);
+	pr_debug("%s : enble spd clock, ret = %d\n", __func__,ret);
+	if (ret < 0) {
+	    pr_err("%s : pmic_refout_update failed\n", __func__);
+		goto err_sysfs_power_stats;
+	}	
+#else	
 	st21nfc_dev->gpiod_clkreq = devm_gpiod_get(dev, "clkreq", GPIOD_IN);
 	if (IS_ERR_OR_NULL(st21nfc_dev->gpiod_clkreq)) {
 		pr_warn("[OPTIONAL] %s : Unable to request clkreq-gpios\n",
@@ -1365,7 +1376,7 @@ static int st21nfc_probe(struct i2c_client *client,
 			goto err_sysfs_power_stats;
 		}
 	}
-
+#endif
 	client->irq = gpiod_to_irq(st21nfc_dev->gpiod_irq);
 
 	/* I2C retry management: we want only 1 attempt at communication.
@@ -1474,8 +1485,12 @@ st21nfc_remove(struct i2c_client *client)
 {
 	struct st21nfc_device *st21nfc_dev = i2c_get_clientdata(client);
 
-
+#ifdef SPD_UMS9230_CLK_ENABLE
+	pmic_refout_update(st21nfc_dev,4, 0);
+	pr_debug("%s : disable spd clk\n", __func__);
+#else	
 	st21nfc_clock_deselect(st21nfc_dev);
+#endif	
 	misc_deregister(&st21nfc_dev->st21nfc_device);
 	if (!IS_ERR_OR_NULL(st21nfc_dev->gpiod_pidle)) {
 		sysfs_remove_file(&client->dev.kobj,

@@ -49,10 +49,13 @@ void st21nfc_unregister_st54spi_cb(void);
 // newer kernels since 5.4
 #define ACCESS_OK(x, y, z) access_ok(y, z)
 
+#define SPD_UMS9230_CLK_ENABLE
+
+#ifdef SPD_UMS9230_CLK_ENABLE
 //pmic_refout_clk
 struct pmic_refout {
 	unsigned int regsw;
 	unsigned int refnum;
 	struct regmap *regmap;
 };
-
+#endif

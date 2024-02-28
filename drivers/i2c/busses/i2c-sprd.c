@@ -806,10 +806,16 @@ static irqreturn_t sprd_i2c_dma_isr(int irq, void *dev_id)
 {
 	struct sprd_i2c *i2c_dev = dev_id;
 	struct i2c_msg *msg = i2c_dev->msg;
-
+	int ret = 0;
 	i2c_dev->err = 0;
 	i2c_dev->ack_flag = !(readl(i2c_dev->base + I2C_STATUS) & I2C_RX_ACK);
 	if (!i2c_dev->ack_flag) {
+		 if (msg->addr == 0x08) {
+                      pr_err("---i2c-NFC_is NACK---\n");
+                      ret = reset_control_reset(i2c_dev->rst);
+                      if (ret < 0)
+                               dev_err(i2c_dev->dev, "i2c soft reset failed, ret = %d\n", ret);
+		}
 		if (msg->flags & I2C_M_RD)
 			complete(&i2c_dev->dma_complete);
 		i2c_dev->err = -EIO;
