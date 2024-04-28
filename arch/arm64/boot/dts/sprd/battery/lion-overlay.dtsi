@@ -222,7 +222,7 @@
 	cm-fuel-gauge = "sc27xx-fgu";
 
 	cm-alt-charger-adapt-enable;
-	cm-alt-charger-power-supplys = "sgm41513_charger";
+	cm-alt-charger-power-supplys = "sgm41513_charger" , "sc89890_charger";
 
 	/* in deci centigrade */
 	cm-battery-cold = <200>;

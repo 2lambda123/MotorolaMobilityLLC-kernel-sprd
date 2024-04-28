@@ -228,7 +228,6 @@ static int cm_manager_get_jeita_status(struct charger_manager *cm, int cur_temp)
 static bool cm_charger_is_support_fchg(struct charger_manager *cm);
 static int cm_get_battery_temperature(struct charger_manager *cm, int *temp);
 static bool cm_pd_is_ac_online(struct charger_manager *cm);
-
 /*
  * cm_cap_advance_full - capacity value are
  * reported in advance based on percentage
@@ -1491,7 +1490,7 @@ static bool cm_update_current_jeita_status(struct charger_manager *cm)
 	struct cm_jeita_info *jeita_info = &cm->desc->jeita_info;
 	int cur_jeita_status, ret;
 	bool is_normal = true;
-
+	dev_err(cm->dev, "find cm_update_current_jeita_status\n");
 	/**
 	 * Note that it need to vote for ibat before the caller of this function
 	 * if does not define jeita table
@@ -1572,11 +1571,11 @@ static void cm_update_charge_info(struct charger_manager *cm, int cmd)
 	struct charger_desc *desc = cm->desc;
 	struct cm_thermal_info *thm_info = &cm->desc->thm_info;
 	u32 last_jeita_tab_size;
-
+	
 	mutex_lock(&cm->desc->charge_info_mtx);
 
 	last_jeita_tab_size = desc->jeita_tab_size;
-
+	dev_info(cm->dev, "find cm_update_charge_info desc->charger_type = %d\n",desc->charger_type);
 	switch (desc->charger_type) {
 	case CM_CHARGER_TYPE_DCP:
 		desc->charge_limit_cur = desc->cur.dcp_cur;
@@ -1786,7 +1785,7 @@ static void cm_update_charge_info(struct charger_manager *cm, int cmd)
 						 SPRD_VOTE_CMD_MIN,
 						 cm->desc->thm_info.thm_adjust_cur, cm);
 	}
-
+	pr_err("cmd = %d, CM_CHARGE_INFO_JEITA_LIMIT = %d\n",cmd ,CM_CHARGE_INFO_JEITA_LIMIT);
 	if (cmd & CM_CHARGE_INFO_JEITA_LIMIT) {
 		desc->jeita_info.jeita_changed = true;
 		cm_update_current_jeita_status(cm);
@@ -4500,10 +4499,11 @@ static void jeita_info_init(struct cm_jeita_info *jeita_info)
 
 static int cm_manager_get_jeita_status(struct charger_manager *cm, int cur_temp)
 {
+  
 	struct charger_desc *desc = cm->desc;
 	struct cm_jeita_info *jeita_info = &desc->jeita_info;
 	int i, jeita_status, temp_status, recovery_temp_status = -1;
-
+	dev_err(cm->dev, "find cm_update_current_jeita_status\n");
 	jeita_status = jeita_info->jeita_status;
 
 	for (i = desc->jeita_tab_size - 1; i >= 0; i--) {
@@ -6207,7 +6207,8 @@ static bool cm_pd_is_ac_online(struct charger_manager *cm)
 
 static void cm_update_charger_type_status(struct charger_manager *cm)
 {
-
+  	
+	dev_err(cm->dev, "find cm_update_charger_type_status\n");
 	if (is_ext_wl_pwr_online(cm)) {
 		wireless_main.ONLINE = 1;
 		ac_main.ONLINE = 0;
@@ -6395,12 +6396,14 @@ static ssize_t jeita_control_store(struct device *dev,
 				   const char *buf, size_t count)
 {
 	int ret;
-	struct charger_sysfs_ctl_item *sysfs = container_of(attr, struct charger_sysfs_ctl_item,
-							    attr_jeita_control);
 	struct charger_manager *cm;
 	struct charger_desc *desc;
-	bool enabled;
-
+ 	bool enabled;
+	struct charger_sysfs_ctl_item *sysfs = container_of(attr, struct charger_sysfs_ctl_item,
+							    attr_jeita_control);
+	
+	
+	pr_err("find jeita_control_store\n");
 	if (!sysfs) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
 		return -ENOMEM;
@@ -7057,14 +7060,15 @@ static ssize_t unknow_type_cur_control_store(struct device *dev,
  */
 static int charger_manager_prepare_sysfs(struct charger_manager *cm)
 {
+  	
 	struct charger_desc *desc = cm->desc;
 	struct charger_sysfs_ctl_item *sysfs;
 	int chargers_externally_control = 1;
 	char *name;
 	int i;
-
+	
 	desc->num_sysfs = 1;
-
+	dev_err(cm->dev, "find charger_manager_prepare_sysfs\n");
 	desc->sysfs_groups = devm_kcalloc(cm->dev, desc->num_sysfs + 1, sizeof(*desc->sysfs_groups),
 					  GFP_KERNEL);
 	if (!desc->sysfs_groups)
@@ -7298,8 +7302,9 @@ static struct charger_desc *of_cm_parse_desc(struct device *dev)
 	struct device_node *np = dev->of_node;
 	u32 poll_mode = CM_POLL_DISABLE;
 	u32 battery_stat = CM_NO_BATTERY;
-	int i = 0, num_chgs = 0, num_cp_psys = 0;
-
+	int i = 0, num_chgs = 0, num_charger_psys = 0, num_cp_psys = 0;
+	
+  	pr_err("find of_cm_parse_desc\n");
 	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return ERR_PTR(-ENOMEM);
@@ -7330,6 +7335,26 @@ static struct charger_desc *of_cm_parse_desc(struct device *dev)
 
 	of_property_read_u32(np, "cm-battery-stat", &battery_stat);
 	desc->battery_present = battery_stat;
+	desc->enable_alt_charger_adapt =
+		device_property_read_bool(dev, "cm-alt-charger-adapt-enable");
+
+	/* alternative charger power supply */
+	num_charger_psys = of_property_count_strings(np, "cm-alt-charger-power-supplys");
+	dev_info(dev, "%s num_charger_psys = %d\n", __func__, num_charger_psys);
+	if (num_charger_psys > 0) {
+		desc->alt_charger_nums = num_charger_psys;
+		/* Allocate empty bin at the tail of array */
+		desc->psy_alt_charger_adpt_stat = devm_kzalloc(dev, sizeof(char *)
+							       * (num_charger_psys + 1),
+							       GFP_KERNEL);
+		if (desc->psy_alt_charger_adpt_stat) {
+			for (i = 0; i < num_charger_psys; i++)
+				of_property_read_string_index(np, "cm-alt-charger-power-supplys",
+						i, &desc->psy_alt_charger_adpt_stat[i]);
+		} else {
+			return ERR_PTR(-ENOMEM);
+		}
+	}
 
 
 	/* chargers */
@@ -7751,7 +7776,7 @@ static void cm_batt_works(struct work_struct *work)
 	int chg_vol = 0, vbat_avg = 0, ibat_avg = 0, recharge_uv = 0;
 	static int last_fuel_cap = CM_MAGIC_NUM;
 	int work_cycle = CM_CAP_CYCLE_TRACK_TIME_15S;
-
+	dev_err(cm->dev, "find cm_batt_works\n");
 	ret = get_vbat_now_uV(cm, &batt_uV);
 	if (ret) {
 		dev_err(cm->dev, "get_vbat_now_uV error.\n");
@@ -7877,7 +7902,6 @@ static void cm_batt_works(struct work_struct *work)
 		 cm->desc->charger_type, board_temp, cur_temp,
 		 cm->desc->thm_info.thm_adjust_cur, cm->desc->thm_info.thm_pwr,
 		 cm->desc->is_fast_charge, cm->desc->enable_fast_charge, flush_time, period_time);
-
 	switch (cm->desc->charger_status) {
 	case POWER_SUPPLY_STATUS_CHARGING:
 		last_fuel_cap = fuel_cap;
@@ -8109,6 +8133,67 @@ static int get_boot_mode(void)
 	return 0;
 }
 
+static int cm_check_alt_charger_psy_ready_status(struct charger_manager *cm)
+{
+	struct charger_desc *desc = cm->desc;
+	struct power_supply *psy;
+	int i;
+
+	if (!desc->psy_charger_stat || !desc->psy_alt_charger_adpt_stat) {
+		dev_err(cm->dev, "%s, chargeIC not exit\n", __func__);
+		return 0;
+	}
+
+	psy = power_supply_get_by_name(desc->psy_charger_stat[0]);
+	if (psy) {
+		dev_info(cm->dev, "%s, find preferred chargeIC \"%s\"\n",
+			 __func__, desc->psy_charger_stat[0]);
+		goto done;
+	}
+
+	for (i = 0; desc->psy_alt_charger_adpt_stat[i]; i++) {
+		psy = power_supply_get_by_name(desc->psy_alt_charger_adpt_stat[i]);
+		if (!psy) {
+			dev_warn(cm->dev, "%s, cannot find alt chargeIC \"%s\"\n",
+				 __func__, desc->psy_alt_charger_adpt_stat[i]);
+		} else {
+			dev_info(cm->dev, "%s, find alt chargeIC \"%s\"\n",
+				 __func__, desc->psy_alt_charger_adpt_stat[i]);
+			desc->psy_charger_stat[0] = desc->psy_alt_charger_adpt_stat[i];
+			goto done;
+		}
+	}
+
+	if (i == desc->alt_charger_nums) {
+		dev_err(cm->dev, "%s, cannot find all chargeIC\n", __func__);
+		return -EPROBE_DEFER;
+	}
+
+done:
+	power_supply_put(psy);
+	return 0;
+}
+
+static int cm_check_charger_psy_ready_status(struct charger_manager *cm)
+{
+	struct charger_desc *desc = cm->desc;
+	struct power_supply *psy;
+	int i;
+
+	/* Check if charger's supplies are present at probe */
+	for (i = 0; desc->psy_charger_stat[i]; i++) {
+		psy = power_supply_get_by_name(desc->psy_charger_stat[i]);
+		if (!psy) {
+			dev_err(cm->dev, "Cannot find power supply \"%s\"\n",
+				desc->psy_charger_stat[i]);
+			return -EPROBE_DEFER;
+		}
+		power_supply_put(psy);
+	}
+
+	return 0;
+}
+
 static int charger_manager_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -8193,17 +8278,18 @@ static int charger_manager_probe(struct platform_device *pdev)
 		pr_err("boot_mode can't not parse bootargs property\n");
 		return ret;
 	}
-	/* Check if charger's supplies are present at probe */
-	for (i = 0; desc->psy_charger_stat[i]; i++) {
-		struct power_supply *psy;
-
-		psy = power_supply_get_by_name(desc->psy_charger_stat[i]);
-		if (!psy) {
-			dev_err(&pdev->dev, "Cannot find power supply \"%s\"\n",
-				desc->psy_charger_stat[i]);
-			return -EPROBE_DEFER;
+	if (desc->enable_alt_charger_adapt && desc->alt_charger_nums > 0) {
+		ret = cm_check_alt_charger_psy_ready_status(cm);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "can't find chargeIC\n");
+			return ret;
 		}
-		power_supply_put(psy);
+	} else {
+		ret = cm_check_charger_psy_ready_status(cm);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "can't find chargeIC\n");
+			return ret;
+		}
 	}
 
 	if (desc->enable_alt_cp_adapt && (desc->alt_cp_nums > 0)) {

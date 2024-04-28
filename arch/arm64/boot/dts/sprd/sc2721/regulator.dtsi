@@ -7,7 +7,7 @@
  */
 
 &sc2721_pmic {
-	power-controller@c00 {
+	pmic_regulator:power-controller@c00 {
 		compatible = "sprd,sc2731-regulator", "sprd,sc2721-regulator";
 		regulator-debugfs-enable;
 

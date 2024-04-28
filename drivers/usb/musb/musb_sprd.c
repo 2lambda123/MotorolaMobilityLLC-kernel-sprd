@@ -36,7 +36,6 @@
 #include <linux/usb/sprd_commonphy.h>
 #include <linux/usb/sprd_typec.h>
 #include <linux/usb/sprd_usbm.h>
-#include <linux/power_supply.h>
 
 #include "musb_core.h"
 #include "sprd_musbhsdma.h"
@@ -138,7 +137,6 @@ struct sprd_glue {
 	struct regulator		*vbus;
 	struct wakeup_source		*pd_wake_lock;
 	struct regmap			*pmu;
-	struct power_supply 		*chg_psy;
 	struct musb_reg_info		pubsys_bypass;
 	struct musb_reg_info		suspend_clk_src_frc_on;
 	struct usb_role_switch		*role_sw;
@@ -191,23 +189,6 @@ struct sprd_glue {
 	bool				use_pdhub_c2c;
 };
 
-static const char * const charger_supply_name[] = {
-        "sc2731_charger",
-        "sc2720_charger",
-        "sc2721_charger",
-        "sc2723_charger",
-        "sc2703_charger",
-        "fan54015_charger",
-        "bq2560x_charger",
-        "bq25890_charger",
-        "bq25910_charger",
-        "eta6937_charger",
-        "aw32257",
-        "upm6920_charger",
-        "sgm41513_charger",
-        "charger",
-		"sc89890_charger",
-};
 
 static int boot_charging;
 
@@ -1509,13 +1490,8 @@ static void musb_sprd_adaptive_shutdown(struct musb *musb)
 static int musb_sprd_otg_start_host(struct sprd_glue *glue, int on)
 {
 	int ret = 0;
-	#ifndef OTG_USE_REGULATOR
-	int i;
-	union power_supply_propval val;
-#endif
 	struct musb *musb = glue->musb;
 	struct musb_hdrc_platform_data *plat = dev_get_platdata(musb->controller);
-#ifdef OTG_USE_REGULATOR
 	if (!glue->vbus) {
 		glue->vbus = devm_regulator_get(glue->dev, "vddvbus");
 		if (IS_ERR(glue->vbus)) {
@@ -1525,23 +1501,8 @@ static int musb_sprd_otg_start_host(struct sprd_glue *glue, int on)
 		dev_info(glue->dev, "get vbus succeed\n");
 	}
 
-#else
-	if (glue->chg_psy == NULL) {
-		for (i = 0; i < ARRAY_SIZE(charger_supply_name); i++) {
-			glue->chg_psy = power_supply_get_by_name(charger_supply_name[i]);
-			if (glue->chg_psy)
-				break;
-		}
-		if (glue->chg_psy == NULL) {
-			dev_err(glue->dev, "get chg_psy failed\n");
-			return -EPROBE_DEFER;
-		}
-	}
-#endif
-
 	if (on) {
 		dev_info(glue->dev, "%s: turn on host\n", __func__);
-#ifdef OTG_USE_REGULATOR
 		if (!glue->use_pdhub_c2c) {
 			if (!regulator_is_enabled(glue->vbus)) {
 				dev_info(glue->dev, "%s: regulator enable\n", __func__);
@@ -1552,16 +1513,6 @@ static int musb_sprd_otg_start_host(struct sprd_glue *glue, int on)
 				}
 			}
 		}
-#else
-		if (glue->chg_psy) {
-			val.intval = 1;
-			ret = power_supply_set_property(glue->chg_psy, POWER_SUPPLY_PROP_SCOPE, &val);
-			if (ret) {
-				dev_err(glue->dev, "failed to enable vbus\n");
-				return ret;
-			}
-		}
-#endif
 		if (!glue->enable_pm_suspend_in_host && !IS_ENABLED(CONFIG_MUSB_SPRD_LOWPOWER))
 			pm_stay_awake(musb->controller);
 
@@ -1578,16 +1529,7 @@ static int musb_sprd_otg_start_host(struct sprd_glue *glue, int on)
 			ret = musb_host_setup(musb, plat->power);
 			if (ret) {
 				dev_err(glue->dev, "musb_host_setup failed: %d\n", ret);
-				#ifdef OTG_USE_REGULATOR
 				regulator_disable(glue->vbus);
-#else
-				if (glue->chg_psy) {
-					val.intval = 0;
-					ret = power_supply_set_property(glue->chg_psy, POWER_SUPPLY_PROP_SCOPE, &val);
-					if (ret)
-						dev_err(glue->dev, "failed to disable vbus\n");
-				}
-#endif
 				pm_runtime_put_sync(musb->controller);
 				return ret;
 			}
@@ -1626,24 +1568,11 @@ static int musb_sprd_otg_start_host(struct sprd_glue *glue, int on)
 		if (musb->port_mode != MUSB_HOST)
 			musb_host_cleanup(musb);
 
-		#ifdef OTG_USE_REGULATOR
 		if (!glue->use_pdhub_c2c) {
 			ret = regulator_disable(glue->vbus);
 			if (ret)
 				dev_err(glue->dev, "Failed to disable vbus: %d\n", ret);
 		}
-#else
-		if (glue->dr_mode == USB_DR_MODE_HOST) {
-			if (glue->chg_psy) {
-				val.intval = 0;
-				ret = power_supply_set_property(glue->chg_psy, POWER_SUPPLY_PROP_SCOPE, &val);
-				if (ret) {
-					dev_err(glue->dev, "failed to disable vbus\n");
-					return ret;
-				}
-			}
-		}
-#endif
 
 		/* disable usb audio offload */
 		if (musb->is_offload) {
@@ -2469,9 +2398,6 @@ static int musb_sprd_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&musb->irq_work);
 	cancel_delayed_work_sync(&musb->finish_resume_work);
 	cancel_delayed_work_sync(&musb->deassert_reset_work);
-	if (glue->chg_psy) {
-		power_supply_put(glue->chg_psy);
-	}
 
 	usb_role_switch_unregister(glue->role_sw);
 	platform_device_unregister(glue->musb_pdev);
