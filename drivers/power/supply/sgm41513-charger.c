@@ -150,7 +150,7 @@ static void power_path_control(struct sgm41513_charger_info *info)
 			boot_calibration = true;
 	}
 }
-
+/*
 static bool sgm41513_charger_is_bat_present(struct sgm41513_charger_info *info)
 {
 	struct power_supply *psy;
@@ -176,7 +176,7 @@ static bool sgm41513_charger_is_bat_present(struct sgm41513_charger_info *info)
 			"Failed to get property of present:%d\n", ret);
 
 	return present;
-}
+}*/
 
 static int sgm41513_charger_is_fgu_present(struct sgm41513_charger_info *info)
 {
@@ -552,7 +552,7 @@ static int sgm41513_charger_hw_init(struct sgm41513_charger_info *info)
 
 	return ret;
 }
-
+/*
 static int sgm41513_charger_get_charge_voltage(struct sgm41513_charger_info *info, u32 *charge_vol)
 {
 	struct power_supply *psy;
@@ -579,7 +579,7 @@ static int sgm41513_charger_get_charge_voltage(struct sgm41513_charger_info *inf
 
 	return 0;
 }
-
+*/
 static void sgm41513_dump_register(struct sgm41513_charger_info *info)
 {
 	int ret;
@@ -970,7 +970,7 @@ static int sgm41513_charger_usb_set_property(struct power_supply *psy,
 	struct sgm41513_charger_info *info = power_supply_get_drvdata(psy);
 	int ret = 0;
 	u32 input_vol;
-	bool bat_present;
+	//bool bat_present;
 
 	if (!info) {
 		pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
@@ -982,8 +982,8 @@ static int sgm41513_charger_usb_set_property(struct power_supply *psy,
 	 * POWER_SUPPLY_PROP_STATUS and POWER_SUPPLY_PROP_CALIBRATE.
 	 */
 	if (psp == POWER_SUPPLY_PROP_STATUS || psp == POWER_SUPPLY_PROP_CALIBRATE) {
-		bat_present = sgm41513_charger_is_bat_present(info);
-		ret = sgm41513_charger_get_charge_voltage(info, &input_vol);
+		//bat_present = sgm41513_charger_is_bat_present(info);
+		//ret = sgm41513_charger_get_charge_voltage(info, &input_vol);
 		if (ret) {
 			input_vol = 0;
 			dev_err(info->dev, "failed to get charge voltage! ret = %d\n", ret);

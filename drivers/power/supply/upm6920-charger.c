@@ -796,7 +796,7 @@ static int upm6920_exit_hiz_mode(struct upm6920_charger_info *info)
 
     return ret;
 }
-
+/*
 static int upm6920_charger_get_charge_voltage(struct upm6920_charger_info *info,
             u32 *charge_vol)
 {
@@ -824,7 +824,7 @@ static int upm6920_charger_get_charge_voltage(struct upm6920_charger_info *info,
 
     return 0;
 }
-
+*/
 static int upm6920_charger_start_charge(struct upm6920_charger_info *info)
 {
     int ret = 0;
@@ -1347,7 +1347,7 @@ static int upm6920_charger_usb_set_property(struct power_supply *psy,
     struct upm6920_charger_info *info = power_supply_get_drvdata(psy);
     int ret = 0;
     u32 input_vol;
-    bool bat_present;
+    bool bat_present = 1;
 
     if (!info) {
         pr_err("%s:line%d: NULL pointer!!!\n", __func__, __LINE__);
@@ -1355,8 +1355,8 @@ static int upm6920_charger_usb_set_property(struct power_supply *psy,
     }
 
     if (psp == POWER_SUPPLY_PROP_STATUS || psp == POWER_SUPPLY_PROP_CALIBRATE) {
-        bat_present = upm6920_charger_is_bat_present(info);
-        ret = upm6920_charger_get_charge_voltage(info, &input_vol);
+        //bat_present = upm6920_charger_is_bat_present(info);
+        //ret = upm6920_charger_get_charge_voltage(info, &input_vol);
         if (ret) {
             input_vol = 0;
             dev_err(info->dev, "failed to get charge voltage! ret = %d\n", ret);
