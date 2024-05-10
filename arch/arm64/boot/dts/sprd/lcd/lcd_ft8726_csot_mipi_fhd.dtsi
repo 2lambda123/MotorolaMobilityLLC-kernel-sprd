@@ -143,6 +143,8 @@
 					sprd,sleep-in-command = [
 						05 14 00 01 28
 						05 96 00 01 10
+						29 00 00 02 00 00
+						29 00 00 05 F7 5A A5 95 27
 					];
 					sprd,sleep-out-command = [
 						05 5A 00 01 11
