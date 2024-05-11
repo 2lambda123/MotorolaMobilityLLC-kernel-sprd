@@ -1,5 +1,5 @@
 /*
- * FPC Capacitive Fingerprint sensor device driver
+ * FPC Fingerprint sensor device driver
  *
  * This driver will control the platform resources that the FPC fingerprint
  * sensor needs to operate. The major things are probing the sensor to check
@@ -11,20 +11,24 @@
  * enables dynamic control of these features from eg. a user space process.
  *
  * The sensor's IRQ events will be pushed to Kernel's event handling system and
- * are exposed in the drivers event fpc_node. This makes it possible for a user
- * space process to poll the input fpc_node and receive IRQ events easily. Usually
- * this fpc_node is available under /dev/input/eventX where 'X' is a number given by
+ * are exposed in the drivers event node. This makes it possible for a user
+ * space process to poll the input node and receive IRQ events easily. Usually
+ * this node is available under /dev/input/eventX where 'X' is a number given by
  * the event system. A user space process will need to traverse all the event
  * nodes and ask for its parent's name (through EVIOCGNAME) which should match
  * the value in device tree named input-device-name.
  *
  *
- * Copyright (c) 2020-2021 Fingerprint Cards AB <tech@fingerprints.com>
+ * Copyright (c) 2018 Fingerprint Cards AB <tech@fingerprints.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
  * as published by the Free Software Foundation.
  */
+
+#define DEBUG
+#define pr_fmt(fmt) "fingerprint %s +%d, " fmt, __func__,__LINE__
+
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -41,514 +45,931 @@
 #include <linux/mutex.h>
 #include <linux/pm_wakeup.h>
 #include <linux/regulator/consumer.h>
-#include <linux/version.h>
-#include <linux/uaccess.h>
+#include <linux/notifier.h>
+#include <linux/fb.h>
 #include <linux/clk.h>
-#include <linux/cdev.h>
-#include <linux/ctype.h>
 
-#define FPC_SPI_IOC_SUPPORT 0
-#define FPC_MODULE_NAME     "fpc1020"
-#define FPC_SPI_BUF_SIZE    (128*1024 - 16)
-#define FPC_COMPATIBLE_ID   "fpc,fpc1020"
-#define GENERIC_OK          0
-#define FPC_ERR             -1
-#define FPC_GPIO_COUNT      3
-#define SPI_MODE_MASK       (SPI_CPHA | SPI_CPOL | SPI_CS_HIGH \
-                | SPI_LSB_FIRST | SPI_3WIRE | SPI_LOOP \
-                | SPI_NO_CS | SPI_READY | SPI_TX_DUAL \
-                | SPI_TX_QUAD | SPI_RX_DUAL | SPI_RX_QUAD)
 
-#define CHECK_STATUS(status) if(status) { pr_err("%s, err line:%d, status=%d\n", __func__, __LINE__, status); return FPC_ERR; }
-#define CHECK_NULL(v) if(v == NULL) { pr_err("%s, err line:%d, %s is null\n", __func__, __LINE__, #v); return FPC_ERR; }
-
-#define FPC_IOC_MAGIC       'p'
-#define FPC_IOC_WAKEUP      _IO(FPC_IOC_MAGIC, 0)
-#define FPC_IOC_CLK_ON      _IO(FPC_IOC_MAGIC, 1)
-#define FPC_IOC_CLK_OFF     _IO(FPC_IOC_MAGIC, 2)
-#define FPC_IOC_SPI_MESSAGE _IOW(FPC_IOC_MAGIC, 3, char[sizeof(struct spi_ioc_transfer)])
-#define FPC_IOC_READ_SYS    _IOW(FPC_IOC_MAGIC, 6, char[128])
-
-static dev_t fpc_devt;
-static u8 *fpc_spi_buf;
-static s32 fpc_irq_num;
-static s32 fpc_gpio[FPC_GPIO_COUNT];
-static uint fpc_vdd = 30;
-static uint fpc_hw_id;
-static struct cdev *fpc_c_dev;
-static struct class *fpc_class;
-static struct device_node *fpc_node;
-static struct spi_device *fpc_spi_dev;
-static struct regulator *fpc_regulator;
-static struct wakeup_source *fpc_wakeup_s;
-static struct device *fpc_dev;
-
-#ifdef CONFIG_MICROTRUST_TEE_SUPPORT
-#include "teei_fp.h"
-#include "tee_client_api.h"
-struct TEEC_UUID fpc_uuid = { 0xa3808888, 0xc30c, 0x4dd0, {0xa3, 0x19, 0xea, 0x29, 0x64, 0x3d, 0x4d, 0x4b} };
+//#define USE_REGULATOR  使用regulator供电打开这个宏
+#ifndef CONFIG_FB
+#define CONFIG_FB
+#endif
+#ifdef PIN_CONTROL
+static const char * const pctl_names[] = {
+    "fpc1020_reset_reset",
+	"fpc1020_reset_active",
+	"fpc1020_irq_active",
+	"fpc1020_power_active",
+	"fpc1020_power_deactive",
+};
 #endif
 
-#ifdef CONFIG_MEDIATEK_SOLUTION
-#include <linux/platform_data/spi-mt65xx.h>
-extern void mt_spi_disable_master_clk(struct spi_device *spidev);
-extern void mt_spi_enable_master_clk(struct spi_device *spidev);
+#define HWID_SIZE		40
+#define FPC_RESET_LOW_US 5000
+#define FPC_RESET_HIGH1_US 100
+#define FPC_RESET_HIGH2_US 5000
+#define FPC_TTW_HOLD_TIME 1000
+#define FPC_POWEROFF_SLEEP_US 1000
+#define MAX_RESET_NUM 2
+
+#define GET_STR_BYSTATUS(status) (status==0? "Success":"Failure")
+#define ERROR_LOG       (0)
+#define INFO_LOG        (1)
+#define DEBUG_LOG       (2)
+
+/* debug log setting */
+static u8 debug_level = DEBUG_LOG;
+#define fpsensor_log(level, fmt, args...) do { \
+    if (debug_level >= level) {\
+        if( level == DEBUG_LOG) { \
+            printk("fingerprint %s +%d, " fmt, __func__, __LINE__, ##args); \
+        } else { \
+            printk("fingerprint: " fmt, ##args); \
+        }\
+    } \
+} while (0)
+#define func_entry()    do{fpsensor_log(DEBUG_LOG, "%s, %d, entry\n", __func__, __LINE__);}while(0)
+#define func_exit()     do{fpsensor_log(DEBUG_LOG, "%s, %d, exit\n", __func__, __LINE__);}while(0)
+#ifdef CONFIG_FB
+#define DRM_MODE_DPMS_ON        0
+#define DRM_MODE_DPMS_STANDBY   1
+#define DRM_MODE_DPMS_SUSPEND   2
+#define DRM_MODE_DPMS_OFF       3
+//extern int dsp_register_client(struct notifier_block *nb);
+//extern int dsp_unregister_client(struct notifier_block *nb);
+#endif
+#ifdef USE_REGULATOR
+struct vreg_config {
+	char *name;
+	unsigned long vmin;
+	unsigned long vmax;
+	int ua_load;
+};
+
+static const struct vreg_config vreg_conf[] = {
+	{ "vdd_io", 3300000UL, 3300000UL, 6000, },
+};
 #endif
 
+struct fpc_data {
+    struct device *dev;
+    struct platform_device *pdev;
+#ifdef USE_REGULATOR
+	struct regulator *vreg[ARRAY_SIZE(vreg_conf)];
+#endif
+#ifdef PIN_CONTROL
+    struct pinctrl *fpc_pinctrl;
+	struct pinctrl_state *pinctrl_state[ARRAY_SIZE(pctl_names)];
+#endif
+    int prop_wakeup;
+    int irq_gpio;
+    int irq_num;
+    int rst_gpio;
+    int power_ctl_gpio;
+    bool wakeup_enabled;
+	char hwid[HWID_SIZE];
+    struct wakeup_source ttw_wl;
+    bool clocks_enabled;
+#ifdef CONFIG_FB
+	struct notifier_block fb_notif;
+	int screen_status;
+#endif
+};
+
+static DEFINE_MUTEX(fpc_set_gpio_mutex);
+
+static int fpc_dts_pin_init( struct fpc_data * fpc);
+
+static int fpc_dts_irq_init(struct fpc_data *fpc);
 static irqreturn_t fpc_irq_handler(int irq, void *handle);
-static int fpc_dev_destory(void);
-static int fpc_dev_create(void);
+static int reset_num = 0;
 
-static void fpc_free(void)
+#ifdef CONFIG_FB
+static int fb_notifier_callback(struct notifier_block *self,
+unsigned long event, void *data)
 {
-    int i = 0;
-    int gpio_count = FPC_GPIO_COUNT;
-    const char ptl_name[][16] = {"fpc_vdd_of", "fpc_rst_lo"};
-    int len = sizeof(ptl_name)/sizeof(ptl_name[0]);
-    if (of_property_read_bool(fpc_node, "pinctrl-names")) {
-        struct pinctrl *ptl = devm_pinctrl_get(fpc_dev);
-        for (i = 0; i < len; i++) {
-            struct pinctrl_state *ptl_state = pinctrl_lookup_state(ptl, ptl_name[i]);
-            if (!IS_ERR(ptl_state)) {
-                pinctrl_select_state(ptl, ptl_state);
-                pr_info("%s, by pinctrl:%s\n", __func__, ptl_name[i]);
-            }
-        }
-        devm_pinctrl_put(ptl);
-    } else {
-        pr_info("%s, no pinctrl\n", __func__);
-    }
-    if(fpc_irq_num > 0) {
-        disable_irq_nosync(fpc_irq_num);
-        devm_free_irq(fpc_dev, fpc_irq_num, fpc_dev);
-        pr_info("%s, free fpc_irq_num = %d\n", __func__, fpc_irq_num);
-        fpc_irq_num = 0;
-    }
-    while(gpio_count) {
-		pr_info("%s, free gpio = %d\n", __func__, fpc_gpio[gpio_count - 1]);
-        if(gpio_is_valid(fpc_gpio[gpio_count - 1])) {
-            //gpio_set_value(fpc_gpio[gpio_count - 1], 0);
-            devm_gpio_free(fpc_dev, fpc_gpio[gpio_count - 1]);
-        }
-        gpio_count--;
-    }
-    if (of_property_read_bool(fpc_node, "vfp-supply")) {
-        regulator_disable(fpc_regulator);
-        devm_regulator_put(fpc_regulator);
-        fpc_regulator = NULL;
-    }
-    if (fpc_wakeup_s) wakeup_source_unregister(fpc_wakeup_s);
-    fpc_wakeup_s = NULL;
-    // wakeup_source_trash(fpc_wakeup_s);
+	int *p = data;
+	unsigned int blank = 0;
+	struct fpc_data *fpc = NULL;
+	func_entry();
+
+	if(p != NULL)
+		blank = *p;
+
+	if (event != 0x10 && event != 0x11)
+	{
+		fpsensor_log(ERROR_LOG, "%s worng event, return 0!\n", __func__);
+		return 0;
+	}
+
+	fpc = container_of(self, struct fpc_data, fb_notif);
+
+	fpsensor_log(INFO_LOG, "%s blank:0x%x.\n", __func__, blank);
+
+	switch(blank)
+	{
+		case DRM_MODE_DPMS_ON:
+			fpc->screen_status = 1;
+			fpsensor_log(INFO_LOG, "%s lcd on notify, screen_status:%d.\n", __func__, fpc->screen_status);
+			break;
+		case DRM_MODE_DPMS_OFF:
+			fpc->screen_status = 0;
+			fpsensor_log(INFO_LOG, "%s lcd off notify, screen_status:%d.\n", __func__, fpc->screen_status);
+			break;
+		default:
+			fpsensor_log(INFO_LOG, "%s other status notify, will ignore. screen_status:%d.\n", __func__, fpc->screen_status);
+			break;
+	}
+	func_exit();
+	return NOTIFY_OK;
 }
+#endif
 
-static int fpc_spi_sync(u8 *tx, u8 *rx, u32 len, u32 speed)
+#ifdef PIN_CONTROL
+static int select_pin_ctl(struct fpc_data *fpc, const char *name)
 {
-    struct spi_transfer t = {
-        .tx_buf = tx,
-        .rx_buf = rx,
-        .len = len,
-        .speed_hz = speed,
-    };
-    int status = 0;
-    struct spi_message m;
-    CHECK_NULL(fpc_spi_dev)
-    spi_message_init(&m);
-    spi_message_add_tail(&t, &m);
-    status = spi_sync(fpc_spi_dev, &m);
-    if(status) pr_err("%s err status = %d", __func__, status);
-    return status;
-}
-
-static void fpc_id_read(void)
-{
-    int status = 0;
-    u8 buf[3] = {0xfc, 0, 0};
-    status = fpc_spi_sync(buf, buf, 3, 1000000);
-    pr_info("%s, id = %2x %2x %2x\n", __func__, buf[0], buf[1], buf[2]);
-    if (buf[1] >= 0x10 && buf[1] != 0xff) {
-        fpc_hw_id = (buf[1] << 8) + buf[2];
-    }
-}
-
-static void fpc_optical_id_read(void)
-{
-    #define READ_OP(x) (((x) << 1) | 0x01)
-    u8 REG_HWID_H = 0x00;
-    u8 REG_HWID_L = 0x01;
-    u8 tx1[] = { READ_OP(REG_HWID_H), 0 };
-    u8 tx2[] = { READ_OP(REG_HWID_L), 0 };
-    fpc_spi_sync(tx1, tx1, 2, 1000000);
-    fpc_spi_sync(tx2, tx2, 2, 1000000);
-    pr_info("%s, id = %2x %2x\n", __func__, tx1[1], tx2[1]);
-    if(tx1[1] > 0x10 && tx1[1] != 0xff) {
-        fpc_hw_id = (tx1[1] << 8) | tx2[1];
-    }
-}
-
-static void fpc_gpio_set(int vdd, int rst, int irq)
-{
-    int status = 0;
-    int irqf = IRQF_TRIGGER_RISING | IRQF_ONESHOT;
-
-    if(gpio_is_valid(vdd)) {
-        gpio_direction_output(vdd, 0);
-        msleep(3);
-        gpio_set_value(vdd, 1);
-        pr_info("%s, vdd %d\n", __func__, vdd);
-    }
-    if(gpio_is_valid(rst)) {
-        gpio_direction_output(rst, 1);
-        msleep(10);
-        gpio_set_value(rst, 0);
-        msleep(3);
-        gpio_set_value(rst, 1);
-        msleep(3);
-        pr_info("%s, rst %d\n", __func__, rst);
-    }
-    if (fpc_irq_num <= 0 && gpio_is_valid(irq)) {
-        fpc_irq_num = gpio_to_irq(irq); //fpc_irq_num = irq_of_parse_and_map(fpc_node, 0);
-        status = devm_request_threaded_irq(fpc_dev, fpc_irq_num, NULL, fpc_irq_handler, irqf, dev_name(fpc_dev), fpc_dev);
-        // fpc_wakeup_s = wakeup_source_register(dev_name(fpc_dev));
-        fpc_wakeup_s = wakeup_source_register(fpc_dev, dev_name(fpc_dev));
-        enable_irq_wake(fpc_irq_num);
-    }
-    pr_info("%s, fpc_irq_num = %d, value = %d\n", __func__, fpc_irq_num, gpio_get_value(irq));
-}
-
-static void fpc_gpio_request(void)
-{
-    int i = 0;
-    const char gpio_name[][16] = {"fpc_vdd", "fpc_rst", "fpc_irq"};
-    int len = sizeof(gpio_name)/sizeof(gpio_name[0]);
-
-    if (fpc_irq_num <= 0) {
-        for (i = 0; i < len; i++) {
-            fpc_gpio[i] = of_get_named_gpio(fpc_node, gpio_name[i], 0);
-            if(gpio_is_valid(fpc_gpio[i]) && devm_gpio_request(fpc_dev, fpc_gpio[i], FPC_MODULE_NAME) == 0) {
-                pr_info("%s, ok %s = %d\n", __func__, gpio_name[i], fpc_gpio[i]);
-            } else {
-                pr_info("%s, no %s %d\n", __func__, gpio_name[i], fpc_gpio[i]);
-            }
+    size_t i;
+    int rc;
+	fpsensor_log(INFO_LOG, "fpc %s entry.\n", __func__);
+    for (i = 0; i < ARRAY_SIZE(fpc->pinctrl_state); i++) {
+        const char *n = pctl_names[i];
+        if (!strncmp(n, name, strlen(n))) {
+            mutex_lock(&fpc_set_gpio_mutex);
+            rc = pinctrl_select_state(fpc->fpc_pinctrl, fpc->pinctrl_state[i]);
+            mutex_unlock(&fpc_set_gpio_mutex);
+            if (rc)
+                fpsensor_log(ERROR_LOG, "fpc %s cannot select '%s'\n", __func__, name);
+            else
+                fpsensor_log(ERROR_LOG, "fpc %s selected '%s'\n", __func__, name);
+            goto exit;
         }
     }
-    fpc_gpio_set(fpc_gpio[0], fpc_gpio[1], fpc_gpio[2]);
+    rc = -EINVAL;
+exit:
+	fpsensor_log(INFO_LOG, "fpc %s:'%s' found.\n", __func__, name);
+    return rc;
 }
-
-static void fpc_pinctrl(void)
+#endif
+#ifdef USE_REGULATOR
+static int vreg_setup(struct fpc_data *fpc1020, const char *name,
+	bool enable)
 {
-    if (of_property_read_bool(fpc_node, "pinctrl-names")) {
-        struct pinctrl *ptl = devm_pinctrl_get(fpc_dev);
-        struct pinctrl_state *ptl_state = pinctrl_lookup_state(ptl, "fpc_irq_en");
-        pr_info("fpc fpc_pinctrl_on begin\n");
-        pinctrl_select_state(ptl, ptl_state);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_vdd_of");
-        pinctrl_select_state(ptl, ptl_state);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_lo");
-        pinctrl_select_state(ptl, ptl_state);
-        msleep(3);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_vdd_on");
-        pinctrl_select_state(ptl, ptl_state);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_hi");
-        pinctrl_select_state(ptl, ptl_state);
-        msleep(10);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_lo");
-        pinctrl_select_state(ptl, ptl_state);
-        msleep(3);
-        ptl_state = pinctrl_lookup_state(ptl, "fpc_rst_hi");
-        pinctrl_select_state(ptl, ptl_state);
-        msleep(3);
-        devm_pinctrl_put(ptl);
-        pr_info("fpc fpc_pinctrl_on end\n");
-    }
-}
-
-static void fpc_power_regulator(void)
-{
-    int status = 0;
+	size_t i;
 	int rc;
-    if (of_property_read_bool(fpc_node, "vfp-supply")) {
-        fpc_regulator = devm_regulator_get_optional(fpc_dev, "vfp");
-        if (IS_ERR(fpc_regulator)) {
-            pr_err("err %s +%d\n", __func__, __LINE__);
-            return;
-        }
-        if (regulator_is_enabled(fpc_regulator)) {
-            regulator_disable(fpc_regulator);
-            msleep(3);
-        }
-        status = regulator_set_voltage(fpc_regulator, fpc_vdd*100000, fpc_vdd*100000);
-        if(status) {
-            pr_err("err %s +%d, status = %d\n", __func__, __LINE__, status);
-            return;           
-        }
-        rc = regulator_enable(fpc_regulator);
-        pr_info("%s, fpc_vdd = %d\n", __func__, fpc_vdd);
+	struct regulator *vreg;
+	struct device *dev = fpc1020->dev;
+
+	for (i = 0; i < ARRAY_SIZE(fpc1020->vreg); i++) {
+		const char *n = vreg_conf[i].name;
+
+		if (!strncmp(n, name, strlen(n)))
+			goto found;
+	}
+
+	dev_err(dev, "Regulator %s not found\n", name);
+
+	return -EINVAL;
+
+found:
+	vreg = fpc1020->vreg[i];
+	if (enable) {
+		if (!vreg) {
+			vreg = devm_regulator_get(dev, name);
+			if (IS_ERR_OR_NULL(vreg)) {
+				dev_err(dev, "Unable to get %s\n", name);
+				return PTR_ERR(vreg);
+			}
+		}
+
+		if (regulator_count_voltages(vreg) > 0) {
+			rc = regulator_set_voltage(vreg, vreg_conf[i].vmin,
+					vreg_conf[i].vmax);
+			if (rc)
+				dev_err(dev,
+					"Unable to set voltage on %s, %d\n",
+					name, rc);
+		}
+
+		rc = regulator_set_load(vreg, vreg_conf[i].ua_load);
+		if (rc < 0)
+			dev_err(dev, "Unable to set current on %s, %d\n",
+					name, rc);
+
+		rc = regulator_enable(vreg);
+		if (rc) {
+			dev_err(dev, "error enabling %s: %d\n", name, rc);
+			vreg = NULL;
+		}
+		fpc1020->vreg[i] = vreg;
+	} else {
+		if (vreg) {
+			if (regulator_is_enabled(vreg)) {
+				regulator_disable(vreg);
+				dev_dbg(dev, "disabled %s\n", name);
+			}
+			fpc1020->vreg[i] = NULL;
+		}
+		rc = 0;
+	}
+
+	return rc;
+}
+
+#endif
+
+static int set_clks(struct fpc_data *fpc, bool enable)
+{
+    int rc = 0;
+    if(fpc->clocks_enabled == enable)
+        return rc;
+    if (enable) {
+        fpc->clocks_enabled = true;
+        rc = 1;
     } else {
-        pr_info("%s, no\n", __func__);
+        fpc->clocks_enabled = false;
+        rc = 0;
     }
+
+    return rc;
+}
+static int hw_reset(struct  fpc_data *fpc)
+{
+    int irq_value = 0;
+	int rc = 0;
+	func_entry();
+
+#ifdef PIN_CONTROL
+	rc = select_pin_ctl(fpc, "fpc1020_reset_active");
+	if(rc){
+		fpsensor_log(ERROR_LOG, "fpc %s pin ctrl reset active failed.\n", __func__);
+		return rc;
+	}
+	usleep_range(FPC_RESET_HIGH1_US, FPC_RESET_HIGH1_US + 100);
+
+	rc = select_pin_ctl(fpc, "fpc1020_reset_reset");
+	if(rc){
+		fpsensor_log(ERROR_LOG, "fpc %s pin ctrl reset reset failed.\n", __func__);
+		return rc;
+	}
+	usleep_range(FPC_RESET_LOW_US, FPC_RESET_LOW_US + 100);
+
+	rc = select_pin_ctl(fpc, "fpc1020_reset_active");
+	if(rc){
+		fpsensor_log(ERROR_LOG, "fpc %s pin ctrl reset active failed.\n", __func__);
+		return rc;
+	}
+	usleep_range(FPC_RESET_HIGH2_US, FPC_RESET_HIGH2_US + 100);
+#else
+	gpio_direction_output(fpc->rst_gpio, 1);
+	usleep_range(FPC_RESET_HIGH1_US, FPC_RESET_HIGH1_US + 100);
+	gpio_direction_output(fpc->rst_gpio, 0);
+	usleep_range(FPC_RESET_LOW_US, FPC_RESET_LOW_US + 100);
+	gpio_direction_output(fpc->rst_gpio, 1);
+	usleep_range(FPC_RESET_HIGH2_US, FPC_RESET_HIGH2_US + 100);
+#endif
+
+    irq_value = gpio_get_value(fpc->irq_gpio);
+    fpsensor_log(DEBUG_LOG, "fpc %s IRQ after reset is %d\n", __func__, irq_value);
+	func_exit();
+    return rc;
+}
+static int hw_power_reset(struct fpc_data *fpc, int enable)
+{
+	int rc = 0;
+	func_entry();
+
+#ifdef USE_REGULATOR
+		rc = vreg_setup(fpc, "vdd_io", false);
+		if (rc != 0 ){
+			fpsensor_log(ERROR_LOG, "fpc %s vreg_setup:false failed!\n", __func__);
+			return rc;
+		}
+		usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+        if(enable){
+            rc = vreg_setup(fpc, "vdd_io", true);
+            if (rc !=0 ){
+                fpsensor_log(ERROR_LOG, "fpc %s vreg_setup:true failed!\n", __func__);
+                return rc;
+            }
+            usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+        }
+#else
+#ifdef PIN_CONTROL
+    rc = select_pin_ctl(fpc, "fpc1020_power_deactive");
+    if(rc != 0 ){
+		fpsensor_log(ERROR_LOG, "fpc %s pin ctrl power de-active failed.\n", __func__);
+		return rc;
+	}
+    usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+    if(enable){
+        rc = select_pin_ctl(fpc, "fpc1020_power_active");
+        if(rc != 0 ){
+            fpsensor_log(ERROR_LOG, "fpc %s pin ctrl power active failed.\n", __func__);
+            return rc;
+        }
+        usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+    }
+#else
+    gpio_direction_output(fpc->power_ctl_gpio, 0);
+    usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+    if(enable){
+        gpio_direction_output(fpc->power_ctl_gpio, 1);
+        usleep_range(FPC_POWEROFF_SLEEP_US, FPC_POWEROFF_SLEEP_US + 100);
+    }
+	fpsensor_log(INFO_LOG, "fpc %s the value after set fpc->power_ctl_gpio 1 is %d\n", __func__, gpio_get_value(fpc->power_ctl_gpio));
+#endif
+#endif
+    rc = hw_reset(fpc);
+    return rc;
+}
+static ssize_t hw_reset_set(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    int rc;
+    struct  fpc_data *fpc = dev_get_drvdata(dev);
+	fpsensor_log(DEBUG_LOG, "fpc %s cmd=%s\n", __func__, buf);
+
+    if (!strncmp(buf, "reset", strlen("reset"))) {
+        if(reset_num > MAX_RESET_NUM){
+            fpsensor_log(INFO_LOG, "fpc %s hardware abnormal, shut down.\n", __func__);
+            rc = hw_power_reset(fpc,0);
+            reset_num = 0;
+            return rc ? rc : count;
+        }
+        reset_num++;
+        rc = hw_power_reset(fpc,1);
+        return rc ? rc : count;
+    }
+    else
+        return -EINVAL;
+}
+static DEVICE_ATTR(hw_reset, S_IWUSR, NULL, hw_reset_set);
+
+/**
+ * sysfs node for controlling whether the driver is allowed
+ * to wake up the platform on interrupt.
+ */
+static ssize_t wakeup_enable_set(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct  fpc_data *fpc = dev_get_drvdata(dev);
+    ssize_t ret = count;
+
+    fpsensor_log(DEBUG_LOG, "fpc %s config=%s\n", __func__, buf);
+
+    if (!strncmp(buf, "enable", strlen("enable"))) {
+        fpc->wakeup_enabled = true;
+        smp_wmb();
+    } else if (!strncmp(buf, "disable", strlen("disable"))) {
+        fpc->wakeup_enabled = false;
+        smp_wmb();
+    } else {
+        ret = -EINVAL;
+    }
+
+    return ret;
+}
+static DEVICE_ATTR(wakeup_enable, S_IWUSR, NULL, wakeup_enable_set);
+
+/**
+ * sysf node to check the interrupt status of the sensor, the interrupt
+ * handler should perform sysf_notify to allow userland to poll the node.
+ */
+static ssize_t irq_get(struct device *device,
+        struct device_attribute *attribute,
+        char* buffer)
+{
+    struct fpc_data *fpc = dev_get_drvdata(device);
+    int irq = gpio_get_value(fpc->irq_gpio);
+
+    return scnprintf(buffer, PAGE_SIZE, "%i\n", irq);
 }
 
-static ssize_t irq_get(struct device *dev, struct device_attribute *attr, char *buf)
+/**
+ * writing to the irq node will just drop a printk message
+ * and return success, used for latency measurement.
+ */
+static ssize_t irq_ack(struct device *device,
+        struct device_attribute *attribute,
+        const char *buffer, size_t count)
 {
-    (void)dev;(void)attr;
-    return scnprintf(buf, PAGE_SIZE, "%i\n", gpio_get_value(fpc_gpio[2]));
-}
+    struct fpc_data *fpc = dev_get_drvdata(device);
+    dev_dbg(fpc->dev, "%s\n", __func__);
 
-static ssize_t irq_ack(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-    (void)dev;(void)attr;(void)buf;
     return count;
 }
 static DEVICE_ATTR(irq, S_IRUSR | S_IWUSR, irq_get, irq_ack);
+
+static ssize_t clk_enable_set(struct device *device,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct fpc_data *fpc = dev_get_drvdata(device);
+	fpsensor_log(DEBUG_LOG, "fpc %s config=%s\n", __func__, buf);
+    return set_clks(fpc, (*buf == '1')) ? : count;
+}
+static DEVICE_ATTR(clk_enable, S_IWUSR, NULL, clk_enable_set);
+
+
+static ssize_t sensor_init(struct fpc_data *fpc)
+{
+
+    int ret = -1;
+    int irqf = 0;
+
+    fpsensor_log(INFO_LOG, "fpc %s entry\n", __func__);
+
+    if(fpc == NULL) {
+        fpsensor_log(ERROR_LOG, "fpc %s data is null, init failed", __func__);
+        return -EINVAL;
+    }
+    ret = fpc_dts_pin_init(fpc);
+    if( ret) {
+        fpsensor_log(ERROR_LOG, "fpc %s fpc_dts_pin_init fpc init failed\n", __func__);
+        goto init_exit;
+    }
+    ret = fpc_dts_irq_init(fpc);
+    if( ret) {
+        fpsensor_log(ERROR_LOG, "fpc %s fpc_dts_irq_init fpc init failed\n", __func__);
+        goto init_exit;
+    }
+
+    fpc->clocks_enabled = false;
+    fpc->wakeup_enabled = true;
+
+    irqf = IRQF_TRIGGER_RISING | IRQF_ONESHOT ;
+    if(fpc->prop_wakeup){
+        irqf |= IRQF_NO_SUSPEND;
+        device_init_wakeup(fpc->dev, 1);
+    }
+    ret = devm_request_threaded_irq( fpc->dev, fpc->irq_num,
+            NULL, fpc_irq_handler, irqf,
+            dev_name(fpc->dev), fpc);
+    if (ret) {
+        fpsensor_log(ERROR_LOG, "fpc %s could not request irq %d\n", __func__, fpc->irq_num);
+        disable_irq_wake(fpc->irq_num);
+        free_irq(fpc->irq_num, fpc);
+        //wakeup_source_trash(&fpc->ttw_wl);
+        wakeup_source_remove(&fpc->ttw_wl);
+        ret = devm_request_threaded_irq( fpc->dev, fpc->irq_num,
+                NULL, fpc_irq_handler, irqf,
+                dev_name(fpc->dev), fpc);
+        fpsensor_log(ERROR_LOG, "fpc %s the value of request irq is %d\n", __func__, ret);
+        if (ret) {
+            goto init_exit;
+        }
+    }
+    fpsensor_log(INFO_LOG, "fpc %s requested irq, irq_gpio=%d, irq_num=%d\n", __func__, fpc->irq_gpio, fpc->irq_num);
+
+    /* Request that the interrupt should be wakeable */
+    enable_irq_wake(fpc->irq_num);
+    //wakeup_source_init(&fpc->ttw_wl, "fpc_ttw_wl");
+    wakeup_source_create("fpc_ttw_wl");
+    wakeup_source_add(&fpc->ttw_wl);
+    //fpsensor_log(INFO_LOG, "fpc %s the value of fpc->power_ctl_gpio is %d\n", __func__, fpc->power_ctl_gpio);
+
+#ifdef USE_REGULATOR
+	ret = vreg_setup(fpc, "vdd_io", true);
+	if (ret)
+		goto init_exit;
+
+#else
+
+#ifdef PIN_CONTROL
+	ret = select_pin_ctl(fpc, "fpc1020_power_active");
+	if(ret){
+		fpsensor_log(ERROR_LOG, "fpc %s pin ctrl power active failed.\n", __func__);
+		goto init_exit;
+	}
+#else
+	gpio_direction_output(fpc->power_ctl_gpio, 1);
+	fpsensor_log(INFO_LOG, "fpc %s the value after set fpc->power_ctl_gpio 1 is %d\n", __func__, gpio_get_value(fpc->power_ctl_gpio));
+#endif
+
+#endif
+
+    (void)hw_reset(fpc);
+
+    fpsensor_log(INFO_LOG, "fpc %s exit\n", __func__);
+init_exit:
+    return ret;
+}
+
+static ssize_t sensor_release(struct fpc_data *fpc)
+{
+    struct device *dev = &fpc->pdev->dev;
+	int ret = 0;
+
+    fpsensor_log(INFO_LOG, "fpc %s entry\n", __func__);
+    if(fpc->irq_num) {
+        disable_irq_wake(fpc->irq_num);
+        free_irq(fpc->irq_num, fpc);
+		//wakeup_source_trash(&fpc->ttw_wl);
+        wakeup_source_remove(&fpc->ttw_wl);
+        fpc->irq_num = 0;
+    }
+
+	if (gpio_is_valid(fpc->rst_gpio)) {
+		devm_gpio_free(dev, fpc->rst_gpio);
+		fpsensor_log(DEBUG_LOG, "fpc %s remove rst_gpio success.\n", __func__);
+	}
+
+	if (gpio_is_valid(fpc->irq_gpio)) {
+		devm_gpio_free(dev, fpc->irq_gpio);
+		fpsensor_log(DEBUG_LOG, "fpc %s remove irq_gpio success.\n", __func__);
+	}
+
+
+#ifdef USE_REGULATOR
+	ret = vreg_setup(fpc, "vdd_io", false);
+	if (ret != 0){
+		fpsensor_log(ERROR_LOG, "fpc %s vreg_setup:false failed!\n", __func__);
+		return ret;
+	}
+#else
+    if (gpio_is_valid(fpc->power_ctl_gpio)) {
+/*
+#ifdef PIN_CONTROL
+		ret = select_pin_ctl(fpc, "fpc1020_power_deactive");
+		if(ret){
+			fpsensor_log(ERROR_LOG, "fpc %s pin ctrl power deactive failed.\n", __func__);
+		}
+#else
+		gpio_direction_output(fpc->power_ctl_gpio, 0);
+#endif
+*/
+   		fpsensor_log(DEBUG_LOG, "cutoff power value fpc->power_ctl_gpio = %d\n", gpio_get_value(fpc->power_ctl_gpio));
+        devm_gpio_free(dev, fpc->power_ctl_gpio);
+    	fpsensor_log(DEBUG_LOG, "fpc %s remove power_ctl_gpio success.\n", __func__);
+
+    }
+#endif
+	fpsensor_log(INFO_LOG, "fpc %s exit\n", __func__);
+    return ret;
+}
+
+static ssize_t sensor_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int rc;
+	struct fpc_data *fpc = dev_get_drvdata(dev);
+	fpsensor_log(DEBUG_LOG, "fpc %s config=%s\n", __func__, buf);
+	if (!memcmp(buf, "init", strlen("init")))
+		rc = sensor_init(fpc);
+	else if (!memcmp(buf, "release", strlen("release")))
+		rc = sensor_release(fpc);
+	else
+		return -EINVAL;
+
+	return rc ? rc : count;
+}
+static DEVICE_ATTR(sensor, S_IWUSR, NULL, sensor_set);
+
+
+static ssize_t hwinfo_set(struct device *device,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct fpc_data *fpc = dev_get_drvdata(device);
+	fpsensor_log(INFO_LOG, "fpc %s set hwinfo:%s", __func__, buf);
+	snprintf(fpc->hwid, HWID_SIZE, "%s", buf);
+	return count;
+}
+
+static ssize_t hwinfo_get(struct device *device,
+        struct device_attribute *attribute,
+        char* buffer)
+{
+    struct fpc_data *fpc = dev_get_drvdata(device);
+    fpsensor_log(INFO_LOG, "fpc %s get hwinfo:%s", __func__, fpc->hwid);
+    return snprintf(buffer, HWID_SIZE, "%s\n", fpc->hwid);
+}
+
+static DEVICE_ATTR(hwinfo, S_IRUSR | S_IWUSR, hwinfo_get, hwinfo_set);
+
+static ssize_t screen_get(struct device *device,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct fpc_data *fpc = dev_get_drvdata(device);
+	fpsensor_log(INFO_LOG, "fpc %s get screen_status:%d", __func__, fpc->screen_status);
+    return snprintf(buf, PAGE_SIZE, "%d\n", fpc->screen_status);
+}
+
+static ssize_t screen_set(struct device *device,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+    int value;
+	struct fpc_data *fpc = dev_get_drvdata(device);
+	fpsensor_log(INFO_LOG, "fpc %s set screen_status:%s", __func__, buf);
+    if (sscanf(buf, "%d", &value) == 1) {
+        fpc->screen_status = value;
+        return count;
+    }
+    return -EINVAL;
+}
+
+static DEVICE_ATTR(screen, S_IWUSR | S_IRUGO, screen_get, screen_set);
+
 static struct attribute *fpc_attributes[] = {
+    &dev_attr_hw_reset.attr,
+    &dev_attr_wakeup_enable.attr,
+    &dev_attr_clk_enable.attr,
     &dev_attr_irq.attr,
+    &dev_attr_sensor.attr,
+    &dev_attr_hwinfo.attr,
+    &dev_attr_screen.attr,
     NULL
 };
 
-static struct attribute_group fpc_attribute_group = {
+static const struct attribute_group fpc_attribute_group = {
     .attrs = fpc_attributes,
 };
-
 static irqreturn_t fpc_irq_handler(int irq, void *handle)
 {
-    struct device *dev = (struct device *)handle;
+    struct fpc_data *fpc = handle;
+    struct device *dev = fpc->dev;
+
+    /* Make sure 'wakeup_enabled' is updated before using it
+     ** since this is interrupt context (other thread...) */
+    smp_rmb();
+    if (fpc->wakeup_enabled) {
+        __pm_wakeup_event(&fpc->ttw_wl, FPC_TTW_HOLD_TIME);
+    }
+
     sysfs_notify(&dev->kobj, NULL, dev_attr_irq.attr.name);
+
     return IRQ_HANDLED;
 }
-
-static int fpc_spi_probe(struct spi_device *spi_dev)
+static int fpc_dts_irq_init(struct fpc_data *fpc)
 {
-    pr_info("%s\n", __func__);
-    fpc_spi_dev = spi_dev;
+    int error = 0;
+
+    func_entry();
+
+	if(gpio_is_valid(fpc->irq_gpio)){
+#ifdef PIN_CONTROL
+		error = select_pin_ctl(fpc, "fpc1020_irq_active");
+		if(error){
+			fpsensor_log(ERROR_LOG, "fpc %s pin ctrl irq active failed.\n", __func__);
+			return error;
+		}
+#else
+		gpio_direction_output(fpc->irq_gpio, 0);
+#endif
+    	error = gpio_direction_input(fpc->irq_gpio);
+		if (error != 0) {
+	        fpsensor_log(ERROR_LOG,"%s setup fpsensor irq gpio for input failed!error[%d]\n", __func__, error);
+	        return -EINVAL;
+	    }
+		fpc->irq_num = gpio_to_irq(fpc->irq_gpio);
+		if (!fpc->irq_num) {
+            fpsensor_log(ERROR_LOG,"%s fpc irq_of_parse_and_map failed, irq_gpio=%d, irq_num=%d\n", __func__,
+                    fpc->irq_gpio, fpc->irq_num);
+            return -EINVAL;
+        }
+		fpsensor_log(INFO_LOG,"%s fpc->irq_gpio=%d, fpc->irq_num=%d\n", __func__, fpc->irq_gpio,
+                fpc->irq_num);
+	}
+	else{
+		fpsensor_log(ERROR_LOG,"%s fpc->irq_gpio isn't valid!\n", __func__);
+        return -EINVAL;
+	}
+
+	func_exit();
+    return error;
+}
+
+static int fpc_dts_pin_init( struct fpc_data * fpc)
+{
+    struct device_node *node = NULL;
+    struct device *dev = &fpc->pdev->dev;
+    int ret = 0;
+	func_entry();
+    node = of_find_compatible_node(NULL, NULL, "fpc,fpc1553");
+    if (node) {
+
+#ifndef USE_REGULATOR
+         fpc->power_ctl_gpio = of_get_named_gpio(node, "fpc,power_ctl_gpio", 0);
+         if (fpc->power_ctl_gpio < 0) {
+             fpsensor_log(ERROR_LOG,"%s failed to get fpc,power_ctl_gpio!\n", __func__);
+             return fpc->power_ctl_gpio;
+         }
+         ret = devm_gpio_request(dev, fpc->power_ctl_gpio, "fpc,power_ctl_gpio");
+         if (ret) {
+             fpsensor_log(ERROR_LOG,"%s failed to request power_ctl_gpio %d, ret = %d.\n", __func__, fpc->power_ctl_gpio, ret);
+             gpio_free(fpc->power_ctl_gpio);
+             ret = devm_gpio_request(dev, fpc->power_ctl_gpio, "fpc,power_ctl_gpio");
+			 if(ret){
+				fpsensor_log(ERROR_LOG,"%s failed to request power_ctl_gpio %d, ret = %d. retry failed.\n", __func__, fpc->power_ctl_gpio, ret);
+				return ret;
+			 }
+         }
+		 fpsensor_log(INFO_LOG,"%s the value of request fpc->power_ctl_gpio is %d\n", __func__, fpc->power_ctl_gpio);
+#endif
+		fpc->rst_gpio = of_get_named_gpio(node, "fpc,rst_gpio", 0);
+        if (fpc->rst_gpio < 0) {
+            fpsensor_log(ERROR_LOG,"%s failed to get fpc,rst_gpio! \n", __func__);
+            return fpc->rst_gpio;
+        }
+
+		ret = devm_gpio_request(dev, fpc->rst_gpio, "fpc,rst_gpio");
+		if (ret) {
+	    	fpsensor_log(ERROR_LOG,"%s failed to request rst_gpio %d, ret = %d.\n", __func__, fpc->rst_gpio, ret);
+            gpio_free(fpc->rst_gpio);
+            ret = devm_gpio_request(dev, fpc->rst_gpio, "fpc,rst_gpio");
+			if(ret){
+				fpsensor_log(ERROR_LOG,"%s failed to request rst_gpio %d, ret = %d. retry failed.\n", __func__, fpc->rst_gpio, ret);
+				return ret;
+			}
+
+		}
+		fpsensor_log(INFO_LOG,"%s the value of request fpc->rst_gpio is %d\n", __func__, fpc->rst_gpio);
+
+		fpc->irq_gpio = of_get_named_gpio(node, "fpc,irq_gpio", 0);
+        if (fpc->irq_gpio < 0) {
+            fpsensor_log(ERROR_LOG,"%s failed to get fpc,irq_gpio!\n", __func__);
+            return fpc->irq_gpio;
+        }
+        ret = devm_gpio_request(dev, fpc->irq_gpio, "fpc,irq_gpio");
+        if (ret) {
+            fpsensor_log(ERROR_LOG,"%s failed to request irq_gpio %d, ret = %d.\n", __func__, fpc->irq_gpio, ret);
+            gpio_free(fpc->irq_gpio);
+            ret = devm_gpio_request(dev, fpc->irq_gpio, "fpc,irq_gpio");
+			if(ret){
+				fpsensor_log(ERROR_LOG,"%s failed to request irq_gpio %d, ret = %d.retry failed.\n", __func__, fpc->irq_gpio, ret);
+				return ret;
+			}
+        }
+		fpsensor_log(INFO_LOG,"%s the value of request fpc->irq_gpio is %d\n", __func__, fpc->irq_gpio);
+        fpsensor_log(INFO_LOG,"%s fpc->irq_gpio =%d, fpc->rst_gpio = %d\n", __func__, fpc->irq_gpio, fpc->rst_gpio);
+
+#ifdef PIN_CONTROL
+		ret = select_pin_ctl(fpc, "fpc1020_reset_active");
+		if(ret){
+			fpsensor_log(ERROR_LOG, "fpc %s pin ctrl reset active failed.\n", __func__);
+			return ret;
+		}
+#else
+		gpio_direction_output(fpc->rst_gpio, 1);
+#endif
+		func_exit();
+		return ret;
+    } else {
+        fpsensor_log(ERROR_LOG,"%s Cannot find node!\n", __func__);
+        ret = -ENODEV;
+		func_exit();
+		return ret;
+	}
+}
+
+static int fpc_probe(struct platform_device *pdev)
+{
+    struct device *dev = &pdev->dev;
+    struct fpc_data *fpc;
+    int rc = 0;
+    reset_num = 0;
+	fpsensor_log(INFO_LOG, "%s fpc_probe in\n", __func__);
+#ifdef PIN_CONTROL
+	int i;
+#endif
+
+    func_entry();
+
+    fpc = devm_kzalloc(dev, sizeof(*fpc), GFP_KERNEL);
+    if (fpc == NULL) {
+        fpsensor_log(ERROR_LOG, "%s failed to allocate memory for struct fpc_data\n", __func__);
+        rc = -ENOMEM;
+        goto fpc_probe_exit;
+    }
+    memset( fpc, 0, sizeof(struct fpc_data));
+
+    fpc->dev = dev;
+    fpc->pdev = pdev;
+
+	dev_set_drvdata(dev, fpc);
+
+#ifdef PIN_CONTROL
+	fpc->fpc_pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(fpc->fpc_pinctrl)) {
+		if (PTR_ERR(fpc->fpc_pinctrl) == -EPROBE_DEFER) {
+			fpsensor_log(ERROR_LOG, "%s pinctrl not ready\n", __func__);
+			rc = -EPROBE_DEFER;
+			goto fpc_probe_exit;
+		}
+		fpsensor_log(ERROR_LOG, "%s Target does not use pinctrl\n", __func__);
+		fpc->fpc_pinctrl = NULL;
+		rc = -EINVAL;
+		goto fpc_probe_exit;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(pctl_names); i++) {
+		const char *n = pctl_names[i];
+		struct pinctrl_state *state =
+			pinctrl_lookup_state(fpc->fpc_pinctrl, n);
+		if (IS_ERR(state)) {
+			fpsensor_log(ERROR_LOG, "%s cannot find '%s'\n", __func__, n);
+			rc = -EINVAL;
+			goto fpc_probe_exit;
+		}
+		fpsensor_log(INFO_LOG, "%s found pin control %s in [%d]\n", __func__, n, i);
+		fpc->pinctrl_state[i] = state;
+	}
+#endif
+
+    if (of_property_read_bool(dev->of_node, "fpc,enable-wakeup")) {
+        fpc->prop_wakeup = 1;
+    } else {
+        fpc->prop_wakeup = 0;
+    }
+    fpsensor_log(DEBUG_LOG, "%s prop_wakeup=%d\n", __func__, fpc->prop_wakeup);
+
+
+    rc = sysfs_create_group(&dev->kobj, &fpc_attribute_group);
+    if (rc != 0) {
+        fpsensor_log(ERROR_LOG, "%s create sysfs failed\n", __func__);
+        goto fpc_probe_exit;
+    }
+
+	rc = sprintf(fpc->hwid,"%s","NULL");
+	if(rc < 0){
+		fpsensor_log(ERROR_LOG, "%s init hwid failed\n", __func__);
+	}
+
+#ifdef CONFIG_FB
+	fpc->screen_status = 1;
+	fpc->fb_notif.notifier_call = fb_notifier_callback;
+/*
+	rc = fb_register_client(&fpc->fb_notif);
+	rc = dsp_register_client(&fpc->fb_notif);
+	if (rc)
+		fpsensor_log(ERROR_LOG, "%s Unable to register fb_notifier: %d\n", __func__, rc);
+*/
+#endif
+
+    fpsensor_log(INFO_LOG, "%s FPC Module Probing Success\n", __func__);
+	rc = 0;
+	func_exit();
+    return rc;
+
+fpc_probe_exit:
+    if(fpc != NULL) {
+        kfree(fpc);
+    }
+    fpsensor_log(ERROR_LOG, "%s FPC Module Probing Failure, ret=%d\n", __func__, rc);
+	func_exit();
+    return rc;
+}
+
+static int fpc_remove(struct platform_device *pdev)
+{
+    struct  fpc_data *fpc = dev_get_drvdata(&pdev->dev);
+	func_entry();
+    sysfs_remove_group(&pdev->dev.kobj, &fpc_attribute_group);
+    //wakeup_source_trash(&fpc->ttw_wl);
+    wakeup_source_remove(&fpc->ttw_wl);
+	//dsp_unregister_client(&fpc->fb_notif);
+    fpsensor_log(INFO_LOG, "%s FPC Module Remove\n", __func__);
+	func_exit();
     return 0;
 }
-
-static int fpc_plat_probe(struct platform_device *device)
-{
-	pr_info("%s syh\n", __func__);
-    fpc_dev = &(device->dev);
-    fpc_node = of_find_compatible_node(NULL, NULL, FPC_COMPATIBLE_ID);
-    return fpc_dev_create();
-}
-
-static int fpc_spi_remove(struct spi_device *dev)
-{
-    (void)dev;
-    return 0;
-}
-
-static int fpc_plat_remove(struct platform_device *dev)
-{
-    (void)dev;
-    return fpc_dev_destory();
-}
-
 static struct of_device_id fpc_of_match[] = {
-    { .compatible = FPC_COMPATIBLE_ID, },
-    { .compatible = "fpc,fpc_spi", },
-    { .compatible = "mediatek,fingerprint", },
+    { .compatible = "fpc,fpc1553", },
     {}
 };
-
 MODULE_DEVICE_TABLE(of, fpc_of_match);
 
-static struct spi_driver fpc_spi_driver = {
+static struct platform_driver fpc_plat_driver =
+{
     .driver = {
-        .name = FPC_MODULE_NAME,
-        .owner = THIS_MODULE,
-        .bus = &spi_bus_type,
+        .name   = "fpc",
+        .bus    = &platform_bus_type,
+        .owner	= THIS_MODULE,
         .of_match_table = fpc_of_match,
-    },
-    .probe = fpc_spi_probe,
-    .remove = fpc_spi_remove,
-};
 
-static struct platform_driver fpc_plat_driver = {
-    .driver = {
-        .name = FPC_MODULE_NAME,
-        .owner = THIS_MODULE,
-        .of_match_table = fpc_of_match,
     },
-    .probe = fpc_plat_probe,
-    .remove = fpc_plat_remove,
+    .probe	= fpc_probe,
+    .remove	= fpc_remove,
 };
 
 static int __init fpc_init(void)
 {
-    return platform_driver_register(&fpc_plat_driver);
+    int status;
+
+    status = platform_driver_register(&fpc_plat_driver);
+	func_entry();
+    fpsensor_log(INFO_LOG, "%s FPC Module Init, %s\n", __func__, GET_STR_BYSTATUS(status));
+	func_exit();
+    return status;
 }
+module_init(fpc_init);
 
 static void __exit fpc_exit(void)
 {
+	func_entry();
     platform_driver_unregister(&fpc_plat_driver);
+    func_exit();
 }
-
-static int fpc_ioctl_spi(unsigned long arg)
-{
-    int status = 0;
-    struct spi_ioc_transfer spi_ioc;
-    if (FPC_SPI_IOC_SUPPORT == 0 || fpc_spi_dev == NULL) {
-        pr_err("%s, err\n", __func__);
-        return -1;
-    }
-    status = copy_from_user(&spi_ioc, (struct spi_ioc_transfer __user *)arg, sizeof(struct spi_ioc_transfer));
-    CHECK_STATUS(status)
-
-    if (fpc_spi_buf == NULL) {
-        fpc_spi_buf = kmalloc(FPC_SPI_BUF_SIZE, GFP_KERNEL);
-        CHECK_NULL(fpc_spi_buf)
-    }
-    if (spi_ioc.len > FPC_SPI_BUF_SIZE) {
-        pr_info("%s, err spi_ioc.len = %d\n", __func__, spi_ioc.len);
-        return -1;
-    }
-    status = copy_from_user(fpc_spi_buf, (const u8 __user *)(uintptr_t)spi_ioc.tx_buf, spi_ioc.len);
-    CHECK_STATUS(status)
-
-    status = fpc_spi_sync(fpc_spi_buf, fpc_spi_buf, spi_ioc.len, spi_ioc.speed_hz);
-    CHECK_STATUS(status)
-
-    if(spi_ioc.rx_buf) {
-        status = copy_to_user((u8 __user *)(uintptr_t)spi_ioc.rx_buf, fpc_spi_buf, spi_ioc.len);
-        CHECK_STATUS(status)
-    }
-    return GENERIC_OK;
-}
-
-static long fpc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
-{
-    char *fpc_sys_path = NULL;
-	int rc;
-    if(_IOC_TYPE(cmd) != FPC_IOC_MAGIC) {
-        pr_err("%s, err line:%d\n", __func__ ,__LINE__);
-        return -ENOTTY;
-    }
-    switch(cmd) {
-        case FPC_IOC_WAKEUP:
-            __pm_wakeup_event(fpc_wakeup_s, 3000);
-            break;
-    #ifdef CONFIG_MEDIATEK_SOLUTION
-        case FPC_IOC_CLK_ON:
-            CHECK_NULL(fpc_spi_dev)
-            mt_spi_enable_master_clk(fpc_spi_dev);
-            break;
-        case FPC_IOC_CLK_OFF:
-            CHECK_NULL(fpc_spi_dev)
-            mt_spi_disable_master_clk(fpc_spi_dev);
-            break;
-    #endif
-        case FPC_IOC_READ_SYS:
-            fpc_sys_path = kobject_get_path(&fpc_dev->kobj, GFP_KERNEL);
-            if(!fpc_sys_path) {
-                pr_err("%s +%d", __func__, __LINE__);
-                return -ENOTTY;
-            }
-            rc = copy_to_user((char __user *)(uintptr_t)arg, fpc_sys_path, strlen(fpc_sys_path));
-            kfree(fpc_sys_path);
-            break;
-        case FPC_IOC_SPI_MESSAGE:
-            return fpc_ioctl_spi(arg);
-        default:
-            pr_err("%s, err line:%d\n", __func__ ,__LINE__);
-            return -ENOTTY;
-    }
-    return GENERIC_OK;
-}
-
-static ssize_t fpc_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
-{
-    int status = 0;
-	int rc;
-    char cmd[8] = {0};
-    if(count > 8) {
-        pr_err("err %s +%d\n", __func__, __LINE__);
-        return FPC_ERR;
-    }
-    status = copy_from_user(cmd, buf, count);
-    CHECK_STATUS(status)
-
-    if (strncmp(cmd, "id", 2) == 0) {
-        fpc_id_read();
-    } else if(strncmp(cmd, "oid", 3) == 0) {
-        fpc_optical_id_read();
-    } else if(strncmp(cmd, "init", 4) == 0) {
-        #ifdef CONFIG_MICROTRUST_TEE_SUPPORT
-        memcpy(&uuid_fp, &fpc_uuid, sizeof(struct TEEC_UUID));
-        #endif
-        fpc_power_regulator();
-        fpc_pinctrl();
-        fpc_gpio_request();
-    } else if(strncmp(cmd, "spi", 3) == 0) {
-        spi_register_driver(&fpc_spi_driver);
-    } else if(strncmp(cmd, "uspi", 4) == 0) {
-        spi_unregister_driver(&fpc_spi_driver);
-    } else if(strncmp(cmd, "free", 4) == 0) {
-        fpc_free();
-    } else if(isdigit(cmd[0]) && isdigit(cmd[1]) && (2 == strlen(cmd))){
-        rc = kstrtouint(cmd, 10, &fpc_vdd);
-        fpc_power_regulator();
-        fpc_pinctrl();
-        fpc_gpio_request();
-    } else if(!strncmp(cmd, "wakelock", strlen("wakelock"))){
-        pr_err("fpc wakeup 30s %s cmd=%s\n", __func__, cmd);
-        __pm_wakeup_event(fpc_wakeup_s, (35 * 1000)); //5s for fwk enter auth mode
-    } else {
-        pr_err("%s id oid init spi uspi free 33\n", __func__);
-        return FPC_ERR;
-    }
-    return count;
-}
-
-static const struct file_operations fpc1020_ops = {
-    .owner = THIS_MODULE,
-    .write = fpc_write,
-    .unlocked_ioctl = fpc_ioctl,
-};
-
-static int fpc_dev_create(void)
-{
-    struct device *c_device;
-    int status = sysfs_create_group(&fpc_dev->kobj, &fpc_attribute_group);
-    CHECK_STATUS(status)
-    status = alloc_chrdev_region(&fpc_devt, 0, 1, FPC_MODULE_NAME);
-    CHECK_STATUS(status)
-    fpc_class = class_create(THIS_MODULE, FPC_MODULE_NAME);
-    if (IS_ERR(fpc_class)) {
-        pr_err("%s err class_create\n", __func__);
-        return FPC_ERR;
-    }
-    c_device = device_create(fpc_class, fpc_dev, fpc_devt, NULL, FPC_MODULE_NAME);
-    if (IS_ERR(c_device)) {
-        pr_err("%s err device_create\n", __func__);
-        return FPC_ERR;
-    }
-    fpc_c_dev = cdev_alloc();
-    if (IS_ERR(fpc_c_dev)) {
-        pr_err("%s err cdev_alloc\n", __func__);
-        return FPC_ERR;
-    }
-    cdev_init(fpc_c_dev, &fpc1020_ops);
-    status = cdev_add(fpc_c_dev, MKDEV(MAJOR(fpc_devt), 0), 1);
-    CHECK_STATUS(status)
-    return GENERIC_OK;
-}
-
-static int fpc_dev_destory(void)
-{
-    pr_info("%s\n", __func__);
-    fpc_free();
-    device_destroy(fpc_class, fpc_devt);
-    class_destroy(fpc_class);
-    cdev_del(fpc_c_dev);
-    unregister_chrdev_region(fpc_devt, 1);
-    if(fpc_spi_buf) kfree(fpc_spi_buf);
-    sysfs_remove_group(&fpc_dev->kobj, &fpc_attribute_group);
-    return GENERIC_OK;
-}
-
-late_initcall(fpc_init);
 module_exit(fpc_exit);
 
-MODULE_LICENSE("GPL v2");
-MODULE_AUTHOR("sheldon <sheldon.xie@fingerprints.com>");
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("fingerprint driver, fpc, sw50.0");
+MODULE_ALIAS("fingerprint:fpc-drivers");
