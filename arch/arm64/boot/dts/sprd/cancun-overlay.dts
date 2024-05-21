@@ -286,8 +286,8 @@
 &hsphy {
 	vdd-supply = <&vddusb33>;
 	extcon = <&pmic_typec>;
-	sprd,hsphy-device-eye-pattern = <0x0683d1c0>;
-	sprd,hsphy-host-eye-pattern = <0x04b3d1c0>;
+	sprd,hsphy-device-eye-pattern = <0x67cd1c0>;
+	sprd,hsphy-host-eye-pattern = <0x493d1c0>;
 	status = "okay";
 };
 
