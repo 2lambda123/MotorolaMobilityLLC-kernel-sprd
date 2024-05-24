@@ -813,7 +813,7 @@ static int sc8989x_charger_start_charge(struct sc8989x_charger_info *info)
         gpiod_set_value_cansleep(info->gpiod, 0);
     }
 
-    ret = sc8989x_charger_set_limit_current(info,
+    /*ret = sc8989x_charger_set_limit_current(info,
                         info->last_limit_cur, false);
     if (ret) {
         dev_err(info->dev, "failed to set limit current\n");
@@ -822,7 +822,7 @@ static int sc8989x_charger_start_charge(struct sc8989x_charger_info *info)
 
     ret = sc8989x_charger_set_termina_cur(info, info->termination_cur);
     if (ret)
-        dev_err(info->dev, "set sc8989x terminal cur failed\n");
+        dev_err(info->dev, "set sc8989x terminal cur failed\n");*/
     return ret;
 }
 
@@ -2235,6 +2235,8 @@ static int sc8989x_charger_probe(struct i2c_client *client,
 
 	info->client = client;
 	info->dev = dev;
+
+    ret = sc8989x_update_bits(info, SC8989X_REG_0, 6, 0);
 
     ret = sc8989x_charger_get_vendor_id_part_value(info);
     if (ret) {
