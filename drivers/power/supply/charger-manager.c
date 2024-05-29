@@ -4898,25 +4898,22 @@ static bool _cm_monitor(struct charger_manager *cm)
 	if (target == POWER_SUPPLY_STATUS_CHARGING) {
 		cm->emergency_stop = 0;
 		cm->charging_status = 0;
-		if (cm->desc->ffc.ffc_state_running && cm->desc->ffc.ffc_state == CM_FFC_STATE_EXIT) {
-			pr_info("unisoc:_cm_monitor:line%d:\n", __LINE__);
-			try_charger_enable(cm, false);
-		} else {
-			try_charger_enable(cm, true);
+		
+		try_charger_enable(cm, true);
 
-			if (!cm->desc->cp.cp_running && !cm_check_primary_charger_enabled(cm)
-				&& !cm->desc->force_set_full) {
-				dev_info(cm->dev, "%s, primary charger does not enable,enable it\n", __func__);
-				cm_primary_charger_enable(cm, true);
-			}
-
-			if (cm_is_need_start_cp(cm))
-				cm_start_cp_state_machine(cm, true);
-			else if (!cm->desc->cp.cp_running && cm_is_need_start_fixed_fchg(cm))
-				cm_start_fixed_fchg(cm, true);
-			else if (!cm->desc->ffc.ffc_state_running && cm_is_need_start_ffc_state_machine(cm))
-				cm_start_ffc_state_machine(cm, true);
+		if (!cm->desc->cp.cp_running && !cm_check_primary_charger_enabled(cm)
+			&& !cm->desc->force_set_full) {
+			dev_info(cm->dev, "%s, primary charger does not enable,enable it\n", __func__);
+			cm_primary_charger_enable(cm, true);
 		}
+
+		if (cm_is_need_start_cp(cm))
+			cm_start_cp_state_machine(cm, true);
+		else if (!cm->desc->cp.cp_running && cm_is_need_start_fixed_fchg(cm))
+			cm_start_fixed_fchg(cm, true);
+		else if (!cm->desc->ffc.ffc_state_running && cm_is_need_start_ffc_state_machine(cm))
+			cm_start_ffc_state_machine(cm, true);
+		
 	} else {
 		try_charger_enable(cm, false);
 	}
@@ -8563,7 +8560,7 @@ static int charger_manager_remove(struct platform_device *pdev)
 	cancel_delayed_work_sync(&cm->uvlo_work);
 
 	power_supply_unregister(cm->charger_psy);
-
+	
 	try_charger_enable(cm, false);
 
 	return 0;
