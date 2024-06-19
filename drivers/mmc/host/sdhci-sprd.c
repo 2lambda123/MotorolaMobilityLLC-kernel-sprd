@@ -1872,7 +1872,7 @@ static int sdhci_sprd_probe(struct platform_device *pdev)
 	host->mmc_host_ops.execute_tuning = sdhci_sprd_execute_tuning;
 
 	host->mmc->caps = MMC_CAP_SD_HIGHSPEED | MMC_CAP_MMC_HIGHSPEED |
-		MMC_CAP_WAIT_WHILE_BUSY;
+		MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
