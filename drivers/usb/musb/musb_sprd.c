@@ -1046,11 +1046,15 @@ static void musb_sprd_charger_mode(void)
 	if (s != NULL)
 		boot_charging = 1;
 	else {
+		#if 0
 		s = strstr(cmd_line, "sprdboot.mode=charger");
 		if (s != NULL)
 			boot_charging = 1;
 		else
 			boot_charging = 0;
+		#else
+		boot_charging = 0;
+		#endif
 	}
 }
 
