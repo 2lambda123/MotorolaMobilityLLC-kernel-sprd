@@ -1000,7 +1000,7 @@ static void sc8989x_dump_reg_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
    struct sc8989x_charger_info *info =
         container_of(dwork, struct sc8989x_charger_info, dump_work);
-   sc8989x_dump_register(info);
+   //sc8989x_dump_register(info);
     schedule_delayed_work(&info->dump_work, SC8989X_DUMP_WORK_MS);
 }
 
