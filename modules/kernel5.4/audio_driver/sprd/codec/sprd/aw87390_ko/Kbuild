@@ -1,0 +1,41 @@
+#
+# snd-soc-pa-aw87xxx.ko
+#
+# Kbuild: for kernel building external module
+#
+# Note:
+# - Please use these predefined name for keeping code:
+#   KO_MODULE_NAME KO_MODULE_PATH KO_MODULE_SRC
+#
+
+#
+# Source List
+#
+KO_MODULE_NAME := snd-soc-pa-aw87xxx
+KO_MODULE_PATH := $(src)
+KO_MODULE_SRC  :=
+
+ccflags-y += -I$(KO_MODULE_PATH)
+ccflags-y += -I$(KO_MODULE_PATH)/../../../include
+ccflags-y += -I$(KO_MODULE_PATH)/../../../../sprd_audio/agdsp_access
+
+KO_MODULE_SRC += $(wildcard $(KO_MODULE_PATH)/*.c)
+
+#
+# Final Objects
+#
+obj-m := $(KO_MODULE_NAME).o
+
+AW87XXX_COMMON := \
+		aw87xxx.o \
+		aw87xxx_device.o \
+		aw87xxx_monitor.o \
+		aw87xxx_bin_parse.o \
+		aw87xxx_dsp.o \
+		aw87xxx_acf_bin.o
+		
+$(KO_MODULE_NAME)-y += \
+		$(AW87XXX_COMMON)
+		
+# Comment it if the only object file has the same name with module
+$(KO_MODULE_NAME)-y := $(patsubst $(src)/%.c,%.o,$(KO_MODULE_SRC))

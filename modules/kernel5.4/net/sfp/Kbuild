@@ -1,0 +1,39 @@
+#
+# sfp.ko
+#
+# Kbuild: for kernel building external module
+#
+# Note:
+# - Please refer to modules/sample/Kbuild to find out what should be
+#   done is this Kbuild file
+#
+
+#
+# Source List
+#
+KO_MODULE_NAME := sprd_sfp
+KO_MODULE_PATH := $(src)
+KO_MODULE_SRC  :=
+
+KO_MODULE_SRC += $(wildcard $(KO_MODULE_PATH)/*.c)
+
+#ccflags-y += -I$(KO_MODULE_PATH)
+
+#
+# Final Objects
+#
+obj-m := $(KO_MODULE_NAME).o
+
+SPRD_SFP := \
+	sfp_mgr.o \
+	sfp_ct.o \
+	sfp_fwd.o \
+	sfp_hook.o \
+	sfp_intf.o \
+	sfp_ipa.o \
+	sfp_proc.o \
+	sfp_test.o \
+	sfp_tuple.o \
+	sysctl_net_sfp.o
+
+$(KO_MODULE_NAME)-y += $(SPRD_SFP)
