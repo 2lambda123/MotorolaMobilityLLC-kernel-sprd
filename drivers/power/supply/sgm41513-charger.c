@@ -539,6 +539,15 @@ static int sgm41513_charger_hw_init(struct sgm41513_charger_info *info)
 		return ret;
 	}
 
+	ret = sgm41513_update_bits(info, SGM41513_REG_07,
+				   SGM41513_BATFET_RST_EN_MASK,
+				   SGM41513_BATFET_RST_DISABLE << SGM41513_BATFET_RST_EN_SHIFT);
+	if (ret) {
+		dev_err(info->dev, "disable sgm41513 batfet reset failed\n");
+		return ret;
+	}
+
+
 	ret = sgm41513_charger_set_termina_vol(info, voltage_max_microvolt);
 	if (ret) {
 		dev_err(info->dev, "set sgm41513 terminal vol failed\n");
