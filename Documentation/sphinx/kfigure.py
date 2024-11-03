@@ -61,6 +61,7 @@ from sphinx.util.nodes import clean_astext
 from six import iteritems
 
 import kernellog
+from security import safe_command
 
 PY3 = sys.version_info[0] == 3
 
@@ -308,7 +309,7 @@ def dot2format(app, dot_fname, out_fname):
     exit_code = 42
 
     with open(out_fname, "w") as out:
-        exit_code = subprocess.call(cmd, stdout = out)
+        exit_code = safe_command.run(subprocess.call, cmd, stdout = out)
         if exit_code != 0:
             kernellog.warn(app,
                           "Error #%d when calling: %s" % (exit_code, " ".join(cmd)))
@@ -326,7 +327,7 @@ def svg2pdf(app, svg_fname, pdf_fname):
     """
     cmd = [convert_cmd, svg_fname, pdf_fname]
     # use stdout and stderr from parent
-    exit_code = subprocess.call(cmd)
+    exit_code = safe_command.run(subprocess.call, cmd)
     if exit_code != 0:
         kernellog.warn(app, "Error #%d when calling: %s" % (exit_code, " ".join(cmd)))
     return bool(exit_code == 0)

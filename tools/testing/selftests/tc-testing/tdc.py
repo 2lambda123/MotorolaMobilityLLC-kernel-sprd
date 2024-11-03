@@ -18,6 +18,7 @@ from string import Template
 
 from tdc_config import *
 from tdc_helper import *
+from security import safe_command
 
 
 USE_NS = True
@@ -44,7 +45,7 @@ def exec_cmd(command, nsonly=True):
     if '$' in command:
         command = replace_keywords(command)
 
-    proc = subprocess.Popen(command,
+    proc = safe_command.run(subprocess.Popen, command,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)

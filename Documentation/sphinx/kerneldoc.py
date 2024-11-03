@@ -42,6 +42,7 @@ from docutils.parsers.rst import directives, Directive
 # AutodocReporter is only good up to Sphinx 1.7
 #
 import sphinx
+from security import safe_command
 
 Use_SSI = sphinx.__version__[:3] >= '1.7'
 if Use_SSI:
@@ -101,7 +102,7 @@ class KernelDocDirective(Directive):
             kernellog.verbose(env.app,
                               'calling kernel-doc \'%s\'' % (" ".join(cmd)))
 
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            p = safe_command.run(subprocess.Popen, cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = p.communicate()
 
             out, err = codecs.decode(out, 'utf-8'), codecs.decode(err, 'utf-8')

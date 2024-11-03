@@ -6,6 +6,7 @@ import os
 
 import kunit_config
 import kunit_parser
+from security import safe_command
 
 KCONFIG_PATH = '.config'
 
@@ -60,8 +61,7 @@ class LinuxSourceTreeOperations(object):
 
 	def linux_bin(self, params, timeout):
 		"""Runs the Linux UML binary. Must be named 'linux'."""
-		process = subprocess.Popen(
-			['./linux'] + params,
+		process = safe_command.run(subprocess.Popen, ['./linux'] + params,
 			stdin=subprocess.PIPE,
 			stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
